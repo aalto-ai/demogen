@@ -437,6 +437,46 @@ def generate_edit_distance_plots(
     plt.clf()
 
 
+def frequency_count_conditional_probabilities(gscan_dataset, ACTION2IDX):
+    print("Conditional probabilities frequency counts")
+    print(
+        make_target_commands_frequency_table(
+            gscan_dataset["examples"]["train"], list(ACTION2IDX.keys())
+        ).to_latex(
+            float_format="%.2f",
+            caption="One-step ahead conditional probability table, training set",
+            escape=False,
+        )
+    )
+    print(
+        make_target_commands_frequency_table(
+            gscan_dataset["examples"]["test"], list(ACTION2IDX.keys())
+        ).to_latex(
+            float_format="%.2f",
+            caption="One-step ahead conditional probability table, Split A",
+            escape=False,
+        )
+    )
+    print(
+        make_target_commands_frequency_table(
+            gscan_dataset["examples"]["adverb_2"], list(ACTION2IDX.keys())
+        ).to_latex(
+            float_format="%.2f",
+            caption="One-step ahead conditional probability table, Split H",
+            escape=False,
+        )
+    )
+    print(
+        make_target_commands_frequency_table(
+            gscan_dataset["examples"]["visual"], list(ACTION2IDX.keys())
+        ).to_latex(
+            float_format="%.2f",
+            caption="One-step ahead conditional probability table, Split C",
+            escape=False,
+        )
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compositional-splits", type=str, required=True)
@@ -529,43 +569,7 @@ def main():
     )
 
     # Frequency-counting conditional probabilities
-    print("Conditional probabilities frequency counts")
-    print(
-        make_target_commands_frequency_table(
-            gscan_dataset["examples"]["train"], list(ACTION2IDX.keys())
-        ).to_latex(
-            float_format="%.2f",
-            caption="One-step ahead conditional probability table, training set",
-            escape=False,
-        )
-    )
-    print(
-        make_target_commands_frequency_table(
-            gscan_dataset["examples"]["test"], list(ACTION2IDX.keys())
-        ).to_latex(
-            float_format="%.2f",
-            caption="One-step ahead conditional probability table, Split A",
-            escape=False,
-        )
-    )
-    print(
-        make_target_commands_frequency_table(
-            gscan_dataset["examples"]["adverb_2"], list(ACTION2IDX.keys())
-        ).to_latex(
-            float_format="%.2f",
-            caption="One-step ahead conditional probability table, Split H",
-            escape=False,
-        )
-    )
-    print(
-        make_target_commands_frequency_table(
-            gscan_dataset["examples"]["visual"], list(ACTION2IDX.keys())
-        ).to_latex(
-            float_format="%.2f",
-            caption="One-step ahead conditional probability table, Split C",
-            escape=False,
-        )
-    )
+    frequency_count_conditional_probabilities(gscan_dataset, ACTION2IDX)
 
 
 if __name__ == "__main__":
