@@ -11,11 +11,11 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from .dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
-from .embedding import BOWEmbedding
-from .load_data import load_data
-from .logging import LoadableCSVLogger
-from .scheduler import transformer_optimizer_config
+from gscan_metaseq2seq.models.embedding import BOWEmbedding
+from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
+from gscan_metaseq2seq.util.load_data import load_data
+from gscan_metaseq2seq.util.logging import LoadableCSVLogger
+from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 
 
 class StateEncoderTransformer(nn.Module):

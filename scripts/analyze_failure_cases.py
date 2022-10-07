@@ -14,7 +14,8 @@ import Levenshtein
 
 from tqdm.auto import tqdm
 
-from train_meta_seq2seq_transformer import ImaginationMetaLearner, PaddingDataset
+from gscan_metaseq2seq.util.dataset import PaddingDataset
+from train_meta_seq2seq_transformer import ImaginationMetaLearner
 from train_transformer import TransformerLearner
 
 

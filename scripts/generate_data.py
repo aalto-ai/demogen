@@ -13,10 +13,11 @@ from torch.utils.data import DataLoader, IterableDataset
 
 from tqdm.auto import tqdm
 
-from gscan.world import Situation, ObjectVocabulary, World
-from gscan.vocabulary import Vocabulary
+from gscan_metaseq2seq.gscan.world import Situation, ObjectVocabulary, World
+from gscan_metaseq2seq.gscan.vocabulary import Vocabulary
 
-from train_transformer import TransformerLearner, PaddingIterableDataset
+from gscan_metaseq2seq.util.dataset import PaddingIterableDataset
+from train_transformer import TransformerLearner
 
 GRID_SIZE = 6
 MIN_OTHER_OBJECTS = 0
