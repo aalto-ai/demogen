@@ -107,9 +107,9 @@ def make_target_commands_frequency_table(examples, actions):
     return frequency_counts_df
 
 
-def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset):
+def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True):
     module = ImaginationMetaLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
-    trainer = pl.Trainer(accelerator="gpu", devices=1)
+    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1)
     preds = trainer.predict(module, DataLoader(dataset, batch_size=64))
 
     predicted_targets_stacked, logits_stacked, exacts_stacked = list(
@@ -119,11 +119,11 @@ def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset):
     return (predicted_targets_stacked, logits_stacked, exacts_stacked)
 
 
-def get_transformer_predictions(transformer_checkpoint, transformer_dataset):
+def get_transformer_predictions(transformer_checkpoint, transformer_dataset, use_cuda=True):
     transformer_module = TransformerLearner.load_from_checkpoint(transformer_checkpoint)
 
     # Sanity check - does this transformer perform well?
-    trainer = pl.Trainer(accelerator="gpu", devices=1)
+    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1)
     trainer.validate(
         transformer_module,
         DataLoader(Subset(transformer_dataset, torch.arange(1024)), batch_size=64),
