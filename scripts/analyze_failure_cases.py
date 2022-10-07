@@ -119,7 +119,9 @@ def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True)
     return (predicted_targets_stacked, logits_stacked, exacts_stacked)
 
 
-def get_transformer_predictions(transformer_checkpoint, transformer_dataset, use_cuda=True):
+def get_transformer_predictions(
+    transformer_checkpoint, transformer_dataset, use_cuda=True
+):
     transformer_module = TransformerLearner.load_from_checkpoint(transformer_checkpoint)
 
     # Sanity check - does this transformer perform well?
@@ -156,7 +158,7 @@ def classify_error_types(
     predicted_targets_stacked,
     exacts_stacked,
     ACTION2IDX,
-    IDX2ACTION
+    IDX2ACTION,
 ):
     error_classifications = {
         "turn_failure": (("turn left", "turn right"), "walk"),
@@ -307,12 +309,16 @@ def main():
         predicted_targets_stacked,
         logits_stacked,
         exacts_stacked,
-    ) = get_metaseq2seq_predictions(args.meta_seq2seq_checkpoint, dataset, not args.disable_cuda)
+    ) = get_metaseq2seq_predictions(
+        args.meta_seq2seq_checkpoint, dataset, not args.disable_cuda
+    )
     (
         transformer_predicted_targets_stacked,
         transformer_logits_stacked,
         transformer_exacts_stacked,
-    ) = get_transformer_predictions(args.transformer_checkpoint, transformer_dataset, not args.disable_cuda)
+    ) = get_transformer_predictions(
+        args.transformer_checkpoint, transformer_dataset, not args.disable_cuda
+    )
 
     print("Exact match accurracy - transformer")
     print(np.array(transformer_exacts_stacked).astype(np.float).mean())
