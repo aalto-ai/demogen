@@ -16,7 +16,8 @@ will need a copy of the [gSCAN compositional splits](https://github.com/LauraRui
 
 Invoke it like this:
 
-    python --gscan-dataset path/to/compositional_splits/dataset.txt
+    python scripts/generate_data.py
+           --gscan-dataset path/to/compositional_splits/dataset.txt
            --output-directory data/metalearn_sample_environments
            --generate-mode baseline
 
@@ -34,7 +35,7 @@ There are a few different `--generate-mode` options:
 
 To train the models, use something like:
 
-    python train_meta_seq2seq_transformer.py \
+    python scripts/train_meta_seq2seq_transformer.py \
     --train-demonstrations data/metalearn/train.pb \
     --valid-demonstrations data/metalearn/valid \
     --dictionary data/baseline/dictionary.pb \
@@ -72,7 +73,7 @@ logs, exclude the worst seeds and generate the tables.
 This can all be found in the `analyze_failure_cases.py` script. To run this you will need a
 trained meta-seq2seq model and transformer model.
 
-    python analyze_failure_cases.py
+    python scripts/analyze_failure_cases.py
     --compositional-splits path/to/gscan/compositional_splits/dataset.txt
     --metalearn-data-directory data/metalearn
     --baseline-data-directory data/baseline
