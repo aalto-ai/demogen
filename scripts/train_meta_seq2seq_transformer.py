@@ -291,7 +291,6 @@ class MetaNetRNN(nn.Module):
         self.output_size = output_size
         self.embedding_dim = embedding_dim
         self.dropout_p = dropout_p
-        self.bi_encoder = bidirectional
         self.attn = Attn()
         self.suppport_embedding = StateEncoderDecoderTransformer(
             n_state_components,
