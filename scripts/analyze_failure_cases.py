@@ -264,87 +264,15 @@ def compute_turn_entropies(
     )
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--compositional-splits", type=str, required=True)
-    parser.add_argument("--metalearn-data-directory", type=str, required=True)
-    parser.add_argument("--baseline-data-directory", type=str, required=True)
-    parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
-    parser.add_argument("--transformer-checkpoint", type=str, required=True)
-    parser.add_argument("--disable-cuda", action="store_false")
-    args = parser.parse_args()
-
-    with open(f"{args.baseline_data_directory}/dictionary.pb", "rb") as f:
-        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
-
-    IDX2WORD = {i: w for w, i in WORD2IDX.items()}
-    IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
-
-    pad_word = WORD2IDX["[pad]"]
-    pad_action = ACTION2IDX["[pad]"]
-    sos_action = ACTION2IDX["[sos]"]
-    eos_action = ACTION2IDX["[eos]"]
-
-    with open(f"{args.compositional_splits}", "r") as f:
-        gscan_dataset = json.load(f)
-
-    with open(f"{args.metalearn_data_directory}/valid/h.pb", "rb") as f:
-        gscan_metalearn_split_h_demonstrations = pickle.load(f)
-
-    with open(f"{args.baseline_data_directory}/valid/h.pb", "rb") as f:
-        gscan_split_h_demonstrations = pickle.load(f)
-
-    dataset = PaddingDataset(
-        gscan_metalearn_split_h_demonstrations,
-        (None, None, 8, 72, (8, 8), (8, 72)),
-        (None, None, pad_word, pad_action, pad_word, pad_action),
-    )
-    transformer_dataset = PaddingDataset(
-        gscan_split_h_demonstrations,
-        (8, 72, None),
-        (pad_word, pad_action, None),
-    )
-
-    (
-        predicted_targets_stacked,
-        logits_stacked,
-        exacts_stacked,
-    ) = get_metaseq2seq_predictions(
-        args.meta_seq2seq_checkpoint, dataset, not args.disable_cuda
-    )
-    (
-        transformer_predicted_targets_stacked,
-        transformer_logits_stacked,
-        transformer_exacts_stacked,
-    ) = get_transformer_predictions(
-        args.transformer_checkpoint, transformer_dataset, not args.disable_cuda
-    )
-
-    print("Exact match accurracy - transformer")
-    print(np.array(transformer_exacts_stacked).astype(np.float).mean())
-
-    print("Exact match accurracy - meta-seq2seq")
-    print(np.array(exacts_stacked).astype(np.float).mean())
-
-    error_classifications_indices = classify_error_types(
-        gscan_dataset,
-        dataset,
-        predicted_targets_stacked,
-        exacts_stacked,
-        ACTION2IDX,
-        IDX2ACTION,
-    )
-
-    # Compute entropy value for turns
-    compute_turn_entropies(
-        error_classifications_indices,
-        dataset,
-        logits_stacked,
-        predicted_targets_stacked,
-        ACTION2IDX,
-    )
-
-    # Measure edit distance between predicted targets and inputs
+def generate_edit_distance_plots(
+    dataset,
+    gscan_split_h_demonstrations,
+    predicted_targets_stacked,
+    exacts_stacked,
+    transformer_predicted_targets_stacked,
+    transformer_exacts_stacked,
+    ACTION2IDX,
+):
     meta_seq2seq_split_h_levenshtein_distances = np.array(
         [
             Levenshtein.distance(
@@ -507,6 +435,98 @@ def main():
     )
     plt.savefig("edit_distance_vs_pulls_8_16.pdf")
     plt.clf()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--compositional-splits", type=str, required=True)
+    parser.add_argument("--metalearn-data-directory", type=str, required=True)
+    parser.add_argument("--baseline-data-directory", type=str, required=True)
+    parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
+    parser.add_argument("--transformer-checkpoint", type=str, required=True)
+    parser.add_argument("--disable-cuda", action="store_false")
+    args = parser.parse_args()
+
+    with open(f"{args.baseline_data_directory}/dictionary.pb", "rb") as f:
+        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+
+    IDX2WORD = {i: w for w, i in WORD2IDX.items()}
+    IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
+
+    pad_word = WORD2IDX["[pad]"]
+    pad_action = ACTION2IDX["[pad]"]
+    sos_action = ACTION2IDX["[sos]"]
+    eos_action = ACTION2IDX["[eos]"]
+
+    with open(f"{args.compositional_splits}", "r") as f:
+        gscan_dataset = json.load(f)
+
+    with open(f"{args.metalearn_data_directory}/valid/h.pb", "rb") as f:
+        gscan_metalearn_split_h_demonstrations = pickle.load(f)
+
+    with open(f"{args.baseline_data_directory}/valid/h.pb", "rb") as f:
+        gscan_split_h_demonstrations = pickle.load(f)
+
+    dataset = PaddingDataset(
+        gscan_metalearn_split_h_demonstrations,
+        (None, None, 8, 72, (8, 8), (8, 72)),
+        (None, None, pad_word, pad_action, pad_word, pad_action),
+    )
+    transformer_dataset = PaddingDataset(
+        gscan_split_h_demonstrations,
+        (8, 72, None),
+        (pad_word, pad_action, None),
+    )
+
+    (
+        predicted_targets_stacked,
+        logits_stacked,
+        exacts_stacked,
+    ) = get_metaseq2seq_predictions(
+        args.meta_seq2seq_checkpoint, dataset, not args.disable_cuda
+    )
+    (
+        transformer_predicted_targets_stacked,
+        transformer_logits_stacked,
+        transformer_exacts_stacked,
+    ) = get_transformer_predictions(
+        args.transformer_checkpoint, transformer_dataset, not args.disable_cuda
+    )
+
+    print("Exact match accurracy - transformer")
+    print(np.array(transformer_exacts_stacked).astype(np.float).mean())
+
+    print("Exact match accurracy - meta-seq2seq")
+    print(np.array(exacts_stacked).astype(np.float).mean())
+
+    error_classifications_indices = classify_error_types(
+        gscan_dataset,
+        dataset,
+        predicted_targets_stacked,
+        exacts_stacked,
+        ACTION2IDX,
+        IDX2ACTION,
+    )
+
+    # Compute entropy value for turns
+    compute_turn_entropies(
+        error_classifications_indices,
+        dataset,
+        logits_stacked,
+        predicted_targets_stacked,
+        ACTION2IDX,
+    )
+
+    # Measure edit distance between predicted targets and inputs
+    generate_edit_distance_plots(
+        dataset,
+        gscan_split_h_demonstrations,
+        predicted_targets_stacked,
+        exacts_stacked,
+        transformer_predicted_targets_stacked,
+        transformer_exacts_stacked,
+        ACTION2IDX,
+    )
 
     # Frequency-counting conditional probabilities
     print("Conditional probabilities frequency counts")
