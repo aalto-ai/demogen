@@ -68,6 +68,8 @@ Assuming that you run over:
 then you can run the `analyze_results.py` script on your `logs` dir with `--logs-dir logs`. This will open all the
 logs, exclude the worst seeds and generate the tables.
 
+    python scripts/analyze_results.py --logs-dir path/to/logs --other-scripts-logs-dir path/to/logs
+
 # Performing the failure case analysis
 
 This can all be found in the `analyze_failure_cases.py` script. To run this you will need a
