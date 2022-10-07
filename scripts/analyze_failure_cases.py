@@ -229,6 +229,39 @@ def classify_error_types(
     return error_classifications_indices
 
 
+def compute_turn_entropies(
+    error_classifications_indices,
+    dataset,
+    logits_stacked,
+    predicted_targets_stacked,
+    ACTION2IDX,
+):
+    logits_from_missed_turns = np.concatenate(
+        [
+            logits_stacked[idx].numpy()[
+                np.logical_and(
+                    (predicted_targets_stacked[idx].numpy() == ACTION2IDX["walk"]),
+                    np.logical_or(
+                        dataset[idx][3] == ACTION2IDX["turn left"],
+                        dataset[idx][3] == ACTION2IDX["turn right"],
+                    ),
+                )
+            ][:1]
+            for idx in error_classifications_indices["turn_failure"]
+        ]
+    )
+
+    logits_from_missed_turns_entropies = entropy_from_logits(
+        logits_from_missed_turns[:, [3, 4, 5]]
+    )
+
+    print("Missed turns entropies")
+    print(
+        logits_from_missed_turns_entropies.mean(),
+        logits_from_missed_turns_entropies.std(),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compositional-splits", type=str, required=True)
@@ -293,32 +326,16 @@ def main():
         predicted_targets_stacked,
         exacts_stacked,
         ACTION2IDX,
-        IDX2ACTION
+        IDX2ACTION,
     )
 
-    logits_from_missed_turns = np.concatenate(
-        [
-            logits_stacked[idx].numpy()[
-                np.logical_and(
-                    (predicted_targets_stacked[idx].numpy() == ACTION2IDX["walk"]),
-                    np.logical_or(
-                        dataset[idx][3] == ACTION2IDX["turn left"],
-                        dataset[idx][3] == ACTION2IDX["turn right"],
-                    ),
-                )
-            ][:1]
-            for idx in error_classifications_indices["turn_failure"]
-        ]
-    )
-
-    logits_from_missed_turns_entropies = entropy_from_logits(
-        logits_from_missed_turns[:, [3, 4, 5]]
-    )
-
-    print("Missed turns entropies")
-    print(
-        logits_from_missed_turns_entropies.mean(),
-        logits_from_missed_turns_entropies.std(),
+    # Compute entropy value for turns
+    compute_turn_entropies(
+        error_classifications_indices,
+        dataset,
+        logits_stacked,
+        predicted_targets_stacked,
+        ACTION2IDX,
     )
 
     # Measure edit distance between predicted targets and inputs
