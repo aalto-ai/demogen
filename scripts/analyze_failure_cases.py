@@ -150,63 +150,14 @@ def get_transformer_predictions(transformer_checkpoint, transformer_dataset, use
     )
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--compositional-splits", type=str, required=True)
-    parser.add_argument("--metalearn-data-directory", type=str, required=True)
-    parser.add_argument("--baseline-data-directory", type=str, required=True)
-    parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
-    parser.add_argument("--transformer-checkpoint", type=str, required=True)
-    args = parser.parse_args()
-
-    with open(f"{args.baseline_data_directory}/dictionary.pb", "rb") as f:
-        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
-
-    IDX2WORD = {i: w for w, i in WORD2IDX.items()}
-    IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
-
-    pad_word = WORD2IDX["[pad]"]
-    pad_action = ACTION2IDX["[pad]"]
-    sos_action = ACTION2IDX["[sos]"]
-    eos_action = ACTION2IDX["[eos]"]
-
-    with open(f"{args.compositional_splits}", "r") as f:
-        gscan_dataset = json.load(f)
-
-    with open(f"{args.metalearn_data_directory}/valid/h.pb", "rb") as f:
-        gscan_metalearn_split_h_demonstrations = pickle.load(f)
-
-    with open(f"{args.baseline_data_directory}/valid/h.pb", "rb") as f:
-        gscan_split_h_demonstrations = pickle.load(f)
-
-    dataset = PaddingDataset(
-        gscan_metalearn_split_h_demonstrations,
-        (None, None, 8, 72, (8, 8), (8, 72)),
-        (None, None, pad_word, pad_action, pad_word, pad_action),
-    )
-    transformer_dataset = PaddingDataset(
-        gscan_split_h_demonstrations,
-        (8, 72, None),
-        (pad_word, pad_action, None),
-    )
-
-    (
-        predicted_targets_stacked,
-        logits_stacked,
-        exacts_stacked,
-    ) = get_metaseq2seq_predictions(args.meta_seq2seq_checkpoint, dataset)
-    (
-        transformer_predicted_targets_stacked,
-        transformer_logits_stacked,
-        transformer_exacts_stacked,
-    ) = get_transformer_predictions(args.transformer_checkpoint, transformer_dataset)
-
-    print("Exact match accurracy - transformer")
-    print(np.array(transformer_exacts_stacked).astype(np.float).mean())
-
-    print("Exact match accurracy - meta-seq2seq")
-    print(np.array(exacts_stacked).astype(np.float).mean())
-
+def classify_error_types(
+    gscan_dataset,
+    dataset,
+    predicted_targets_stacked,
+    exacts_stacked,
+    ACTION2IDX,
+    IDX2ACTION
+):
     error_classifications = {
         "turn_failure": (("turn left", "turn right"), "walk"),
         "spurious_pull": (("walk",), "pull"),
@@ -273,6 +224,76 @@ def main():
             k: len(v) / len(exacts_stacked[exacts_stacked == False])
             for k, v in error_classifications_indices.items()
         }
+    )
+
+    return error_classifications_indices
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--compositional-splits", type=str, required=True)
+    parser.add_argument("--metalearn-data-directory", type=str, required=True)
+    parser.add_argument("--baseline-data-directory", type=str, required=True)
+    parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
+    parser.add_argument("--transformer-checkpoint", type=str, required=True)
+    parser.add_argument("--disable-cuda", action="store_false")
+    args = parser.parse_args()
+
+    with open(f"{args.baseline_data_directory}/dictionary.pb", "rb") as f:
+        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+
+    IDX2WORD = {i: w for w, i in WORD2IDX.items()}
+    IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
+
+    pad_word = WORD2IDX["[pad]"]
+    pad_action = ACTION2IDX["[pad]"]
+    sos_action = ACTION2IDX["[sos]"]
+    eos_action = ACTION2IDX["[eos]"]
+
+    with open(f"{args.compositional_splits}", "r") as f:
+        gscan_dataset = json.load(f)
+
+    with open(f"{args.metalearn_data_directory}/valid/h.pb", "rb") as f:
+        gscan_metalearn_split_h_demonstrations = pickle.load(f)
+
+    with open(f"{args.baseline_data_directory}/valid/h.pb", "rb") as f:
+        gscan_split_h_demonstrations = pickle.load(f)
+
+    dataset = PaddingDataset(
+        gscan_metalearn_split_h_demonstrations,
+        (None, None, 8, 72, (8, 8), (8, 72)),
+        (None, None, pad_word, pad_action, pad_word, pad_action),
+    )
+    transformer_dataset = PaddingDataset(
+        gscan_split_h_demonstrations,
+        (8, 72, None),
+        (pad_word, pad_action, None),
+    )
+
+    (
+        predicted_targets_stacked,
+        logits_stacked,
+        exacts_stacked,
+    ) = get_metaseq2seq_predictions(args.meta_seq2seq_checkpoint, dataset, not args.disable_cuda)
+    (
+        transformer_predicted_targets_stacked,
+        transformer_logits_stacked,
+        transformer_exacts_stacked,
+    ) = get_transformer_predictions(args.transformer_checkpoint, transformer_dataset, not args.disable_cuda)
+
+    print("Exact match accurracy - transformer")
+    print(np.array(transformer_exacts_stacked).astype(np.float).mean())
+
+    print("Exact match accurracy - meta-seq2seq")
+    print(np.array(exacts_stacked).astype(np.float).mean())
+
+    error_classifications_indices = classify_error_types(
+        gscan_dataset,
+        dataset,
+        predicted_targets_stacked,
+        exacts_stacked,
+        ACTION2IDX,
+        IDX2ACTION
     )
 
     logits_from_missed_turns = np.concatenate(
