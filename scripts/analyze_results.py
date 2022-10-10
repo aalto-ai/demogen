@@ -330,7 +330,6 @@ def main():
         GSCAN_TEST_SPLIT_DATALOADER_NAMES,
         args.result_smoothing,
     ).describe()
-    meta_gscan_oracle_performance_at_best_6
 
     meta_gscan_oracle_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -340,7 +339,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_oracle_performance_at_best_6_20k
 
     meta_gscan_oracle_noshuffle_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -350,7 +348,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_oracle_noshuffle_performance_at_best_6_20k
 
     meta_gscan_imagine_actions_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -360,7 +357,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_imagine_actions_performance_at_best_6_20k
 
     meta_gscan_metalearn_distractors_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -370,7 +366,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_metalearn_distractors_performance_at_best_6_20k
 
     meta_gscan_metalearn_only_random_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -380,7 +375,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_metalearn_only_random_performance_at_best_6_20k
 
     meta_gscan_metalearn_sample_environments_performance_at_best_6_20k = (
         get_top_values_for_corresponding_value(
@@ -390,7 +384,6 @@ def main():
             args.result_smoothing,
         ).describe()
     )
-    meta_gscan_metalearn_sample_environments_performance_at_best_6_20k
 
     gscan_transformer_performance_at_best_0 = get_top_values_for_corresponding_value(
         all_transformer_encoder_only_metrics_dfs,
@@ -398,7 +391,6 @@ def main():
         GSCAN_TEST_SPLIT_DATALOADER_NAMES,
         args.result_smoothing,
     ).describe()
-    gscan_transformer_performance_at_best_0
 
     results_table = (
         pd.concat(
