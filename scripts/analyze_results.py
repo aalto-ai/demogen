@@ -59,7 +59,6 @@ def get_top_values_for_corresponding_value(dfs, corresponding, values, rolling=1
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
-    parser.add_argument("--other-scripts-logs-dir", required=True)
     parser.add_argument("--limit", type=int, default=30000)
     parser.add_argument("--ablations-limit", type=int, default=30000)
     parser.add_argument("--drop-bad-seeds", type=int, default=3)
@@ -69,7 +68,6 @@ def main():
     args = parser.parse_args()
 
     SCRIPTS_LOGS_DIR = args.logs_dir
-    OTHER_SCRIPTS_LOGS_DIR = args.other_scripts_logs_dir
 
     all_transformer_encoder_only_metrics_dfs = [
         truncate_at_key(
