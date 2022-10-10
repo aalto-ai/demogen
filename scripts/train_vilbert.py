@@ -136,7 +136,7 @@ class TransformerMLP(nn.Module):
         self.net = nn.Sequential(nn.Linear(emb_dim, ff_dim), nn.Dropout(dropout_p))
         self.norm = nn.LayerNorm(ff_dim, eps=1e-12)
 
-    def forward(self, x, attn_output):
+    def forward(self, attn_output, x):
         return self.norm(x + self.net(attn_output))
 
 
