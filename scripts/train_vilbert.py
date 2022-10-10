@@ -21,7 +21,6 @@ from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 class DecoderTransformer(nn.Module):
     def __init__(
         self,
-        n_state_components,
         hidden_size,
         output_size,
         nlayers,
@@ -37,7 +36,6 @@ class DecoderTransformer(nn.Module):
         #  dropout_p : dropout applied to symbol embeddings and Transformers
         #
         super().__init__()
-        self.n_state_components = n_state_components
         self.nlayers = nlayers
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -349,7 +347,6 @@ class ViLBERTLeaner(pl.LightningModule):
             state_component_sizes, embed_dim, nlayers, nhead, dropout_p
         )
         self.decoder = DecoderTransformer(
-            n_state_components,
             embed_dim,
             y_categories,
             nlayers,
