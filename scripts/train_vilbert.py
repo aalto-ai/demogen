@@ -120,9 +120,11 @@ class StateCNN(nn.Module):
         )
 
     def forward(self, x):
+        # NHWC => NCWH => NCHW
         x = x.transpose(-1, -3).transpose(-1, -2)
         x_multiscale = [layer(x) for layer in self.conv_layers]
         x_multiscale = torch.cat(x_multiscale, dim=-3)
+        # NCHW => NWHC => NHWC
         x_multiscale = x_multiscale.transpose(-1, -3).transpose(-2, -3)
 
         return self.mlp(x_multiscale)
