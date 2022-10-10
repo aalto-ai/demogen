@@ -534,7 +534,7 @@ def main():
 
     pl.seed_everything(seed)
     meta_module = ViLBERTLeaner(
-        7,
+        [4, len(color_dictionary), len(noun_dictionary), 1, 4],
         len(IDX2WORD),
         len(IDX2ACTION),
         args.hidden_size,
