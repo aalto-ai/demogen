@@ -140,7 +140,7 @@ class TransformerMLP(nn.Module):
         return self.norm(x + self.net(attn_output))
 
 
-class TransformerCrossEncoderLayer(nn.Module):
+class TransformerCrossAttentionLayer(nn.Module):
     def __init__(self, emb_dim, ff_dim, nhead=4, dropout_p=0.0):
         super().__init__()
         self.mha_x_to_y = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
@@ -153,6 +153,37 @@ class TransformerCrossEncoderLayer(nn.Module):
         mha_y, _ = self.mha_y_to_x(y, x, x, key_padding_mask=x_key_padding_mask)
 
         return self.dense_x_to_y(mha_x, x), self.dense_y_to_x(mha_y, y)
+
+
+class TransformerIntermediateLayer(nn.Module):
+    def __init__(self, emb_dim, ff_dim):
+        super().__init__()
+        self.linear = nn.Linear(emb_dim, ff_dim)
+        self.gelu = nn.GELU()
+
+    def forward(self, x):
+        return self.gelu(self.linear(x))
+
+
+class TransformerCrossEncoderLayer(nn.Module):
+    def __init__(self, emb_dim, ff_dim, nhead=4, dropout_p=0.0):
+        super().__init__()
+        self.cross_attn = TransformerCrossAttentionLayer(
+            emb_dim, emb_dim, nhead=nhead, dropout_p=dropout_p
+        )
+        self.intermediate1 = TransformerIntermediateLayer(emb_dim, ff_dim)
+        self.intermediate2 = TransformerIntermediateLayer(emb_dim, ff_dim)
+        self.output1 = TransformerMLP(ff_dim, emb_dim, dropout_p)
+        self.output2 = TransformerMLP(ff_dim, emb_dim, dropout_p)
+
+    def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
+        attn_x, attn_y = self.cross_attn(x, y, x_key_padding_mask, y_key_padding_mask)
+        intermediate_x = self.intermediate1(attn_x)
+        intermediate_y = self.intermediate2(attn_y)
+        output_x = self.output1(intermediate_x, attn_x)
+        output_y = self.output2(intermediate_y, attn_y)
+
+        return output_x, output_y
 
 
 class TransformerCrossEncoder(nn.Module):
