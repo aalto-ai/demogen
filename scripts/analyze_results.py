@@ -187,6 +187,17 @@ def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
     ]
 
 
+GSCAN_TEST_SPLIT_DATALOADER_NAMES = [
+    "vexact/dataloader_idx_0",
+    "vexact/dataloader_idx_1",
+    "vexact/dataloader_idx_2",
+    "vexact/dataloader_idx_3",
+    "vexact/dataloader_idx_4",
+    "vexact/dataloader_idx_5",
+    "vexact/dataloader_idx_6",
+]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
@@ -309,30 +320,14 @@ def main():
     meta_gscan_oracle_performance_at_best_0 = get_top_values_for_corresponding_value(
         meta_gscan_oracle_metrics_dfs,
         "vexact/dataloader_idx_0",
-        [
-            "vexact/dataloader_idx_0",
-            "vexact/dataloader_idx_1",
-            "vexact/dataloader_idx_2",
-            "vexact/dataloader_idx_3",
-            "vexact/dataloader_idx_4",
-            "vexact/dataloader_idx_5",
-            "vexact/dataloader_idx_6",
-        ],
+        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
         args.result_smoothing,
     ).describe()
 
     meta_gscan_oracle_performance_at_best_6 = get_top_values_for_corresponding_value(
         meta_gscan_oracle_metrics_dfs,
         "vexact/dataloader_idx_6",
-        [
-            "vexact/dataloader_idx_0",
-            "vexact/dataloader_idx_1",
-            "vexact/dataloader_idx_2",
-            "vexact/dataloader_idx_3",
-            "vexact/dataloader_idx_4",
-            "vexact/dataloader_idx_5",
-            "vexact/dataloader_idx_6",
-        ],
+        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
         args.result_smoothing,
     ).describe()
     meta_gscan_oracle_performance_at_best_6
@@ -341,15 +336,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_oracle_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -359,15 +346,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_oracle_noshuffle_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -377,15 +356,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_imagine_actions_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -395,15 +366,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_metalearn_distractors_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -413,15 +376,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_metalearn_only_random_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -431,15 +386,7 @@ def main():
         get_top_values_for_corresponding_value(
             meta_gscan_metalearn_sample_environments_metrics_dfs_20k,
             "vexact/dataloader_idx_0",
-            [
-                "vexact/dataloader_idx_0",
-                "vexact/dataloader_idx_1",
-                "vexact/dataloader_idx_2",
-                "vexact/dataloader_idx_3",
-                "vexact/dataloader_idx_4",
-                "vexact/dataloader_idx_5",
-                "vexact/dataloader_idx_6",
-            ],
+            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
     )
@@ -448,15 +395,7 @@ def main():
     gscan_transformer_performance_at_best_0 = get_top_values_for_corresponding_value(
         all_transformer_encoder_only_metrics_dfs,
         "vexact/dataloader_idx_0",
-        [
-            "vexact/dataloader_idx_0",
-            "vexact/dataloader_idx_1",
-            "vexact/dataloader_idx_2",
-            "vexact/dataloader_idx_3",
-            "vexact/dataloader_idx_4",
-            "vexact/dataloader_idx_5",
-            "vexact/dataloader_idx_6",
-        ],
+        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
         args.result_smoothing,
     ).describe()
     gscan_transformer_performance_at_best_0
