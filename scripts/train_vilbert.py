@@ -192,7 +192,7 @@ class TransformerCrossEncoder(nn.Module):
         self.layers = nn.ModuleList(
             [
                 TransformerCrossEncoderLayer(
-                    emb_dim, ff_dim, nhead=4, dropout_p=dropout_p
+                    emb_dim, ff_dim, nhead=nhead, dropout_p=dropout_p
                 )
                 for _ in range(nlayers)
             ]
