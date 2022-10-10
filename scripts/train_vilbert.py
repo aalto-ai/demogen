@@ -337,9 +337,9 @@ class ViLBERTLeaner(pl.LightningModule):
         pad_action_idx,
         sos_action_idx,
         eos_action_idx,
-        lr=1e-4,
+        lr=16e-3,
         wd=1e-2,
-        warmup_proportion=0.001,
+        warmup_proportion=0.1,
         decay_power=-1,
         predict_steps=64,
     ):
