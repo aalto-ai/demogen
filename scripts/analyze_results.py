@@ -466,7 +466,7 @@ def main():
         "Transformer Actions",
         "Distractors",
         "Random Instructions",
-        "Sample Environments",
+        "Different States",
     ]
     ablation_study_table = ablation_study_table.drop("index", axis=1)
 
