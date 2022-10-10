@@ -1,3 +1,4 @@
+import torch.nn as nn
 import torch.optim as optim
 
 
@@ -29,9 +30,41 @@ def linear_with_warmup_schedule(
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
+def get_parameter_names(model, exclude_layer_types):
+    """
+    Returns the names of the model parameters that are not inside a forbidden layer.
+    """
+    result = []
+    for name, child in model.named_children():
+        result += [
+            f"{name}.{n}"
+            for n in get_parameter_names(child, exclude_layer_types)
+            if not isinstance(child, tuple(exclude_layer_types))
+        ]
+    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
+    result += list(model._parameters.keys())
+    return result
+
+
 def transformer_optimizer_config(
     harness, lr, warmup_proportion=0.14, decay_power=-2, weight_decay=0
 ):
+    decay_parameters = get_parameter_names(harness, [nn.LayerNorm])
+    decay_parameters = [name for name in decay_parameters if "bias" not in name]
+    optimizer_grouped_parameters = [
+        {
+            "params": [
+                p for n, p in harness.named_parameters() if n in decay_parameters
+            ],
+            "weight_decay": weight_decay,
+        },
+        {
+            "params": [
+                p for n, p in harness.named_parameters() if n not in decay_parameters
+            ],
+            "weight_decay": 0.0,
+        },
+    ]
     optimizer = optim.AdamW(harness.parameters(), lr=lr, weight_decay=weight_decay)
     return {
         "optimizer": optimizer,
