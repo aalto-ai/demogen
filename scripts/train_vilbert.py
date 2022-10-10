@@ -226,6 +226,45 @@ class TransformerCrossEncoder(nn.Module):
         return encoded, torch.cat([x_key_padding_mask, y_key_padding_mask], dim=-1)
 
 
+class TransformerEmbeddings(nn.Module):
+    def __init__(self, n_inp, embed_dim, dropout_p=0.0):
+        super().__init__()
+        self.embedding = nn.Embedding(n_inp, embed_dim)
+        self.pos_embedding = nn.Embedding(n_inp, embed_dim)
+        self.dropout = nn.Dropout(p=dropout_p)
+        self.norm = nn.LayerNorm(embed_dim, eps=1e-12)
+
+    def forward(self, instruction):
+        projected_instruction = self.embedding(instruction)
+        projected_instruction = (
+            self.pos_embedding(torch.ones_like(instruction).cumsum(dim=-1) - 1)
+            + projected_instruction
+        )
+
+        return self.dropout(self.norm(projected_instruction))
+
+
+def nullable_one_hot(vec, cats):
+    # Allows for zeros in a field where the category is zero
+    return F.one_hot(vec, cats + 1)[..., 1:].float()
+
+
+class OneHotEmbedding(nn.Module):
+    def __init__(self, component_sizes):
+        super().__init__()
+        self.component_sizes = component_sizes
+        self.output_size = np.sum(component_sizes)
+
+    def forward(self, x):
+        return torch.cat(
+            [
+                nullable_one_hot(x[..., i], s)
+                for i, s in enumerate(self.component_sizes)
+            ],
+            dim=-1,
+        )
+
+
 class ViLBERTStateEncoderTransformer(nn.Module):
     def __init__(
         self,
