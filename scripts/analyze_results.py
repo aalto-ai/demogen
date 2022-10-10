@@ -56,6 +56,121 @@ def get_top_values_for_corresponding_value(dfs, corresponding, values, rolling=1
     )
 
 
+def format_experiment_name(experiment_config, params):
+    name_dict = {**experiment_config, **params}
+    return "_".join(
+        map(
+            str,
+            [
+                name_dict["headline"],
+                "s",
+                name_dict["seed"],
+                "m",
+                name_dict["model"],
+                "l",
+                name_dict["layers"],
+                "h",
+                name_dict["heads"],
+                "d",
+                name_dict["hidden"],
+                "it",
+                name_dict["iterations"],
+                "b",
+                name_dict["batch_size"],
+                "d",
+                name_dict["dataset"],
+                "t",
+                name_dict["tag"],
+                "drop",
+                name_dict["dropout"],
+            ],
+        )
+    )
+
+
+def format_model_name(experiment_config, include_hparams=False):
+    return "_".join(
+        map(
+            str,
+            [experiment_config["model"]]
+            + (
+                [
+                    "l",
+                    experiment_config["layers"],
+                    "h",
+                    experiment_config["heads"],
+                    "d",
+                    experiment_config["hidden"],
+                ]
+                if include_hparams
+                else []
+            ),
+        )
+    )
+
+
+def format_log_path(experiment_config, params, model_include_hparams=False):
+    return os.path.join(
+        format_experiment_name(experiment_config, params),
+        format_model_name(experiment_config, include_hparams=model_include_hparams),
+        experiment_config["dataset"],
+        str(params["seed"]),
+        "lightning_logs",
+        "100",
+        "metrics.csv",
+    )
+
+
+BASE_EXPERIMENT_CONFIGS = {
+    "transformer": {
+        "headline": "gscan",
+        "model": "transformer_encoder_only_decode_actions",
+        "layers": 28,
+        "heads": 4,
+        "hidden": 128,
+        "iterations": 50000,
+        "batch_size": 4096,
+        "dataset": "gscan",
+        "tag": "none",
+        "dropout": 0.0,
+    },
+    "meta_gscan_oracle": {
+        "headline": "meta_gscan",
+        "model": "meta_imagination_transformer",
+        "layers": 8,
+        "heads": 4,
+        "hidden": 128,
+        "iterations": 50000,
+        "batch_size": 4096,
+        "dataset": "gscan_metalearn_fixed",
+        "tag": "none",
+        "dropout": 0.0,
+    },
+}
+ABLATION_EXPERIMENT_CONFIGS = {
+    "meta_gscan_oracle_noshuffle": {
+        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        "tag": "noshuffle",
+    },
+    "meta_gscan_imagine_actions": {
+        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        "dataset": "gscan_imagine_actions_fixed",
+    },
+    "meta_gscan_distractors": {
+        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        "dataset": "gscan_metalearn_distractors_fixed",
+    },
+    "meta_gscan_sample_environments": {
+        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        "dataset": "gscan_metalearn_sample_environments_fixed",
+    },
+    "meta_gscan_only_random": {
+        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        "dataset": "gscan_metalearn_only_random",
+    },
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
@@ -72,7 +187,9 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"gscan_s_{seed}_m_transformer_encoder_only_decode_actions_l_28_h_4_d_128_it_50000_b_4096_d_gscan_t_none_drop_0.0/transformer_encoder_only_decode_actions/gscan/{seed}/lightning_logs/version_100/metrics.csv",
+                    format_log_path(
+                        BASE_EXPERIMENT_CONFIGS["transformer"], {"seed": seed}
+                    ),
                 )
             ),
             "step",
@@ -92,7 +209,9 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], {"seed": seed}
+                    ),
                 )
             ),
             "step",
@@ -112,7 +231,9 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], {"seed": seed}
+                    ),
                 )
             ),
             "step",
@@ -132,7 +253,10 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_noshuffle_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_oracle_noshuffle"],
+                        {"seed": seed},
+                    ),
                 )
             ),
             "step",
@@ -152,7 +276,10 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_imagine_actions_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_imagine_actions_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_imagine_actions"],
+                        {"seed": seed},
+                    ),
                 )
             ),
             "step",
@@ -172,7 +299,10 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_distractors_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_distractors_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_distractors"],
+                        {"seed": seed},
+                    ),
                 )
             ),
             "step",
@@ -194,7 +324,10 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_sample_environments_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_sample_environments_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_sample_environments"],
+                        {"seed": seed},
+                    ),
                 )
             ),
             "step",
@@ -216,7 +349,10 @@ def main():
             pd.read_csv(
                 os.path.join(
                     args.logs_dir,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_only_random_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_only_random/{seed}/lightning_logs/100/metrics.csv",
+                    format_log_path(
+                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_only_random"],
+                        {"seed": seed},
+                    ),
                 )
             ),
             "step",
