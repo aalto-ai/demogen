@@ -268,24 +268,28 @@ class OneHotEmbedding(nn.Module):
 class ViLBERTStateEncoderTransformer(nn.Module):
     def __init__(
         self,
-        n_state_components,
-        text_dictionary_size,
+        state_component_sizes,
         embed_dim=128,
         nlayers=6,
+        nhead=8,
         dropout_p=0.1,
     ):
         super().__init__()
-        self.state_embedding = BOWEmbedding(64, n_state_components, embed_dim)
-        self.state_projection = nn.Linear(n_state_components * embed_dim, embed_dim)
-        self.embedding = nn.Embedding(text_dictionary_size, embed_dim)
-        self.pos_encoding = PositionalEncoding1D(embed_dim)
-        self.state_encoder = StateCNN(embed_dim, [1, 5, 7], dropout_p=dropout_p)
+        self.state_embedding = OneHotEmbedding(state_component_sizes)
+        self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
+        self.state_encoder = StateCNN(
+            self.state_embedding.output_size,
+            50,
+            embed_dim,
+            [1, 5, 7],
+            dropout_p=dropout_p,
+        )
         self.cross_encoder = TransformerCrossEncoder(
-            nlayers, embed_dim, embed_dim * 2, nhead=4, dropout_p=dropout_p
+            nlayers, embed_dim, embed_dim * 2, nhead=nhead, dropout_p=dropout_p
         )
 
     def forward(self, state, instruction, instruction_key_padding_mask=None):
-        projected_state = self.state_projection(self.state_embedding(state))
+        projected_state = self.state_embedding(state)
         state_seq_dim = projected_state.shape[-2]
         state_w_dim = int(math.sqrt(state_seq_dim))
         state_h_dim = state_w_dim
@@ -298,9 +302,6 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         projected_state = projected_state.flatten(-3, -2)
 
         projected_instruction = self.embedding(instruction)
-        projected_instruction = (
-            self.pos_encoding(projected_instruction) + projected_instruction
-        )
 
         encoding, encoding_mask = self.cross_encoder(
             projected_state,
