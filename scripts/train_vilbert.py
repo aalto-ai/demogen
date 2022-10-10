@@ -313,6 +313,17 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         return encoding, encoding_mask
 
 
+def init_parameters(module):
+    if type(module) in [nn.LayerNorm]:
+        return
+
+    if getattr(module, "weight", None) is not None:
+        torch.nn.init.normal_(module.weight, 0, 1e-2)
+
+    if getattr(module, "bias", None) is not None:
+        torch.nn.init.zeros_(module.bias)
+
+
 class ViLBERTLeaner(pl.LightningModule):
     def __init__(
         self,
@@ -349,6 +360,8 @@ class ViLBERTLeaner(pl.LightningModule):
         self.pad_action_idx = pad_action_idx
         self.sos_action_idx = sos_action_idx
         self.eos_action_idx = eos_action_idx
+
+        self.apply(init_parameters)
         self.save_hyperparameters()
 
     def configure_optimizers(self):
