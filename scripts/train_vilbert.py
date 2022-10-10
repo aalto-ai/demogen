@@ -25,6 +25,7 @@ class DecoderTransformer(nn.Module):
         hidden_size,
         output_size,
         nlayers,
+        nhead,
         pad_action_idx,
         dropout_p=0.1,
     ):
@@ -52,7 +53,7 @@ class DecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-                nhead=4,
+                nhead=nhead,
             ),
             num_layers=nlayers,
         )
@@ -352,6 +353,7 @@ class ViLBERTLeaner(pl.LightningModule):
             embed_dim,
             y_categories,
             nlayers,
+            nhead,
             pad_action_idx,
             dropout_p,
         )
