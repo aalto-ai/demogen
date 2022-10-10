@@ -327,7 +327,7 @@ def init_parameters(module):
 class ViLBERTLeaner(pl.LightningModule):
     def __init__(
         self,
-        n_state_components,
+        state_component_sizes,
         x_categories,
         y_categories,
         embed_dim,
@@ -345,7 +345,7 @@ class ViLBERTLeaner(pl.LightningModule):
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
-            n_state_components, x_categories, embed_dim, nlayers, dropout_p
+            state_component_sizes, embed_dim, nlayers, nhead, dropout_p
         )
         self.decoder = DecoderTransformer(
             n_state_components,
