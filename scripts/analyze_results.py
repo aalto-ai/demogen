@@ -169,6 +169,7 @@ ABLATION_EXPERIMENT_CONFIGS = {
         "dataset": "gscan_metalearn_only_random",
     },
 }
+EXPERIMENT_CONFIGS = {**BASE_EXPERIMENT_CONFIGS, **ABLATION_EXPERIMENT_CONFIGS}
 
 
 def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
@@ -209,195 +210,78 @@ def main():
     parser.add_argument("--result-smoothing", type=int, default=1)
     args = parser.parse_args()
 
-    all_transformer_encoder_only_metrics_dfs = read_all_csv_files_for_seeds_and_limit(
-        args.logs_dir, BASE_EXPERIMENT_CONFIGS["transformer"], args.limit
-    )
-    all_transformer_encoder_only_metrics_dfs = exclude_worst_performing_by_metric(
-        all_transformer_encoder_only_metrics_dfs,
-        "vexact/dataloader_idx_0",
-        args.drop_bad_seeds,
-        args.exclude_by_a_smoothing,
-    )
+    table_configs = {
+        "transformer_full": {"config_name": "transformer", "limit": args.limit},
+        "gscan_oracle_full": {"config_name": "meta_gscan_oracle", "limit": args.limit},
+        "gscan_oracle_ablations": {
+            "config_name": "meta_gscan_oracle",
+            "limit": args.ablations_limit,
+        },
+        "gscan_oracle_noshuffle": {
+            "config_name": "meta_gscan_oracle_noshuffle",
+            "limit": args.ablations_limit,
+        },
+        "gscan_imagine_actions": {
+            "config_name": "meta_gscan_imagine_actions",
+            "limit": args.ablations_limit,
+        },
+        "gscan_metalearn_distractors": {
+            "config_name": "meta_gscan_distractors",
+            "limit": args.ablations_limit,
+        },
+        "gscan_metalearn_sample_environments": {
+            "config_name": "meta_gscan_sample_environments",
+            "limit": args.ablations_limit,
+        },
+        "gscan_metalearn_only_random": {
+            "config_name": "meta_gscan_only_random",
+            "limit": args.ablations_limit,
+        },
+    }
 
-    all_meta_gscan_oracle_metrics_dfs = read_all_csv_files_for_seeds_and_limit(
-        args.logs_dir, BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], args.limit
-    )
-    meta_gscan_oracle_metrics_dfs = exclude_worst_performing_by_metric(
-        all_meta_gscan_oracle_metrics_dfs,
-        "vexact/dataloader_idx_0",
-        args.drop_bad_seeds,
-        args.exclude_by_a_smoothing,
-    )
-
-    all_meta_gscan_oracle_metrics_dfs_20k = read_all_csv_files_for_seeds_and_limit(
-        args.logs_dir,
-        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        args.ablations_limit,
-    )
-    meta_gscan_oracle_metrics_dfs_20k = exclude_worst_performing_by_metric(
-        all_meta_gscan_oracle_metrics_dfs_20k,
-        "vexact/dataloader_idx_0",
-        args.ablations_drop_bad_seeds,
-        args.exclude_by_a_smoothing,
-    )
-
-    all_meta_gscan_oracle_noshuffle_metrics_dfs_20k = (
-        read_all_csv_files_for_seeds_and_limit(
+    read_metrics_dfs_at_limit = {
+        name: read_all_csv_files_for_seeds_and_limit(
             args.logs_dir,
-            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_oracle_noshuffle"],
-            args.ablations_limit,
+            EXPERIMENT_CONFIGS[table_config["config_name"]],
+            table_config["limit"],
         )
-    )
-    meta_gscan_oracle_noshuffle_metrics_dfs_20k = exclude_worst_performing_by_metric(
-        all_meta_gscan_oracle_noshuffle_metrics_dfs_20k,
-        "vexact/dataloader_idx_0",
-        args.ablations_drop_bad_seeds,
-        args.exclude_by_a_smoothing,
-    )
-
-    all_meta_gscan_imagine_actions_metrics_dfs_20k = (
-        read_all_csv_files_for_seeds_and_limit(
-            args.logs_dir,
-            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_imagine_actions"],
-            args.ablations_limit,
-        )
-    )
-    meta_gscan_imagine_actions_metrics_dfs_20k = exclude_worst_performing_by_metric(
-        all_meta_gscan_imagine_actions_metrics_dfs_20k,
-        "vexact/dataloader_idx_0",
-        args.ablations_drop_bad_seeds,
-        args.exclude_by_a_smoothing,
-    )
-
-    all_meta_gscan_metalearn_distractors_metrics_dfs_20k = (
-        read_all_csv_files_for_seeds_and_limit(
-            args.logs_dir,
-            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_distractors"],
-            args.ablations_limit,
-        )
-    )
-    meta_gscan_metalearn_distractors_metrics_dfs_20k = (
-        exclude_worst_performing_by_metric(
-            all_meta_gscan_metalearn_distractors_metrics_dfs_20k,
+        for name, table_config in table_configs.items()
+    }
+    read_metrics_dfs_excluded = {
+        name: exclude_worst_performing_by_metric(
+            read_metrics_df_at_limit,
             "vexact/dataloader_idx_0",
-            args.ablations_drop_bad_seeds,
+            args.drop_bad_seeds,
             args.exclude_by_a_smoothing,
         )
-    )
+        for name, read_metrics_df_at_limit in read_metrics_dfs_at_limit.items()
+    }
 
-    all_meta_gscan_metalearn_sample_environments_metrics_dfs_20k = (
-        read_all_csv_files_for_seeds_and_limit(
-            args.logs_dir,
-            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_sample_environments"],
-            args.ablations_limit,
-        )
-    )
-    meta_gscan_metalearn_sample_environments_metrics_dfs_20k = (
-        exclude_worst_performing_by_metric(
-            all_meta_gscan_metalearn_sample_environments_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            args.ablations_drop_bad_seeds,
-            args.exclude_by_a_smoothing,
-        )
-    )
-
-    all_meta_gscan_metalearn_only_random_metrics_dfs_20k = (
-        read_all_csv_files_for_seeds_and_limit(
-            args.logs_dir,
-            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_only_random"],
-            args.ablations_limit,
-        )
-    )
-    meta_gscan_metalearn_only_random_metrics_dfs_20k = (
-        exclude_worst_performing_by_metric(
-            all_meta_gscan_metalearn_only_random_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            args.ablations_drop_bad_seeds,
-            args.exclude_by_a_smoothing,
-        )
-    )
-
-    meta_gscan_oracle_performance_at_best_0 = get_top_values_for_corresponding_value(
-        meta_gscan_oracle_metrics_dfs,
-        "vexact/dataloader_idx_0",
-        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-        args.result_smoothing,
-    ).describe()
-
-    meta_gscan_oracle_performance_at_best_6 = get_top_values_for_corresponding_value(
-        meta_gscan_oracle_metrics_dfs,
-        "vexact/dataloader_idx_6",
-        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-        args.result_smoothing,
-    ).describe()
-
-    meta_gscan_oracle_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_oracle_metrics_dfs_20k,
+    read_metrics_dfs_best_at_0 = {
+        name: get_top_values_for_corresponding_value(
+            read_metrics_df_excluded,
             "vexact/dataloader_idx_0",
             GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
-    )
-
-    meta_gscan_oracle_noshuffle_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_oracle_noshuffle_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
+        for name, read_metrics_df_excluded in read_metrics_dfs_excluded.items()
+    }
+    read_metrics_dfs_best_at_6 = {
+        name: get_top_values_for_corresponding_value(
+            read_metrics_df_excluded,
+            "vexact/dataloader_idx_6",
             GSCAN_TEST_SPLIT_DATALOADER_NAMES,
             args.result_smoothing,
         ).describe()
-    )
-
-    meta_gscan_imagine_actions_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_imagine_actions_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-    )
-
-    meta_gscan_metalearn_distractors_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_metalearn_distractors_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-    )
-
-    meta_gscan_metalearn_only_random_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_metalearn_only_random_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-    )
-
-    meta_gscan_metalearn_sample_environments_performance_at_best_6_20k = (
-        get_top_values_for_corresponding_value(
-            meta_gscan_metalearn_sample_environments_metrics_dfs_20k,
-            "vexact/dataloader_idx_0",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-    )
-
-    gscan_transformer_performance_at_best_0 = get_top_values_for_corresponding_value(
-        all_transformer_encoder_only_metrics_dfs,
-        "vexact/dataloader_idx_0",
-        GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-        args.result_smoothing,
-    ).describe()
+        for name, read_metrics_df_excluded in read_metrics_dfs_excluded.items()
+    }
 
     results_table = (
         pd.concat(
             [
-                gscan_transformer_performance_at_best_0.T["mean"],
-                meta_gscan_oracle_performance_at_best_0.T["mean"],
-                meta_gscan_oracle_performance_at_best_6.T["mean"],
+                read_metrics_dfs_best_at_0["transformer_full"].T["mean"],
+                read_metrics_dfs_best_at_0["gscan_oracle_full"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_oracle_full"].T["mean"],
             ],
             axis=1,
         )
@@ -408,9 +292,9 @@ def main():
         + (
             pd.concat(
                 [
-                    gscan_transformer_performance_at_best_0.T["std"],
-                    meta_gscan_oracle_performance_at_best_0.T["std"],
-                    meta_gscan_oracle_performance_at_best_6.T["std"],
+                    read_metrics_dfs_best_at_0["transformer_full"].T["std"],
+                    read_metrics_dfs_best_at_0["gscan_oracle_full"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_oracle_full"].T["std"],
                 ],
                 axis=1,
             )
@@ -427,12 +311,12 @@ def main():
     ablation_study_table = (
         pd.concat(
             [
-                meta_gscan_oracle_performance_at_best_6_20k.T["mean"],
-                meta_gscan_oracle_noshuffle_performance_at_best_6_20k.T["mean"],
-                meta_gscan_imagine_actions_performance_at_best_6_20k.T["mean"],
-                meta_gscan_metalearn_distractors_performance_at_best_6_20k.T["mean"],
-                meta_gscan_metalearn_only_random_performance_at_best_6_20k.T["mean"],
-                meta_gscan_metalearn_sample_environments_performance_at_best_6_20k.T[
+                read_metrics_dfs_best_at_6["gscan_oracle_ablations"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_oracle_noshuffle"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_imagine_actions"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_metalearn_distractors"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_metalearn_only_random"].T["mean"],
+                read_metrics_dfs_best_at_6["gscan_metalearn_sample_environments"].T[
                     "mean"
                 ],
             ],
@@ -445,12 +329,12 @@ def main():
         + (
             pd.concat(
                 [
-                    meta_gscan_oracle_performance_at_best_6_20k.T["std"],
-                    meta_gscan_oracle_noshuffle_performance_at_best_6_20k.T["std"],
-                    meta_gscan_imagine_actions_performance_at_best_6_20k.T["std"],
-                    meta_gscan_metalearn_distractors_performance_at_best_6_20k.T["std"],
-                    meta_gscan_metalearn_only_random_performance_at_best_6_20k.T["std"],
-                    meta_gscan_metalearn_sample_environments_performance_at_best_6_20k.T[
+                    read_metrics_dfs_best_at_6["gscan_oracle_ablations"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_oracle_noshuffle"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_imagine_actions"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_metalearn_distractors"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_metalearn_only_random"].T["std"],
+                    read_metrics_dfs_best_at_6["gscan_metalearn_sample_environments"].T[
                         "std"
                     ],
                 ],
