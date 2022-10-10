@@ -133,13 +133,8 @@ class StateCNN(nn.Module):
 class TransformerMLP(nn.Module):
     def __init__(self, emb_dim, ff_dim, dropout_p):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(emb_dim, ff_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(ff_dim, emb_dim),
-            nn.Dropout(dropout_p),
-        )
-        self.norm = nn.LayerNorm(emb_dim, eps=1e-5)
+        self.net = nn.Sequential(nn.Linear(emb_dim, ff_dim), nn.Dropout(dropout_p))
+        self.norm = nn.LayerNorm(ff_dim, eps=1e-12)
 
     def forward(self, x, attn_output):
         return self.norm(x + self.net(attn_output))
