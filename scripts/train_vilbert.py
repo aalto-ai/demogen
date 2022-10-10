@@ -93,13 +93,20 @@ class DecoderTransformer(nn.Module):
 
 
 class StateCNN(nn.Module):
-    def __init__(self, n_input_channels, conv_kernel_sizes, dropout_p):
+    def __init__(
+        self,
+        n_input_channels,
+        n_output_channels,
+        emb_channels,
+        conv_kernel_sizes,
+        dropout_p,
+    ):
         super().__init__()
         self.conv_layers = nn.ModuleList(
             [
                 nn.Conv2d(
                     in_channels=n_input_channels,
-                    out_channels=n_input_channels,
+                    out_channels=n_output_channels,
                     kernel_size=size,
                     padding="same",
                 )
@@ -107,13 +114,9 @@ class StateCNN(nn.Module):
             ]
         )
         self.mlp = nn.Sequential(
-            nn.Linear(
-                len(conv_kernel_sizes) * n_input_channels,
-                len(conv_kernel_sizes) * n_input_channels,
-            ),
             nn.ReLU(inplace=True),
             nn.Dropout(p=dropout_p),
-            nn.Linear(len(conv_kernel_sizes) * n_input_channels, n_input_channels),
+            nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
         )
 
     def forward(self, x):
