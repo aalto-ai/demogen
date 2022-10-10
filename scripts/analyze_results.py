@@ -171,6 +171,22 @@ ABLATION_EXPERIMENT_CONFIGS = {
 }
 
 
+def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
+    return [
+        truncate_at_key(
+            pd.read_csv(
+                os.path.join(
+                    logs_dir,
+                    format_log_path(experiment_config, {"seed": seed}),
+                )
+            ),
+            "step",
+            limit,
+        )
+        for seed in range(10)
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
@@ -182,21 +198,9 @@ def main():
     parser.add_argument("--result-smoothing", type=int, default=1)
     args = parser.parse_args()
 
-    all_transformer_encoder_only_metrics_dfs = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        BASE_EXPERIMENT_CONFIGS["transformer"], {"seed": seed}
-                    ),
-                )
-            ),
-            "step",
-            args.limit,
-        )
-        for seed in range(10)
-    ]
+    all_transformer_encoder_only_metrics_dfs = read_all_csv_files_for_seeds_and_limit(
+        args.logs_dir, BASE_EXPERIMENT_CONFIGS["transformer"], args.limit
+    )
     all_transformer_encoder_only_metrics_dfs = exclude_worst_performing_by_metric(
         all_transformer_encoder_only_metrics_dfs,
         "vexact/dataloader_idx_0",
@@ -204,21 +208,9 @@ def main():
         args.exclude_by_a_smoothing,
     )
 
-    all_meta_gscan_oracle_metrics_dfs = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], {"seed": seed}
-                    ),
-                )
-            ),
-            "step",
-            args.limit,
-        )
-        for seed in range(10)
-    ]
+    all_meta_gscan_oracle_metrics_dfs = read_all_csv_files_for_seeds_and_limit(
+        args.logs_dir, BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], args.limit
+    )
     meta_gscan_oracle_metrics_dfs = exclude_worst_performing_by_metric(
         all_meta_gscan_oracle_metrics_dfs,
         "vexact/dataloader_idx_0",
@@ -226,21 +218,11 @@ def main():
         args.exclude_by_a_smoothing,
     )
 
-    all_meta_gscan_oracle_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"], {"seed": seed}
-                    ),
-                )
-            ),
-            "step",
-            args.ablations_limit,
-        )
-        for seed in range(10)
-    ]
+    all_meta_gscan_oracle_metrics_dfs_20k = read_all_csv_files_for_seeds_and_limit(
+        args.logs_dir,
+        BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
+        args.ablations_limit,
+    )
     meta_gscan_oracle_metrics_dfs_20k = exclude_worst_performing_by_metric(
         all_meta_gscan_oracle_metrics_dfs_20k,
         "vexact/dataloader_idx_0",
@@ -248,22 +230,13 @@ def main():
         args.exclude_by_a_smoothing,
     )
 
-    all_meta_gscan_oracle_noshuffle_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_oracle_noshuffle"],
-                        {"seed": seed},
-                    ),
-                )
-            ),
-            "step",
+    all_meta_gscan_oracle_noshuffle_metrics_dfs_20k = (
+        read_all_csv_files_for_seeds_and_limit(
+            args.logs_dir,
+            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_oracle_noshuffle"],
             args.ablations_limit,
         )
-        for seed in range(10)
-    ]
+    )
     meta_gscan_oracle_noshuffle_metrics_dfs_20k = exclude_worst_performing_by_metric(
         all_meta_gscan_oracle_noshuffle_metrics_dfs_20k,
         "vexact/dataloader_idx_0",
@@ -271,22 +244,13 @@ def main():
         args.exclude_by_a_smoothing,
     )
 
-    all_meta_gscan_imagine_actions_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_imagine_actions"],
-                        {"seed": seed},
-                    ),
-                )
-            ),
-            "step",
+    all_meta_gscan_imagine_actions_metrics_dfs_20k = (
+        read_all_csv_files_for_seeds_and_limit(
+            args.logs_dir,
+            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_imagine_actions"],
             args.ablations_limit,
         )
-        for seed in range(10)
-    ]
+    )
     meta_gscan_imagine_actions_metrics_dfs_20k = exclude_worst_performing_by_metric(
         all_meta_gscan_imagine_actions_metrics_dfs_20k,
         "vexact/dataloader_idx_0",
@@ -294,22 +258,13 @@ def main():
         args.exclude_by_a_smoothing,
     )
 
-    all_meta_gscan_metalearn_distractors_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_distractors"],
-                        {"seed": seed},
-                    ),
-                )
-            ),
-            "step",
+    all_meta_gscan_metalearn_distractors_metrics_dfs_20k = (
+        read_all_csv_files_for_seeds_and_limit(
+            args.logs_dir,
+            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_distractors"],
             args.ablations_limit,
         )
-        for seed in range(10)
-    ]
+    )
     meta_gscan_metalearn_distractors_metrics_dfs_20k = (
         exclude_worst_performing_by_metric(
             all_meta_gscan_metalearn_distractors_metrics_dfs_20k,
@@ -319,22 +274,13 @@ def main():
         )
     )
 
-    all_meta_gscan_metalearn_sample_environments_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_sample_environments"],
-                        {"seed": seed},
-                    ),
-                )
-            ),
-            "step",
+    all_meta_gscan_metalearn_sample_environments_metrics_dfs_20k = (
+        read_all_csv_files_for_seeds_and_limit(
+            args.logs_dir,
+            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_sample_environments"],
             args.ablations_limit,
         )
-        for seed in range(10)
-    ]
+    )
     meta_gscan_metalearn_sample_environments_metrics_dfs_20k = (
         exclude_worst_performing_by_metric(
             all_meta_gscan_metalearn_sample_environments_metrics_dfs_20k,
@@ -344,22 +290,13 @@ def main():
         )
     )
 
-    all_meta_gscan_metalearn_only_random_metrics_dfs_20k = [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    args.logs_dir,
-                    format_log_path(
-                        ABLATION_EXPERIMENT_CONFIGS["meta_gscan_only_random"],
-                        {"seed": seed},
-                    ),
-                )
-            ),
-            "step",
+    all_meta_gscan_metalearn_only_random_metrics_dfs_20k = (
+        read_all_csv_files_for_seeds_and_limit(
+            args.logs_dir,
+            ABLATION_EXPERIMENT_CONFIGS["meta_gscan_only_random"],
             args.ablations_limit,
         )
-        for seed in range(10)
-    ]
+    )
     meta_gscan_metalearn_only_random_metrics_dfs_20k = (
         exclude_worst_performing_by_metric(
             all_meta_gscan_metalearn_only_random_metrics_dfs_20k,
