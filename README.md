@@ -9,6 +9,10 @@ This zip file contains the code used to generate the results in the main paper.
  - pytorch, pytorch-lightning, numpy.
  - You can find exact requirements in `requirements.txt`
 
+# Setup
+
+In a virtual environment, run `python setup.py develop`.
+
 # Generating Data
 
 You will need to generate the data first. To do that, use the `generate_data.py` script. You
