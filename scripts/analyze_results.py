@@ -74,7 +74,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"gscan_s_{seed}_m_transformer_encoder_only_decode_actions_it_50000_b_4096_d_gscan_t_none/transformer_encoder_only_decode_actions/gscan/{seed}/lightning_logs/version_100/metrics.csv",
+                    f"gscan_s_{seed}_m_transformer_encoder_only_decode_actions_l_28_h_4_d_128_it_50000_b_4096_d_gscan_t_none_drop_0.0/transformer_encoder_only_decode_actions/gscan/{seed}/lightning_logs/version_100/metrics.csv",
                 )
             ),
             "step",
@@ -94,7 +94,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_fixed_t_none/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -114,7 +114,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_fixed_t_none/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -134,7 +134,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_fixed_t_noshuffle/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_fixed_t_noshuffle_drop_0.0/meta_imagination_transformer/gscan_metalearn_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -154,7 +154,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_imagine_actions_fixed_t_none/meta_imagination_transformer/gscan_imagine_actions_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_imagine_actions_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_imagine_actions_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -174,7 +174,7 @@ def main():
             pd.read_csv(
                 os.path.join(
                     SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_distractors_fixed_t_none/meta_imagination_transformer/gscan_metalearn_distractors_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_distractors_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_distractors_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -195,8 +195,8 @@ def main():
         truncate_at_key(
             pd.read_csv(
                 os.path.join(
-                    OTHER_SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_sample_environments_fixed_t_none/meta_imagination_transformer/gscan_metalearn_sample_environments_fixed/{seed}/lightning_logs/100/metrics.csv",
+                    SCRIPTS_LOGS_DIR,
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_sample_environments_fixed_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_sample_environments_fixed/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
@@ -217,8 +217,8 @@ def main():
         truncate_at_key(
             pd.read_csv(
                 os.path.join(
-                    OTHER_SCRIPTS_LOGS_DIR,
-                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_it_50000_b_4096_d_gscan_metalearn_only_random_t_none/meta_imagination_transformer/gscan_metalearn_only_random/{seed}/lightning_logs/100/metrics.csv",
+                    SCRIPTS_LOGS_DIR,
+                    f"meta_gscan_s_{seed}_m_meta_imagination_transformer_l_8_h_4_d_128_it_50000_b_4096_d_gscan_metalearn_only_random_t_none_drop_0.0/meta_imagination_transformer/gscan_metalearn_only_random/{seed}/lightning_logs/100/metrics.csv",
                 )
             ),
             "step",
