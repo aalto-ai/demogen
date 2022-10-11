@@ -469,7 +469,8 @@ def main():
     parser.add_argument("--batch-size-mult", type=int, default=16)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
-    parser.add_argument("--dropout-p", type=float, default=0.0)
+    parser.add_argument("--nhead", type=int, default=8)
+    parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--wd", type=float, default=1e-2)
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
@@ -483,10 +484,10 @@ def main():
     args = parser.parse_args()
 
     exp_name = "gscan"
-    model_name = "vilbert_cross_encoder_decode_actions"
+    model_name = f"vilbert_cross_encoder_decode_actions_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = "gscan"
     effective_batch_size = args.train_batch_size * args.batch_size_mult
-    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_gscan_t_{args.tag}"
+    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_gscan_t_{args.tag}_drop_{args.dropout_p}"
     model_dir = f"models/{exp_name}/{model_name}"
     model_path = f"{model_dir}/{exp_name}.pt"
     print(model_path)
