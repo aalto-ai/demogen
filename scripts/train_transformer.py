@@ -352,10 +352,10 @@ def main():
     args = parser.parse_args()
 
     exp_name = "gscan"
-    model_name = "transformer_encoder_only_decode_actions"
+    model_name = f"transformer_encoder_only_decode_actions_l_{args.nlayers}_h_4_d_{args.hidden_size}"
     dataset_name = "gscan"
     effective_batch_size = args.train_batch_size * args.batch_size_mult
-    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_gscan_t_{args.tag}"
+    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_gscan_t_{args.tag}_drop_{args.dropout_p}"
     model_dir = f"models/{exp_name}/{model_name}"
     model_path = f"{model_dir}/{exp_name}.pt"
     print(model_path)
