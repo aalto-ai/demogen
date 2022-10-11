@@ -66,7 +66,7 @@ def transformer_optimizer_config(
             "weight_decay": 0.0,
         },
     ]
-    optimizer = optim.AdamW(harness.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = optim.AdamW(optimizer_grouped_parameters, lr=lr)
     return {
         "optimizer": optimizer,
         "lr_scheduler": {
