@@ -497,6 +497,7 @@ def main():
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--precision", type=int, choices=(16, 32), default=16)
+    parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--no-lr-decay", action="store_true")
