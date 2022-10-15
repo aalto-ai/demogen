@@ -65,13 +65,9 @@ class Attn(nn.Module):
 
 
 class EncoderTransformer(nn.Module):
-<<<<<<< HEAD
     def __init__(
         self, input_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
     ):
-=======
-    def __init__(self, input_size, embedding_dim, nlayers, norm_first, dropout_p, pad_word_idx):
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
         super().__init__()
         self.embedding = nn.Embedding(input_size, embedding_dim)
         self.embedding_projection = nn.Linear(embedding_dim * 2, embedding_dim)
@@ -86,11 +82,7 @@ class EncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
-<<<<<<< HEAD
                 norm_first=norm_first,
-=======
-                norm_first=norm_first
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
             ),
             num_layers=nlayers,
         )
@@ -130,10 +122,7 @@ class StateEncoderTransformer(nn.Module):
         input_size,
         embedding_dim,
         nlayers,
-<<<<<<< HEAD
         nhead,
-=======
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
         norm_first,
         dropout_p,
         pad_word_idx,
@@ -210,10 +199,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         input_size,
         embedding_dim,
         nlayers,
-<<<<<<< HEAD
         nhead,
-=======
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
         norm_first,
         dropout_p,
         pad_word_idx,
@@ -241,11 +227,7 @@ class StateEncoderDecoderTransformer(nn.Module):
             dropout=dropout_p,
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
-<<<<<<< HEAD
             norm_first=norm_first,
-=======
-            norm_first=norm_first
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
         )
 
     def forward(self, state_padded, z_padded):
@@ -326,10 +308,7 @@ class MetaNetRNN(nn.Module):
             input_size,
             embedding_dim,
             nlayers,
-<<<<<<< HEAD
             nhead,
-=======
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
             norm_first,
             dropout_p,
             pad_word_idx,
@@ -342,20 +321,13 @@ class MetaNetRNN(nn.Module):
                 input_size,
                 embedding_dim,
                 nlayers,
-<<<<<<< HEAD
                 nhead,
-=======
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
                 norm_first,
                 dropout_p,
                 pad_word_idx,
             )
         self.output_embedding = EncoderTransformer(
-<<<<<<< HEAD
             output_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
-=======
-            output_size, embedding_dim, nlayers, norm_first, dropout_p, pad_word_idx
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
         )
         self.pad_word_idx = pad_word_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
@@ -497,13 +469,8 @@ class EncoderDecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-<<<<<<< HEAD
                 nhead=nhead,
                 norm_first=norm_first,
-=======
-                nhead=4,
-                norm_first=norm_first
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
             ),
             num_layers=nlayers,
         )
@@ -833,10 +800,7 @@ def main():
     parser.add_argument("--batch-size-mult", type=int, default=1)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
-<<<<<<< HEAD
     parser.add_argument("--nhead", type=int, default=4)
-=======
->>>>>>> train_metaseq2seq_transformer: Add --norm-first option
     parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--lr", type=float, default=1e-4)
