@@ -51,11 +51,7 @@ class StateEncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
-<<<<<<< HEAD
                 norm_first=norm_first,
-=======
-                norm_first=norm_first
->>>>>>> train_transformer: Add --norm-first option
             ),
             num_layers=nlayers,
         )
@@ -120,13 +116,8 @@ class DecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-<<<<<<< HEAD
                 nhead=nhead,
                 norm_first=norm_first,
-=======
-                nhead=4,
-                norm_first=norm_first
->>>>>>> train_transformer: Add --norm-first option
             ),
             num_layers=nlayers,
         )
