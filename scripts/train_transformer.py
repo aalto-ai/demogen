@@ -26,6 +26,7 @@ class StateEncoderTransformer(nn.Module):
         embedding_dim,
         nlayers,
         dropout_p,
+        norm_first,
         pad_word_idx,
     ):
         super().__init__()
@@ -49,6 +50,7 @@ class StateEncoderTransformer(nn.Module):
                 nhead=4,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -86,6 +88,7 @@ class DecoderTransformer(nn.Module):
         nlayers,
         pad_action_idx,
         dropout_p=0.1,
+        norm_first=False,
     ):
         #
         # Input
@@ -112,6 +115,7 @@ class DecoderTransformer(nn.Module):
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
                 nhead=4,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -163,6 +167,7 @@ class TransformerLearner(pl.LightningModule):
         pad_action_idx,
         sos_action_idx,
         eos_action_idx,
+        norm_first=False,
         lr=1e-4,
         wd=1e-2,
         warmup_proportion=0.001,
@@ -176,6 +181,7 @@ class TransformerLearner(pl.LightningModule):
             embed_dim,
             nlayers,
             dropout_p,
+            norm_first,
             pad_word_idx,
         )
         self.decoder = DecoderTransformer(
@@ -184,7 +190,8 @@ class TransformerLearner(pl.LightningModule):
             y_categories,
             nlayers,
             pad_action_idx,
-            dropout_p,
+            dropout_p=dropout_p,
+            norm_first=norm_first,
         )
         self.y_categories = y_categories
         self.pad_word_idx = pad_word_idx
@@ -339,6 +346,7 @@ def main():
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--dropout-p", type=float, default=0.0)
+    parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--wd", type=float, default=1e-2)
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
@@ -415,6 +423,7 @@ def main():
         sos_action,
         eos_action,
         lr=args.lr,
+        norm_first=args.norm_first,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
     )
