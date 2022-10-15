@@ -343,6 +343,7 @@ class ViLBERTLeaner(pl.LightningModule):
         warmup_proportion=0.1,
         decay_power=-1,
         predict_steps=64,
+        no_lr_decay=False,
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
@@ -372,6 +373,7 @@ class ViLBERTLeaner(pl.LightningModule):
             warmup_proportion=self.hparams.warmup_proportion,
             weight_decay=self.hparams.wd,
             decay_power=self.hparams.decay_power,
+            no_lr_decay=self.hparams.no_lr_decay,
         )
 
     def encode(self, states, queries):
@@ -472,6 +474,7 @@ def main():
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--no-lr-decay", action="store_true")
     parser.add_argument("--wd", type=float, default=1e-2)
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
     parser.add_argument("--decay-power", type=int, default=-1)
@@ -550,6 +553,7 @@ def main():
         lr=args.lr,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
+        no_lr_decay=args.no_lr_decay,
     )
     print(meta_module)
 
