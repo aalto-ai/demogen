@@ -4,7 +4,12 @@ import torch.optim as optim
 
 
 def linear_with_warmup_schedule(
-    optimizer, num_warmup_steps, num_training_steps, min_lr_scale, last_epoch=-1
+    optimizer,
+    num_warmup_steps,
+    num_training_steps,
+    min_lr_scale,
+    last_epoch=-1,
+    no_lr_decay=False,
 ):
     min_lr_logscale = min_lr_scale
 
@@ -12,6 +17,9 @@ def linear_with_warmup_schedule(
         # Scale from 0 to 1
         if current_step <= num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
+
+        if no_lr_decay:
+            return 1
 
         # Scale from 1 to min_lr_scale logarithmically
         #
@@ -48,7 +56,12 @@ def get_parameter_names(model, exclude_layer_types):
 
 
 def transformer_optimizer_config(
-    harness, lr, warmup_proportion=0.14, decay_power=-2, weight_decay=0, no_lr_decay=False
+    harness,
+    lr,
+    warmup_proportion=0.14,
+    decay_power=-2,
+    weight_decay=0,
+    no_lr_decay=False,
 ):
     decay_parameters = get_parameter_names(harness, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
@@ -67,6 +80,7 @@ def transformer_optimizer_config(
         },
     ]
     optimizer = optim.AdamW(optimizer_grouped_parameters, lr=lr)
+
     return {
         "optimizer": optimizer,
         "lr_scheduler": {
@@ -75,8 +89,9 @@ def transformer_optimizer_config(
                 harness.trainer.max_steps * warmup_proportion,
                 harness.trainer.max_steps,
                 decay_power,
+                no_lr_decay=no_lr_decay,
             ),
             "interval": "step",
             "frequency": 1,
-        } if not no_lr_decay else None,
+        },
     }
