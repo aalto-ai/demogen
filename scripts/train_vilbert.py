@@ -121,8 +121,10 @@ class StateCNN(nn.Module):
             nn.Dropout(p=dropout_p),
             nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
         )
+        self.residual = nn.Linear(n_input_channels, emb_channels)
 
     def forward(self, x):
+        orig = x
         # NHWC => NCWH => NCHW
         x = x.transpose(-1, -3).transpose(-1, -2)
         x_multiscale = [layer(x) for layer in self.conv_layers]
@@ -130,7 +132,9 @@ class StateCNN(nn.Module):
         # NCHW => NWHC => NHWC
         x_multiscale = x_multiscale.transpose(-1, -3).transpose(-2, -3)
 
-        return self.mlp(x_multiscale)
+        # Original implementation does not use a residual connection, but it
+        # probably should
+        return self.mlp(x_multiscale) + self.residual(orig)
 
 
 class TransformerMLP(nn.Module):
