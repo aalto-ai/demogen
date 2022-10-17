@@ -9,7 +9,7 @@ import sys
 from torch.utils.data import DataLoader, Subset
 from positional_encodings.torch_encodings import PositionalEncoding1D
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
@@ -485,6 +485,7 @@ def main():
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--swa", action="store_true")
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -590,7 +591,12 @@ def main():
                 logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=10
             ),
         ],
-        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb],
+        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb] + ([
+            StochasticWeightAveraging(
+                swa_lrs=1e-2,
+                annealing_epochs=int((iterations * args.batch_size_mult) // len(train_dataloader) * 0.2)
+            )
+        ] if args.swa else []),
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
