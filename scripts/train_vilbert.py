@@ -9,7 +9,7 @@ import sys
 from torch.utils.data import DataLoader, Subset
 from positional_encodings.torch_encodings import PositionalEncoding1D
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
@@ -365,6 +365,7 @@ class ViLBERTLeaner(pl.LightningModule):
         warmup_proportion=0.1,
         decay_power=-1,
         predict_steps=64,
+        no_lr_decay=False,
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
@@ -395,6 +396,7 @@ class ViLBERTLeaner(pl.LightningModule):
             warmup_proportion=self.hparams.warmup_proportion,
             weight_decay=self.hparams.wd,
             decay_power=self.hparams.decay_power,
+            no_lr_decay=self.hparams.no_lr_decay,
         )
 
     def encode(self, states, queries):
@@ -494,8 +496,10 @@ def main():
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--norm-first", action="store_true")
+    parser.add_argument("--precision", type=int, choices=(16, 32), default=16)
     parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--no-lr-decay", action="store_true")
     parser.add_argument("--wd", type=float, default=1e-2)
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
     parser.add_argument("--decay-power", type=int, default=-1)
@@ -505,6 +509,7 @@ def main():
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--swa", action="store_true")
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -575,6 +580,7 @@ def main():
         lr=args.lr,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
+        no_lr_decay=args.no_lr_decay,
     )
     print(meta_module)
 
@@ -610,11 +616,16 @@ def main():
                 logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=10
             ),
         ],
-        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb],
+        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb] + ([
+            StochasticWeightAveraging(
+                swa_lrs=1e-2,
+                annealing_epochs=int((iterations * args.batch_size_mult) // len(train_dataloader) * 0.2)
+            )
+        ] if args.swa else []),
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        precision=args.precision if torch.cuda.is_available() else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,

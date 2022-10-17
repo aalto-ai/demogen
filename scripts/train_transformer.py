@@ -25,6 +25,7 @@ class StateEncoderTransformer(nn.Module):
         input_size,
         embedding_dim,
         nlayers,
+        nhead,
         dropout_p,
         norm_first,
         pad_word_idx,
@@ -47,7 +48,7 @@ class StateEncoderTransformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embedding_dim,
-                nhead=4,
+                nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
                 norm_first=norm_first,
@@ -86,6 +87,7 @@ class DecoderTransformer(nn.Module):
         hidden_size,
         output_size,
         nlayers,
+        nhead,
         pad_action_idx,
         dropout_p=0.1,
         norm_first=False,
@@ -114,7 +116,7 @@ class DecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-                nhead=4,
+                nhead=nhead,
                 norm_first=norm_first,
             ),
             num_layers=nlayers,
@@ -163,6 +165,7 @@ class TransformerLearner(pl.LightningModule):
         embed_dim,
         dropout_p,
         nlayers,
+        nhead,
         pad_word_idx,
         pad_action_idx,
         sos_action_idx,
@@ -180,6 +183,7 @@ class TransformerLearner(pl.LightningModule):
             x_categories,
             embed_dim,
             nlayers,
+            nhead,
             dropout_p,
             norm_first,
             pad_word_idx,
@@ -189,6 +193,7 @@ class TransformerLearner(pl.LightningModule):
             embed_dim,
             y_categories,
             nlayers,
+            nhead,
             pad_action_idx,
             dropout_p=dropout_p,
             norm_first=norm_first,
@@ -345,6 +350,7 @@ def main():
     parser.add_argument("--batch-size-mult", type=int, default=16)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
+    parser.add_argument("--nhead", type=int, default=4)
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -360,7 +366,7 @@ def main():
     args = parser.parse_args()
 
     exp_name = "gscan"
-    model_name = f"transformer_encoder_only_decode_actions_l_{args.nlayers}_h_4_d_{args.hidden_size}"
+    model_name = f"transformer_encoder_only_decode_actions_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = "gscan"
     effective_batch_size = args.train_batch_size * args.batch_size_mult
     exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_gscan_t_{args.tag}_drop_{args.dropout_p}"
@@ -418,6 +424,7 @@ def main():
         args.hidden_size,
         args.dropout_p,
         args.nlayers,
+        args.nhead,
         pad_word,
         pad_action,
         sos_action,

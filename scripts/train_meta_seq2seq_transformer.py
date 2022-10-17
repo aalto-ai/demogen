@@ -66,7 +66,7 @@ class Attn(nn.Module):
 
 class EncoderTransformer(nn.Module):
     def __init__(
-        self, input_size, embedding_dim, nlayers, norm_first, dropout_p, pad_word_idx
+        self, input_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
     ):
         super().__init__()
         self.embedding = nn.Embedding(input_size, embedding_dim)
@@ -79,7 +79,7 @@ class EncoderTransformer(nn.Module):
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embedding_dim,
-                nhead=4,
+                nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
                 norm_first=norm_first,
@@ -122,6 +122,7 @@ class StateEncoderTransformer(nn.Module):
         input_size,
         embedding_dim,
         nlayers,
+        nhead,
         norm_first,
         dropout_p,
         pad_word_idx,
@@ -145,7 +146,7 @@ class StateEncoderTransformer(nn.Module):
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embedding_dim,
-                nhead=4,
+                nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
                 norm_first=norm_first,
@@ -198,6 +199,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         input_size,
         embedding_dim,
         nlayers,
+        nhead,
         norm_first,
         dropout_p,
         pad_word_idx,
@@ -220,7 +222,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         self.pad_word_idx = pad_word_idx
         self.transformer = nn.Transformer(
             d_model=embedding_dim,
-            nhead=4,
+            nhead=nhead,
             dim_feedforward=embedding_dim * 4,
             dropout=dropout_p,
             num_encoder_layers=nlayers,
@@ -279,6 +281,7 @@ class MetaNetRNN(nn.Module):
         input_size,
         output_size,
         nlayers,
+        nhead,
         pad_word_idx,
         norm_first=False,
         dropout_p=0.1,
@@ -305,6 +308,7 @@ class MetaNetRNN(nn.Module):
             input_size,
             embedding_dim,
             nlayers,
+            nhead,
             norm_first,
             dropout_p,
             pad_word_idx,
@@ -317,12 +321,13 @@ class MetaNetRNN(nn.Module):
                 input_size,
                 embedding_dim,
                 nlayers,
+                nhead,
                 norm_first,
                 dropout_p,
                 pad_word_idx,
             )
         self.output_embedding = EncoderTransformer(
-            output_size, embedding_dim, nlayers, norm_first, dropout_p, pad_word_idx
+            output_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
         )
         self.pad_word_idx = pad_word_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
@@ -432,6 +437,7 @@ class EncoderDecoderTransformer(nn.Module):
         output_size,
         norm_first,
         nlayers,
+        nhead,
         pad_action_idx,
         dropout_p=0.1,
     ):
@@ -463,7 +469,7 @@ class EncoderDecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-                nhead=4,
+                nhead=nhead,
                 norm_first=norm_first,
             ),
             num_layers=nlayers,
@@ -473,7 +479,7 @@ class EncoderDecoderTransformer(nn.Module):
                 d_model=hidden_size,
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
-                nhead=4,
+                nhead=nhead,
             ),
             num_layers=nlayers,
         )
@@ -481,7 +487,7 @@ class EncoderDecoderTransformer(nn.Module):
             d_model=hidden_size,
             dim_feedforward=hidden_size * 4,
             dropout=dropout_p,
-            nhead=4,
+            nhead=nhead,
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
         )
@@ -536,6 +542,7 @@ class ImaginationMetaLearner(pl.LightningModule):
         embed_dim,
         dropout_p,
         nlayers,
+        nhead,
         pad_word_idx,
         pad_action_idx,
         sos_action_idx,
@@ -554,6 +561,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             x_categories,
             y_categories,
             nlayers,
+            nhead,
             pad_word_idx,
             norm_first,
             dropout_p,
@@ -563,6 +571,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             embed_dim,
             y_categories,
             nlayers,
+            nhead,
             pad_action_idx,
             norm_first,
             dropout_p,
@@ -791,6 +800,7 @@ def main():
     parser.add_argument("--batch-size-mult", type=int, default=1)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
+    parser.add_argument("--nhead", type=int, default=4)
     parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -808,7 +818,7 @@ def main():
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
-    model_name = f"meta_imagination_transformer_l_{args.nlayers}_h_4_d_{args.hidden_size}"
+    model_name = f"meta_imagination_transformer_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = args.dataset_name
     effective_batch_size = args.train_batch_size * args.batch_size_mult
     exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}"
@@ -890,6 +900,7 @@ def main():
         args.hidden_size,
         args.dropout_p,
         args.nlayers,
+        args.nhead,
         pad_word,
         pad_action,
         sos_action,
