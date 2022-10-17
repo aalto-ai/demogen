@@ -470,6 +470,7 @@ def main():
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
+    parser.add_argument("--precision", type=int, choices=(16, 32), default=16)
     parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--wd", type=float, default=1e-2)
@@ -589,7 +590,7 @@ def main():
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        precision=args.precision if torch.cuda.is_available() else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
