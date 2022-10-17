@@ -348,12 +348,12 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         return encoding, encoding_mask
 
 
-def init_parameters(module, scale=1):
+def init_parameters(module, scale=1e-2):
     if type(module) in [nn.LayerNorm]:
         return
 
     if type(module) in [nn.MultiheadAttention]:
-        torch.nn.init.xavier_normal_(module.in_proj_weight, scale)
+        torch.nn.init.normal_(module.in_proj_weight, 0, scale)
         return
 
     if type(module) in [nn.Conv2d]:
@@ -362,7 +362,7 @@ def init_parameters(module, scale=1):
         return
 
     if getattr(module, "weight", None) is not None:
-        torch.nn.init.xavier_normal_(module.weight, scale)
+        torch.nn.init.normal_(module.weight, 0, scale)
 
     if getattr(module, "bias", None) is not None:
         torch.nn.init.zeros_(module.bias)
