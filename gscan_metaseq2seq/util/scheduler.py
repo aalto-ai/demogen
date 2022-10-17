@@ -48,7 +48,7 @@ def get_parameter_names(model, exclude_layer_types):
 
 
 def transformer_optimizer_config(
-    harness, lr, warmup_proportion=0.14, decay_power=-2, weight_decay=0
+    harness, lr, warmup_proportion=0.14, decay_power=-2, weight_decay=0, no_lr_decay=False
 ):
     decay_parameters = get_parameter_names(harness, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
@@ -78,5 +78,5 @@ def transformer_optimizer_config(
             ),
             "interval": "step",
             "frequency": 1,
-        },
+        } if not no_lr_decay else None,
     }
