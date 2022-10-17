@@ -26,6 +26,7 @@ class DecoderTransformer(nn.Module):
         output_size,
         nlayers,
         nhead,
+        norm_first,
         pad_action_idx,
         dropout_p=0.1,
     ):
@@ -53,9 +54,11 @@ class DecoderTransformer(nn.Module):
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
                 nhead=nhead,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
+        self.norm_first = norm_first
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, inputs, encoder_outputs, encoder_padding):
@@ -131,22 +134,26 @@ class StateCNN(nn.Module):
 
 
 class TransformerMLP(nn.Module):
-    def __init__(self, emb_dim, ff_dim, dropout_p):
+    def __init__(self, emb_dim, ff_dim, norm_first, dropout_p):
         super().__init__()
         self.net = nn.Sequential(nn.Linear(emb_dim, ff_dim), nn.Dropout(dropout_p))
-        self.norm = nn.LayerNorm(ff_dim, eps=1e-12)
+        self.norm = nn.LayerNorm(emb_dim if norm_first else ff_dim)
+        self.norm_first = norm_first
 
-    def forward(self, attn_output, x):
-        return self.norm(x + self.net(attn_output))
+    def forward(self, hidden, residual):
+        if self.norm_first:
+            return residual + self.net(self.norm(hidden))
+
+        return self.norm(residual + self.net(hidden))
 
 
 class TransformerCrossAttentionLayer(nn.Module):
-    def __init__(self, emb_dim, ff_dim, nhead=4, dropout_p=0.0):
+    def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
         self.mha_x_to_y = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
         self.mha_y_to_x = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
-        self.dense_x_to_y = TransformerMLP(emb_dim, ff_dim, dropout_p)
-        self.dense_y_to_x = TransformerMLP(emb_dim, ff_dim, dropout_p)
+        self.dense_x_to_y = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
+        self.dense_y_to_x = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
 
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
         mha_x, _ = self.mha_x_to_y(x, y, y, key_padding_mask=y_key_padding_mask)
@@ -166,15 +173,15 @@ class TransformerIntermediateLayer(nn.Module):
 
 
 class TransformerCrossEncoderLayer(nn.Module):
-    def __init__(self, emb_dim, ff_dim, nhead=4, dropout_p=0.0):
+    def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
         self.cross_attn = TransformerCrossAttentionLayer(
-            emb_dim, emb_dim, nhead=nhead, dropout_p=dropout_p
+            emb_dim, emb_dim, nhead=nhead, norm_first=norm_first, dropout_p=dropout_p
         )
         self.intermediate1 = TransformerIntermediateLayer(emb_dim, ff_dim)
         self.intermediate2 = TransformerIntermediateLayer(emb_dim, ff_dim)
-        self.output1 = TransformerMLP(ff_dim, emb_dim, dropout_p)
-        self.output2 = TransformerMLP(ff_dim, emb_dim, dropout_p)
+        self.output1 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
+        self.output2 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
 
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
         attn_x, attn_y = self.cross_attn(x, y, x_key_padding_mask, y_key_padding_mask)
@@ -187,16 +194,24 @@ class TransformerCrossEncoderLayer(nn.Module):
 
 
 class TransformerCrossEncoder(nn.Module):
-    def __init__(self, nlayers, emb_dim, ff_dim, nhead=4, dropout_p=0.0):
+    def __init__(
+        self, nlayers, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0
+    ):
         super().__init__()
         self.layers = nn.ModuleList(
             [
                 TransformerCrossEncoderLayer(
-                    emb_dim, ff_dim, nhead=nhead, dropout_p=dropout_p
+                    emb_dim,
+                    ff_dim,
+                    nhead=nhead,
+                    norm_first=norm_first,
+                    dropout_p=dropout_p,
                 )
                 for _ in range(nlayers)
             ]
         )
+        self.norm = nn.LayerNorm(emb_dim)
+        self.norm_first = norm_first
 
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
         x_key_padding_mask = (
@@ -232,7 +247,7 @@ class TransformerEmbeddings(nn.Module):
         self.embedding = nn.Embedding(n_inp, embed_dim)
         self.pos_embedding = nn.Embedding(n_inp, embed_dim)
         self.dropout = nn.Dropout(p=dropout_p)
-        self.norm = nn.LayerNorm(embed_dim, eps=1e-12)
+        self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, instruction):
         projected_instruction = self.embedding(instruction)
@@ -272,6 +287,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         embed_dim=128,
         nlayers=6,
         nhead=8,
+        norm_first=False,
         dropout_p=0.1,
     ):
         super().__init__()
@@ -285,7 +301,12 @@ class ViLBERTStateEncoderTransformer(nn.Module):
             dropout_p=dropout_p,
         )
         self.cross_encoder = TransformerCrossEncoder(
-            nlayers, embed_dim, embed_dim * 2, nhead=nhead, dropout_p=dropout_p
+            nlayers,
+            embed_dim,
+            embed_dim * 2,
+            nhead=nhead,
+            norm_first=norm_first,
+            dropout_p=dropout_p,
         )
 
     def forward(self, state, instruction, instruction_key_padding_mask=None):
@@ -334,6 +355,7 @@ class ViLBERTLeaner(pl.LightningModule):
         dropout_p,
         nlayers,
         nhead,
+        norm_first,
         pad_word_idx,
         pad_action_idx,
         sos_action_idx,
@@ -347,13 +369,14 @@ class ViLBERTLeaner(pl.LightningModule):
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
-            state_component_sizes, embed_dim, nlayers, nhead, dropout_p
+            state_component_sizes, embed_dim, nlayers, nhead, norm_first, dropout_p
         )
         self.decoder = DecoderTransformer(
             embed_dim,
             y_categories,
             nlayers,
             nhead,
+            norm_first,
             pad_action_idx,
             dropout_p,
         )
@@ -472,6 +495,7 @@ def main():
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
+    parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--precision", type=int, choices=(16, 32), default=16)
     parser.add_argument("--dropout-p", type=float, default=0.1)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -548,6 +572,7 @@ def main():
         args.dropout_p,
         args.nlayers,
         args.nhead,
+        args.norm_first,
         pad_word,
         pad_action,
         sos_action,

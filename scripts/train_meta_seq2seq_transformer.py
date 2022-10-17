@@ -66,7 +66,7 @@ class Attn(nn.Module):
 
 class EncoderTransformer(nn.Module):
     def __init__(
-        self, input_size, embedding_dim, nlayers, nhead, dropout_p, pad_word_idx
+        self, input_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
     ):
         super().__init__()
         self.embedding = nn.Embedding(input_size, embedding_dim)
@@ -82,6 +82,7 @@ class EncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -148,6 +149,7 @@ class StateEncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -198,6 +200,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         embedding_dim,
         nlayers,
         nhead,
+        norm_first,
         dropout_p,
         pad_word_idx,
     ):
@@ -224,6 +227,7 @@ class StateEncoderDecoderTransformer(nn.Module):
             dropout=dropout_p,
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
+            norm_first=norm_first,
         )
 
     def forward(self, state_padded, z_padded):
@@ -279,6 +283,7 @@ class MetaNetRNN(nn.Module):
         nlayers,
         nhead,
         pad_word_idx,
+        norm_first=False,
         dropout_p=0.1,
         tie_encoders=True,
     ):
@@ -304,6 +309,7 @@ class MetaNetRNN(nn.Module):
             embedding_dim,
             nlayers,
             nhead,
+            norm_first,
             dropout_p,
             pad_word_idx,
         )
@@ -321,7 +327,7 @@ class MetaNetRNN(nn.Module):
                 pad_word_idx,
             )
         self.output_embedding = EncoderTransformer(
-            output_size, embedding_dim, nlayers, nhead, dropout_p, pad_word_idx
+            output_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
         )
         self.pad_word_idx = pad_word_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
@@ -429,6 +435,7 @@ class EncoderDecoderTransformer(nn.Module):
         n_state_components,
         hidden_size,
         output_size,
+        norm_first,
         nlayers,
         nhead,
         pad_action_idx,
@@ -463,6 +470,7 @@ class EncoderDecoderTransformer(nn.Module):
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
                 nhead=nhead,
+                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -539,6 +547,7 @@ class ImaginationMetaLearner(pl.LightningModule):
         pad_action_idx,
         sos_action_idx,
         eos_action_idx,
+        norm_first=False,
         lr=1e-4,
         wd=1e-2,
         warmup_proportion=0.001,
@@ -554,6 +563,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             nlayers,
             nhead,
             pad_word_idx,
+            norm_first,
             dropout_p,
         )
         self.decoder = EncoderDecoderTransformer(
@@ -563,6 +573,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             nlayers,
             nhead,
             pad_action_idx,
+            norm_first,
             dropout_p,
         )
         self.y_categories = y_categories
@@ -790,6 +801,7 @@ def main():
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=4)
+    parser.add_argument("--norm-first", action="store_true")
     parser.add_argument("--dropout-p", type=float, default=0.0)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--wd", type=float, default=1e-2)
@@ -893,6 +905,7 @@ def main():
         pad_action,
         sos_action,
         eos_action,
+        norm_first=args.norm_first,
         lr=args.lr,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
