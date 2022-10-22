@@ -253,7 +253,7 @@ class TransformerCrossEncoder(nn.Module):
 
         # Important that we normalize the encoding here, otherwise
         # the scales from norm-first in the decoder will be different
-        encoded = self.norm(encoded)
+        # encoded = self.norm(encoded)
 
         return encoded, torch.cat([x_key_padding_mask, y_key_padding_mask], dim=-1)
 
