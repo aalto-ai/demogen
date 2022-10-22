@@ -155,14 +155,22 @@ class TransformerMLP(nn.Module):
 class TransformerCrossAttentionLayer(nn.Module):
     def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
+        self.norm_x = nn.LayerNorm(emb_dim)
+        self.norm_y = nn.LayerNorm(emb_dim)
         self.mha_x_to_y = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
         self.mha_y_to_x = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
         self.dense_x_to_y = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
         self.dense_y_to_x = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
 
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
-        mha_x, _ = self.mha_x_to_y(x, y, y, key_padding_mask=y_key_padding_mask)
-        mha_y, _ = self.mha_y_to_x(y, x, x, key_padding_mask=x_key_padding_mask)
+        if self.norm_first:
+            norm_x = self.norm_x(x)
+            norm_y = self.norm_y(y)
+        else:
+            norm_x = x
+            norm_y = y
+        mha_x, _ = self.mha_x_to_y(norm_x, norm_y, norm_y, key_padding_mask=y_key_padding_mask)
+        mha_y, _ = self.mha_y_to_x(norm_y, norm_x, norm_x, key_padding_mask=x_key_padding_mask)
 
         return self.dense_x_to_y(mha_x, x), self.dense_y_to_x(mha_y, y)
 
