@@ -264,7 +264,6 @@ class TransformerEmbeddings(nn.Module):
         self.embedding = nn.Embedding(n_inp, embed_dim)
         self.pos_embedding = nn.Embedding(n_inp, embed_dim)
         self.dropout = nn.Dropout(p=dropout_p)
-        self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, instruction):
         projected_instruction = self.embedding(instruction)
@@ -273,7 +272,7 @@ class TransformerEmbeddings(nn.Module):
             + projected_instruction
         )
 
-        return self.dropout(self.norm(projected_instruction))
+        return self.dropout(projected_instruction)
 
 
 def nullable_one_hot(vec, cats):
