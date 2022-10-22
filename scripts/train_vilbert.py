@@ -118,9 +118,9 @@ class StateCNN(nn.Module):
             ]
         )
         self.mlp = nn.Sequential(
+            nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
             nn.ReLU(inplace=True),
             nn.Dropout(p=dropout_p),
-            nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
         )
         self.residual = nn.Linear(n_input_channels, emb_channels)
 
