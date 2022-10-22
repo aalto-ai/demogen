@@ -958,14 +958,14 @@ def main():
         DataLoader(
             PermuteActionsDataset(
                 PaddingDataset(
-                    Subset(demonstrations, torch.randperm(len(demonstrations))[:1024]),
+                    demonstrations,
                     (
                         None,
                         (8, 36) if isinstance(demonstrations[0][1], list) else None,
                         8,
-                        72,
+                        128,
                         (8, 8),
-                        (8, 72),
+                        (8, 128),
                     ),
                     (
                         None,
