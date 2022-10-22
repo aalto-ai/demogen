@@ -359,8 +359,6 @@ def init_parameters(module, scale=1e-2):
         return
 
     if type(module) in [nn.Conv2d]:
-        torch.nn.init.normal_(module.weight, 0, 1e-2)
-        torch.nn.init.zeros_(module.bias)
         return
 
     if getattr(module, "weight", None) is not None:
