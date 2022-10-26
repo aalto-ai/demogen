@@ -955,6 +955,7 @@ def main():
     parser.add_argument("--limit", type=int, help="Data generation limit", default=None)
     parser.add_argument("--transformer-model", type=str, help="Transformer model")
     parser.add_argument("--inference-batch-size", type=int, default=64)
+    parser.add_argument("--only-splits", nargs="*", type=str)
     args = parser.parse_args()
 
     with open(args.gscan_dataset, "r") as f:
@@ -1072,6 +1073,9 @@ def main():
         "contextual": ["A", "B", "C", "D", "E", "G", "H"],
         "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
     }
+
+    if args.only_splits:
+        splits = {k: v for k, v in splits.items() if k in args.only_splits}
 
     split_examples = {
         split_name: list(
