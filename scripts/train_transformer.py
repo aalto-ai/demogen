@@ -407,8 +407,6 @@ def main():
     seed = args.seed
     iterations = args.iterations
 
-    pl.seed_everything(seed)
-
     (
         (
             WORD2IDX,
@@ -429,6 +427,7 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
+    pl.seed_everything(0)
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
