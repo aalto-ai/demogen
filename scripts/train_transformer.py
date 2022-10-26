@@ -492,7 +492,7 @@ def main():
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        precision=args.precision if torch.cuda.is_available() else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
