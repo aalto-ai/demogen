@@ -123,13 +123,218 @@ action_options = [["walk", "to"], ["push"], ["pull"]]
 adverb_options = [["while spinning"], ["while zigzagging"], ["hesitantly"], []]
 
 
-def generate_relevant_instructions_gscan_oracle(
-    query_instruction,
-    seen_instructions,
+def is_prohibited_action_adverb_combo(action_words, adverb_words):
+    # Split H: push while spinning
+    if "pull" in action_words and "while spinning" in adverb_words:
+        return "H"
+
+    return None
+
+
+def is_prohibited_description(
+    agent_pos, target_object, description_words, allow_demonstration_splits=None
+):
+    allow_demonstration_splits = allow_demonstration_splits or []
+
+    # Split B: "yellow square". We cannot have an example of this
+    if (
+        "yellow" in description_words
+        and "square" in description_words
+        and "B" not in allow_demonstration_splits
+    ):
+        return "B"
+
+    # Split C: red square as target. We cannot have an example of this
+    if (
+        target_object.object.color == "red"
+        and target_object.object.shape == "square"
+        and "C" not in allow_demonstration_splits
+    ):
+        return "C"
+
+    # Split D: object is to the southwest of the agent
+    if (
+        agent_pos.row < target_object.position.row
+        and agent_pos.column > target_object.position.column
+        and "D" not in allow_demonstration_splits
+    ):
+        return "D"
+
+    # Split E: circle of size 2 is the target and "small" in the instruction
+    if (
+        "small" in description_words
+        and target_object.object.size == 2
+        and target_object.object.shape == "circle"
+        and "E" not in allow_demonstration_splits
+    ):
+        return "E"
+
+    # Split F: pushing a square of size 3
+    if (
+        "push" in description_words
+        and target_object.object.size == 3
+        and target_object.object.shape == "square"
+        and "F" not in allow_demonstration_splits
+    ):
+        return "F"
+
+    return None
+
+
+def generate_description_words_options(situation, description_words):
+    """Generate targets and description words from base description words.
+
+    In some cases description_words will contain something that we can't
+    generate, because it would be leaking the target object. So we have to
+    use another object in its place.
+    """
+    object_types_max_sizes = defaultdict(lambda: defaultdict(int))
+    object_types_min_sizes = defaultdict(lambda: defaultdict(lambda: 10))
+    for positioned_object in situation.placed_objects:
+        object_types_max_sizes[positioned_object.object.shape][
+            positioned_object.object.color
+        ] = max(
+            object_types_max_sizes[positioned_object.object.shape][
+                positioned_object.object.color
+            ],
+            positioned_object.object.size,
+        )
+        object_types_min_sizes[positioned_object.object.shape][
+            positioned_object.object.color
+        ] = min(
+            object_types_min_sizes[positioned_object.object.shape][
+                positioned_object.object.color
+            ],
+            positioned_object.object.size,
+        )
+
+    options = [(description_words, situation.target_object)] + [
+        (
+            (
+                (["big"])
+                if positioned_object.object.size
+                == object_types_max_sizes[positioned_object.object.shape][
+                    positioned_object.object.color
+                ]
+                else (
+                    (["small"])
+                    if positioned_object.object.size
+                    == object_types_min_sizes[positioned_object.object.shape][
+                        positioned_object.object.color
+                    ]
+                    else []
+                )
+            )
+            + [positioned_object.object.color, positioned_object.object.shape],
+            positioned_object,
+        )
+        for positioned_object in situation.placed_objects
+        if positioned_object.position != situation.target_object.position
+    ]
+
+    return options
+
+
+def sort_description_words_by_query_match(
+    description_words_options,
+    query_description_words,
     vocabulary_colors,
     vocabulary_nouns,
-    num_irrelevant=0,
-    generate_relevant=True,
+):
+    size_words = ("big", "small")
+
+    description_words_options_colors = [
+        [w for w in dw[0] if w in vocabulary_colors] for dw in description_words_options
+    ]
+    description_words_options_objects = [
+        [w for w in dw[0] if w in vocabulary_nouns] for dw in description_words_options
+    ]
+    description_words_options_sizes = [
+        [w for w in dw[0] if w in size_words] for dw in description_words_options
+    ]
+
+    option_indices = list(range(len(description_words_options)))
+    option_indices_set = set(option_indices)
+
+    matches_color_word = [
+        any([c in query_description_words for c in dwc])
+        for dwc in description_words_options_colors
+    ]
+    matches_color_word_indices = sorted(
+        option_indices, key=lambda i: matches_color_word[i], reverse=True
+    )
+    matches_object_word = [
+        any([c in query_description_words for c in dwc])
+        for dwc in description_words_options_objects
+    ]
+    matches_object_word_indices = sorted(
+        option_indices, key=lambda i: matches_object_word[i], reverse=True
+    )
+    matches_size_word = [
+        any([c in query_description_words for c in dwc])
+        for dwc in description_words_options_sizes
+    ]
+    matches_size_word_indices = sorted(
+        option_indices, key=lambda i: matches_size_word[i], reverse=True
+    )
+
+    indices_indexes = {"color": 0, "object": 0, "size": 0}
+    indices_indexes_array = {
+        "color": matches_color_word_indices,
+        "object": matches_object_word_indices,
+        "size": matches_size_word_indices,
+    }
+    option_matches = {
+        "color": matches_color_word,
+        "object": matches_object_word,
+        "size": matches_size_word,
+    }
+    next_mode = {"color": "object", "object": "size", "size": "color"}
+    mode = "color"
+
+    while any(
+        [
+            index_value < len(index_array)
+            for index_value, index_array in zip(
+                indices_indexes.values(), indices_indexes_array.values()
+            )
+        ]
+    ):
+        # If we run out of indices for this mode, we have to go to the next one
+        if indices_indexes[mode] >= len(indices_indexes_array[mode]):
+            mode = next_mode[mode]
+            continue
+
+        # Try to take the next thing in the current mode
+        possible_option = indices_indexes_array[mode][indices_indexes[mode]]
+
+        # If we don't have this in the set anymore because it was already taken,
+        # or it doesn't match the attribute, then we skip it without removing it
+        # from the set
+        if (
+            possible_option not in option_indices_set
+            or not option_matches[mode][possible_option]
+        ):
+            indices_indexes[mode] += 1
+            continue
+
+        # We got a match! We should yield this one, remove it from the
+        # set of possible options and then advance the index
+        yield description_words_options[possible_option]
+
+        option_indices_set.remove(possible_option)
+        indices_indexes[mode] += 1
+        mode = next_mode[mode]
+
+
+def generate_relevant_instructions_gscan_oracle(
+    query_instruction,
+    situation,
+    vocabulary_colors,
+    vocabulary_nouns,
+    n_description_options=1,
+    demonstrate_target=True,
+    allow_demonstration_splits=None,
 ):
     action_words = []
     article_words = []
@@ -144,53 +349,148 @@ def generate_relevant_instructions_gscan_oracle(
     if "cautiously" in query_instruction:
         real_adverb_options = real_adverb_options + [["cautiously"]]
 
-    if generate_relevant:
-        for w in query_instruction:
-            if w in ["walk", "to", "push", "pull"]:
-                action_words.append(w)
+    vocabulary_descriptors = vocabulary_colors + vocabulary_nouns + ["big", "small"]
+    vocabulary_verbs = ["walk", "to", "push", "pull"]
+    vocabulary_adverbs = [
+        "while spinning",
+        "while zigzagging",
+        "hesitantly",
+        "cautiously",
+    ]
 
-            if w in ["a"]:
-                article_words.append(w)
+    for w in query_instruction:
+        if w in vocabulary_verbs:
+            action_words.append(w)
 
-            if w in vocabulary_colors + vocabulary_nouns + ["big", "small"]:
-                description_words.append(w)
+        if w in ["a"]:
+            article_words.append(w)
 
-            if w in ["while spinning", "while zigzagging", "hesitantly", "cautiously"]:
-                adverb_words.append(w)
+        if w in vocabulary_descriptors:
+            description_words.append(w)
 
-        for action_option in action_options:
-            # print(action_option, " - ", article_words + description_words + adverb_words)
-            if action_option != action_words:
-                if not (
-                    action_option == ["pull"] and adverb_words == ["while spinning"]
-                ):
-                    support_instructions.append(
-                        action_option + article_words + description_words + adverb_words
+        if w in vocabulary_adverbs:
+            adverb_words.append(w)
+
+    description_words_options = generate_description_words_options(
+        situation, description_words
+    )
+
+    # Split into the actual target and other possible targets
+    target_description_words, other_description_words = (
+        description_words_options[:1],
+        description_words_options[1:],
+    )
+
+    # We sort the other possible targets by similarity to the target itself
+    # so eg you get one point for every word that overlaps. The order is
+    # descending
+    #
+    # XXX: We need to think about how to sort this, eg, we want to sort it
+    # so that we get 3 matching words first, then 2 matching words
+    # and so on. Also we want to sort so that we get a different matching
+    # thing every time, so first we get a matching color, then a matching
+    # object, then a matching size and so on.
+    sorted_other_description_words = list(
+        sort_description_words_by_query_match(
+            other_description_words,
+            target_description_words[0][0],
+            vocabulary_colors=vocabulary_colors,
+            vocabulary_nouns=vocabulary_nouns,
+        )
+    )
+
+    # Filter out anything that is not allowed to be a target according to the
+    # gSCAN rules in the sorted_other_description_words. Its important that
+    # we do this before the first check for target_description_words.
+    #
+    # Note that in the context, we allow demonstrations of "prohibited"
+    # descriptions if they appear in splits other than the one that we are
+    # currently testing. So in the training set, we don't allow any examples
+    # of things in the other splits (since we can just exclude those data points)
+    # but when testing split B, we allow an example from split D. Otherwise
+    # there's a risk that there would just be no supports and we would
+    # have to exclude the entire data point.
+    filtered_sorted_other_description_words = list(
+        filter(
+            lambda description_words: not is_prohibited_description(
+                situation.agent_pos,
+                description_words[1],
+                description_words[0],
+                allow_demonstration_splits=allow_demonstration_splits,
+            ),
+            sorted_other_description_words,
+        )
+    )
+
+    # Reassign to emptylist if we cannot take this target. The
+    # net effect is that we take the "next best" target that we are
+    # allowed to take.
+    #
+    # Exception: The target is the only "permitted" target in the whole environment
+    # - in this case we allow a demonstration (such cases are not very
+    # interesting anyway, since there are no distractors, you just have to
+    # identify any non-empty cell)
+    if (
+        is_prohibited_description(
+            situation.agent_pos,
+            target_description_words[0][1],
+            target_description_words[0][0],
+        )
+        or not demonstrate_target
+    ) and filtered_sorted_other_description_words:
+        target_description_words = []
+
+    # We have these options. Then we take then in accordance with n_description_options.
+    # n_description_options == 1 basically means only show the target or the next
+    # best descriptor.
+    description_words_options = (
+        target_description_words + filtered_sorted_other_description_words
+    )
+    description_words_options = description_words_options[:n_description_options]
+
+    # Order description_words_options such that targets with a high
+    # similarity to the target object
+    for action_option in action_options:
+        for adverb_option in (
+            filter(
+                lambda adverb_option: adverb_option != adverb_words, real_adverb_options
+            )
+            if action_option == action_words
+            else [adverb_words]
+        ):
+            for description_words, target_object in description_words_options:
+                # We might be prohibited on the basis of the chosen action/adverb combination
+                # so check that again here
+                if is_prohibited_action_adverb_combo(action_option, adverb_option):
+                    continue
+
+                support_instructions.append(
+                    (
+                        action_option
+                        + article_words
+                        + description_words
+                        + adverb_option,
+                        target_object,
                     )
+                )
 
-        for adverb_option in real_adverb_options:
-            # print(action_words + article_words + description_words, " - ", adverb_words)
-            if adverb_option != adverb_words:
-                if not (
-                    adverb_option == ["while spinning"] and action_words == ["pull"]
-                ):
-                    support_instructions.append(
-                        action_words + article_words + description_words + adverb_option
-                    )
+    # We can skip this data point if we cannot make any
+    # demonstrations for it because none are allowed
+    if not allow_demonstration_splits and not support_instructions:
+        return []
 
-    support_instructions += np.random.choice(
-        seen_instructions, num_irrelevant, replace=True
-    ).tolist()
-
+    assert len(support_instructions) > 0
     return support_instructions
 
 
-# Perhaps this can be modified to demonstrate from the command itself and not
-# the derivation
-
-
 def demonstrate_command_oracle(
-    world, vocabulary, vocabulary_colors, vocabulary_nouns, command, initial_situation
+    world,
+    vocabulary,
+    vocabulary_colors,
+    vocabulary_nouns,
+    command,
+    target_object,
+    initial_situation,
 ):
     """
     Demonstrate a command derivation and situation pair. Done by extracting the events from the logical form
@@ -205,8 +505,6 @@ def demonstrate_command_oracle(
     article_words = []
     description_words = []
     adverb_words = []
-
-    support_instructions = []
 
     for w in command:
         if w in ["walk", "to", "push", "pull"]:
@@ -227,7 +525,7 @@ def demonstrate_command_oracle(
     # Our commands are quite simple
     manner = adverb_words[0] if adverb_words else ""
     world.go_to_position(
-        position=initial_situation.target_object.position,
+        position=target_object.position,
         manner=manner,
         primitive_command="walk",
     )
@@ -314,7 +612,6 @@ def yield_metalearning_examples(
     examples_set,
     world,
     vocabulary,
-    seen_instructions,
     sorted_example_indices_by_command,
     train_examples,
     instruction_word2idx,
@@ -324,6 +621,7 @@ def yield_metalearning_examples(
     num_irrelevant=0,
     generate_relevant=True,
     search_relevant=False,
+    allow_demonstration_splits=None,
 ):
     for data_example in examples_set:
         command = parse_command_repr(data_example["command"])
@@ -349,14 +647,23 @@ def yield_metalearning_examples(
         support_targets = []
         support_layouts = []
 
-        for support_instruction_command in generate_relevant_instructions_gscan_oracle(
+        relevant_instructions = generate_relevant_instructions_gscan_oracle(
             command,
-            seen_instructions,
+            situation,
             list(color2idx.keys()),
             list(noun2idx.keys()),
-            num_irrelevant=num_irrelevant,
-            generate_relevant=generate_relevant,
-        ):
+            n_description_options=num_irrelevant + 1,
+            demonstrate_target=generate_relevant,
+            allow_demonstration_splits=allow_demonstration_splits,
+        )
+
+        if not relevant_instructions:
+            tqdm.write(
+                f"Skipping for {command} {situation.target_object} / {situation.placed_objects} as no demonstrations are possible and it is training or Split A test data.\n"
+            )
+            continue
+
+        for support_instruction_command, target_object in relevant_instructions:
             key = " ".join(support_instruction_command)
 
             if search_relevant and key in sorted_example_indices_by_command:
@@ -404,6 +711,7 @@ def yield_metalearning_examples(
                 list(color2idx.keys()),
                 list(noun2idx.keys()),
                 support_instruction_command,
+                target_object,
                 situation,
             )
             (
@@ -557,6 +865,7 @@ def yield_transformer_model_examples(
     color2idx,
     noun2idx,
     transformer_batch_size=64,
+    allow_demonstration_splits=None,
 ):
     module = TransformerLearner.load_from_checkpoint(transformer_model_path)
     trainer = pl.Trainer(precision=16, accelerator="gpu")
@@ -568,13 +877,13 @@ def yield_transformer_model_examples(
             examples_set,
             world,
             vocabulary,
-            [],
             {},
             [],
             instruction_word2idx,
             action_word2idx,
             color2idx,
             noun2idx,
+            allow_demonstration_splits=allow_demonstration_splits,
         )
     )
     train_preds = trainer.predict(
@@ -622,7 +931,7 @@ GENERATION_CONFIGS = {
     },
     "metalearn_random_only": {
         "yield_func": "metalearning",
-        "kwargs": {"num_irrelevant": 8, "generate_relevant": False},
+        "kwargs": {"num_irrelevant": 4, "generate_relevant": False},
     },
     "metalearn_sample_environments": {
         "yield_func": "metalearning",
@@ -721,7 +1030,6 @@ def main():
             examples,
             world,
             vocabulary,
-            seen_instructions,
             sorted_example_indices_by_command,
             d["examples"]["train"],
             INPUT_WORD2IDX,
@@ -754,11 +1062,22 @@ def main():
         "contextual": "f",
         "adverb_2": "h",
     }
+    allow_demonstrations_of = {
+        "train": [],
+        "test": ["A", "B", "C", "D", "E", "F", "G", "H"],
+        "visual_easier": ["A", "C", "D", "E", "F", "G", "H"],
+        "visual": ["A", "B", "D", "E", "F", "G", "H"],
+        "situational_1": ["A", "B", "C", "E", "F", "G", "H"],
+        "situational_2": ["A", "B", "C", "D", "F", "G", "H"],
+        "contextual": ["A", "B", "C", "D", "E", "G", "H"],
+        "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
+    }
 
     split_examples = {
         split_name: list(
             bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
                 tqdm(d["examples"][split][: args.limit]),
+                allow_demonstration_splits=allow_demonstrations_of[split],
                 **GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
             )
         )
