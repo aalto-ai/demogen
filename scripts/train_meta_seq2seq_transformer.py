@@ -858,8 +858,6 @@ def main():
     seed = args.seed
     iterations = args.iterations
 
-    pl.seed_everything(seed)
-
     (
         (
             WORD2IDX,
@@ -880,6 +878,7 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
+    pl.seed_everything(0)
     meta_train_dataset = ReshuffleOnIndexZeroDataset(
         PermuteActionsDataset(
             PaddingDataset(
@@ -908,7 +907,9 @@ def main():
             pad_word,
             pad_action,
             shuffle=not args.disable_shuffle,
-            seed=seed,
+            # We are testing different random initializations, but
+            # keeping the dataloading order constant
+            seed=0,
         )
     )
 
