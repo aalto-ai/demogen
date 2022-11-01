@@ -943,6 +943,7 @@ def main():
     parser.add_argument("--iterations", type=int, default=2500000)
     parser.add_argument("--disable-shuffle", action="store_true")
     parser.add_argument("--check-val-every", type=int, default=500)
+    parser.add_argument("--limit-val-size", type=int, default=None)
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--restore-from-checkpoint", action="store_true")
     parser.add_argument("--version", type=str, default=None)
@@ -1096,7 +1097,9 @@ def main():
         DataLoader(
             PermuteActionsDataset(
                 PaddingDataset(
-                    demonstrations,
+                    demonstrations[: args.limit_val_size]
+                    if args.limit_val_size is not None
+                    else demonstrations,
                     (
                         None,
                         (8, 36) if isinstance(demonstrations[0][1], list) else None,
