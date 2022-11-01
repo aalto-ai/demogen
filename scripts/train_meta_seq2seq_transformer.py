@@ -435,10 +435,10 @@ class EncoderDecoderTransformer(nn.Module):
         n_state_components,
         hidden_size,
         output_size,
-        norm_first,
         nlayers,
         nhead,
         pad_action_idx,
+        norm_first,
         dropout_p=0.1,
     ):
         #
