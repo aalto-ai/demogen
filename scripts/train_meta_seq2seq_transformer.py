@@ -346,7 +346,15 @@ class MetaNetRNN(nn.Module):
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
         self.tanh = nn.Tanh()
 
-    def forward(self, query_state, support_state, x_supports, y_supports, x_queries):
+    def forward(
+        self,
+        query_state,
+        support_state,
+        x_supports,
+        y_supports,
+        support_mask,
+        x_queries,
+    ):
         #
         # Forward pass over an episode
         #
@@ -413,14 +421,18 @@ class MetaNetRNN(nn.Module):
         #
         # Then if your values are
 
+        # Mask sequences that are actually padding and also those
+        # specified in support_mask
+        support_mask = (xs_padded[..., 0] == self.pad_word_idx).expand(
+            embed_xq_by_step.shape[0], -1, -1
+        ) | support_mask
+
         # Compute context based on key-value memory at each time step for queries
         value_by_step, attn_by_step = self.attn(
             embed_xq_by_step_expanded,  # (xq_seq_len) x bs x 1 x embedding_dim
             embed_xs_expanded,  # seq_len x bs x ns x e
             embed_ys_expanded,  # seq_len x bs x ns x e
-            (xs_padded[..., 0] == self.pad_word_idx).expand(
-                embed_xq_by_step.shape[0], -1, -1
-            ),
+            support_mask,
         )  # => (seq_len x bs x 1 x e)
 
         value_by_step = value_by_step.squeeze(-2)  # seq_len x bs x e
@@ -584,6 +596,7 @@ class ImaginationMetaLearner(pl.LightningModule):
         warmup_proportion=0.001,
         decay_power=-1,
         predict_steps=64,
+        metalearn_dropout_p=0.0,
     ):
         super().__init__()
         self.encoder = MetaNetRNN(
@@ -632,7 +645,14 @@ class ImaginationMetaLearner(pl.LightningModule):
         return self.decoder(decoder_in, encoder_outputs, encoder_padding)
 
     def forward(
-        self, query_state, support_state, x_supports, y_supports, queries, decoder_in
+        self,
+        query_state,
+        support_state,
+        x_supports,
+        y_supports,
+        support_mask,
+        queries,
+        decoder_in,
     ):
         encoded = self.encoder(
             query_state,
@@ -642,6 +662,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
             x_supports,
             y_supports,
+            support_mask,
             queries,
         )
         return self.decode_autoregressive(
@@ -656,9 +677,20 @@ class ImaginationMetaLearner(pl.LightningModule):
             [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
         )
 
+        # Mask metalearn_dropout_p % of the supports
+        support_mask = torch.randperm(x_supports.shape[1], device=self.device).expand(
+            x_supports.shape[0], x_supports.shape[1]
+        ) < int(x_supports.shape[1] * self.hparams.metalearn_dropout_p)
+
         # Now do the training
         preds = self.forward(
-            query_state, support_state, x_supports, y_supports, queries, decoder_in
+            query_state,
+            support_state,
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
         )[:, :-1]
 
         # Ultimately we care about the cross entropy loss
@@ -692,9 +724,17 @@ class ImaginationMetaLearner(pl.LightningModule):
             [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
         )
 
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
         # Now do the training
         preds = self.forward(
-            query_state, support_state, x_supports, y_supports, queries, decoder_in
+            query_state,
+            support_state,
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
         )[:, :-1]
 
         # Ultimately we care about the cross entropy loss
@@ -722,6 +762,8 @@ class ImaginationMetaLearner(pl.LightningModule):
         query_state, support_state, queries, targets, x_supports, y_supports = x
 
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
         padding = queries == self.pad_word_idx
 
         # We do autoregressive prediction, predict for as many steps
@@ -737,6 +779,7 @@ class ImaginationMetaLearner(pl.LightningModule):
                 else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
                 x_supports,
                 y_supports,
+                support_mask,
                 queries,
             )
 
@@ -849,13 +892,14 @@ def main():
     parser.add_argument("--version", type=str, default=None)
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
     model_name = f"meta_imagination_transformer_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = args.dataset_name
     effective_batch_size = args.train_batch_size * args.batch_size_mult
-    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}"
+    exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}_ml_drop_{args.metalearn_dropout_p}"
     model_dir = f"models/{exp_name}/{model_name}"
     model_path = f"{model_dir}/{exp_name}.pt"
     print(model_path)
@@ -944,6 +988,7 @@ def main():
         lr=args.lr,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
+        metalearn_dropout_p=args.metalearn_dropout_p,
     )
     print(meta_module)
 
