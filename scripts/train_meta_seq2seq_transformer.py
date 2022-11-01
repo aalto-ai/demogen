@@ -15,6 +15,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
+from gscan_metaseq2seq.util.padding import pad_to
 from gscan_metaseq2seq.util.load_data import load_data
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
@@ -597,6 +598,7 @@ class ImaginationMetaLearner(pl.LightningModule):
         decay_power=-1,
         predict_steps=64,
         metalearn_dropout_p=0.0,
+        metalearn_include_permutations=False,
     ):
         super().__init__()
         self.encoder = MetaNetRNN(
@@ -646,6 +648,8 @@ class ImaginationMetaLearner(pl.LightningModule):
 
     def forward(
         self,
+        x_permutation,
+        y_permutation,
         query_state,
         support_state,
         x_supports,
@@ -654,6 +658,16 @@ class ImaginationMetaLearner(pl.LightningModule):
         queries,
         decoder_in,
     ):
+        if self.hparams.metalearn_include_permutations:
+            # We concatenate the x and y permutations to the supports, this way
+            # they get encoded and also go through the attention process. The
+            # permutations are never masked.
+            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
+            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
+            support_mask = torch.cat(
+                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
+            )
+
         encoded = self.encoder(
             query_state,
             # We expand the support_state if it was not already expanded.
@@ -670,7 +684,16 @@ class ImaginationMetaLearner(pl.LightningModule):
         )
 
     def training_step(self, x, idx):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         actions_mask = targets == self.pad_action_idx
 
         decoder_in = torch.cat(
@@ -684,6 +707,8 @@ class ImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
+            x_permutation,
+            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -717,7 +742,16 @@ class ImaginationMetaLearner(pl.LightningModule):
         return loss
 
     def validation_step(self, x, idx, dl_idx=0):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         actions_mask = targets == self.pad_action_idx
 
         decoder_in = torch.cat(
@@ -728,6 +762,8 @@ class ImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
+            x_permutation,
+            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -759,10 +795,28 @@ class ImaginationMetaLearner(pl.LightningModule):
         )
 
     def predict_step(self, x, idx, dl_idx=0):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
-
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
         support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
+        if self.hparams.metalearn_include_permutations:
+            # We concatenate the x and y permutations to the supports, this way
+            # they get encoded and also go through the attention process. The
+            # permutations are never masked.
+            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
+            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
+            support_mask = torch.cat(
+                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
+            )
 
         padding = queries == self.pad_word_idx
 
@@ -837,15 +891,15 @@ class PermuteActionsDataset(Dataset):
             np.copy(x) for x in self.dataset[idx]
         ]
 
+        x_permutation = np.arange(self.x_categories)
+        y_permutation = np.arange(self.y_categories)
+
         # Compute permutations of outputs
         if self.shuffle:
             # Do the permutation
-            x_permutation = np.arange(self.x_categories)
             x_permutation[0 : self.pad_word_idx] = x_permutation[0 : self.pad_word_idx][
                 self.generator.permutation(self.pad_word_idx)
             ]
-
-            y_permutation = np.arange(self.y_categories)
             y_permutation[0 : self.pad_action_idx] = y_permutation[
                 0 : self.pad_action_idx
             ][self.generator.permutation(self.pad_action_idx)]
@@ -856,6 +910,8 @@ class PermuteActionsDataset(Dataset):
             targets = y_permutation[targets]
 
         return (
+            pad_to(x_permutation, x_supports.shape[1], pad=self.pad_word_idx),
+            pad_to(y_permutation, y_supports.shape[1], pad=self.pad_action_idx),
             query_state,
             support_state,
             queries,
@@ -893,6 +949,7 @@ def main():
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
+    parser.add_argument("--metalearn-include-permutations", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -989,6 +1046,7 @@ def main():
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
         metalearn_dropout_p=args.metalearn_dropout_p,
+        metalearn_include_permutations=args.metalearn_include_permutations,
     )
     print(meta_module)
 
