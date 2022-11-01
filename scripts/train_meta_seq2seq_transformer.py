@@ -950,6 +950,7 @@ def main():
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
+    parser.add_argument("--metalearn-demonstrations-limit", type=int, default=8)
     parser.add_argument("--metalearn-include-permutations", action="store_true")
     args = parser.parse_args()
 
@@ -1001,13 +1002,13 @@ def main():
                 meta_train_demonstrations,
                 (
                     None,
-                    (8, 36)
+                    (args.metalearn_demonstrations_limit, 36)
                     if isinstance(meta_train_demonstrations[0][1], list)
                     else None,
                     8,
-                    72,
-                    (8, 8),
-                    (8, 72),
+                    128,
+                    (args.metalearn_demonstrations_limit, len(WORD2IDX)),
+                    (args.metalearn_demonstrations_limit, 128),
                 ),
                 (
                     None,
@@ -1102,11 +1103,13 @@ def main():
                     else demonstrations,
                     (
                         None,
-                        (8, 36) if isinstance(demonstrations[0][1], list) else None,
+                        (args.metalearn_demonstrations_limit, 36)
+                        if isinstance(demonstrations[0][1], list)
+                        else None,
                         8,
                         128,
-                        (8, 8),
-                        (8, 128),
+                        (args.metalearn_demonstrations_limit, len(WORD2IDX)),
+                        (args.metalearn_demonstrations_limit, 128),
                     ),
                     (
                         None,
