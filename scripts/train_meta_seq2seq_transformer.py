@@ -1057,7 +1057,8 @@ def main():
     )
 
     check_val_opts = {}
-    interval = args.check_val_every / len(train_dataloader)
+    check_val_every_scaled = args.check_val_every * args.batch_size_mult
+    interval = check_val_every_scaled / len(train_dataloader)
 
     # Every check_val_interval steps, regardless of how large the training dataloader is
     if interval > 1.0:
