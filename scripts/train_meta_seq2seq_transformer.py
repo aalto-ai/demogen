@@ -66,7 +66,14 @@ class Attn(nn.Module):
 
 class EncoderTransformer(nn.Module):
     def __init__(
-        self, input_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
+        self,
+        input_size,
+        embedding_dim,
+        nlayers,
+        nhead,
+        norm_first,
+        dropout_p,
+        pad_word_idx,
     ):
         super().__init__()
         self.embedding = nn.Embedding(input_size, embedding_dim)
@@ -327,7 +334,13 @@ class MetaNetRNN(nn.Module):
                 pad_word_idx,
             )
         self.output_embedding = EncoderTransformer(
-            output_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
+            output_size,
+            embedding_dim,
+            nlayers,
+            nhead,
+            norm_first,
+            dropout_p,
+            pad_word_idx,
         )
         self.pad_word_idx = pad_word_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
