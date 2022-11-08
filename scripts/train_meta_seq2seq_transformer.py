@@ -570,11 +570,11 @@ class ImaginationMetaLearner(pl.LightningModule):
             n_state_components,
             embed_dim,
             y_categories,
-            nlayers,
-            nhead,
-            pad_action_idx,
-            norm_first,
-            dropout_p,
+            nlayers=nlayers,
+            nhead=nhead,
+            pad_action_idx=pad_action_idx,
+            norm_first=norm_first,
+            dropout_p=dropout_p,
         )
         self.y_categories = y_categories
         self.pad_word_idx = pad_word_idx
@@ -946,7 +946,7 @@ def main():
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        precision=16 if torch.cuda.is_available() else 16,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
