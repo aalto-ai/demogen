@@ -1,1 +1,15 @@
+data/
+logs/
+models/
+
+# python optimized
 __pycache__/*
+*.py[cod]
+*$py.class
+
+# packaging
+*.egg
+*.egg-info
+
+# ipython
+.ipynb_checkpoints
