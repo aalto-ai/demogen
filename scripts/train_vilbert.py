@@ -657,8 +657,8 @@ def main():
         [
             DataLoader(
                 PaddingDataset(
-                    Subset(demonstrations, torch.randperm(len(demonstrations))[:1024]),
-                    (8, 72, None),
+                    demonstrations,
+                    (8, 128, None),
                     (pad_word, pad_action, None),
                 ),
                 batch_size=max([args.train_batch_size, args.valid_batch_size]),
