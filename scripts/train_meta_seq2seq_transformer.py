@@ -533,6 +533,24 @@ class EncoderDecoderTransformer(nn.Module):
         return self.out(decoded)
 
 
+def init_parameters(module, scale=1e-2):
+    if type(module) in [nn.LayerNorm]:
+        return
+
+    if type(module) in [nn.MultiheadAttention]:
+        torch.nn.init.normal_(module.in_proj_weight, 0, scale)
+        return
+
+    if type(module) in [nn.Conv2d]:
+        return
+
+    if getattr(module, "weight", None) is not None:
+        torch.nn.init.normal_(module.weight, 0, scale)
+
+    if getattr(module, "bias", None) is not None:
+        torch.nn.init.zeros_(module.bias)
+
+
 class ImaginationMetaLearner(pl.LightningModule):
     def __init__(
         self,
@@ -581,6 +599,8 @@ class ImaginationMetaLearner(pl.LightningModule):
         self.pad_action_idx = pad_action_idx
         self.sos_action_idx = sos_action_idx
         self.eos_action_idx = eos_action_idx
+
+        self.apply(init_parameters)
         self.save_hyperparameters()
 
     def configure_optimizers(self):

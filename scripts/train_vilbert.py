@@ -55,6 +55,7 @@ class DecoderTransformer(nn.Module):
                 dropout=dropout_p,
                 nhead=nhead,
                 norm_first=norm_first,
+                activation='gelu'
             ),
             num_layers=nlayers,
         )
@@ -117,12 +118,14 @@ class StateCNN(nn.Module):
             ]
         )
         self.mlp = nn.Sequential(
+            nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
             nn.ReLU(inplace=True),
             nn.Dropout(p=dropout_p),
-            nn.Linear(len(conv_kernel_sizes) * n_output_channels, emb_channels),
         )
+        self.residual = nn.Linear(n_input_channels, emb_channels)
 
     def forward(self, x):
+        orig = x
         # NHWC => NCWH => NCHW
         x = x.transpose(-1, -3).transpose(-1, -2)
         x_multiscale = [layer(x) for layer in self.conv_layers]
@@ -130,7 +133,9 @@ class StateCNN(nn.Module):
         # NCHW => NWHC => NHWC
         x_multiscale = x_multiscale.transpose(-1, -3).transpose(-2, -3)
 
-        return self.mlp(x_multiscale)
+        # Original implementation does not use a residual connection, but it
+        # probably should
+        return self.mlp(x_multiscale) + self.residual(orig)
 
 
 class TransformerMLP(nn.Module):
@@ -150,14 +155,22 @@ class TransformerMLP(nn.Module):
 class TransformerCrossAttentionLayer(nn.Module):
     def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
+        self.norm_x = nn.LayerNorm(emb_dim)
+        self.norm_y = nn.LayerNorm(emb_dim)
         self.mha_x_to_y = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
         self.mha_y_to_x = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
         self.dense_x_to_y = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
         self.dense_y_to_x = TransformerMLP(emb_dim, ff_dim, norm_first, dropout_p)
 
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
-        mha_x, _ = self.mha_x_to_y(x, y, y, key_padding_mask=y_key_padding_mask)
-        mha_y, _ = self.mha_y_to_x(y, x, x, key_padding_mask=x_key_padding_mask)
+        if self.norm_first:
+            norm_x = self.norm_x(x)
+            norm_y = self.norm_y(y)
+        else:
+            norm_x = x
+            norm_y = y
+        mha_x, _ = self.mha_x_to_y(norm_x, norm_y, norm_y, key_padding_mask=y_key_padding_mask)
+        mha_y, _ = self.mha_y_to_x(norm_y, norm_x, norm_x, key_padding_mask=x_key_padding_mask)
 
         return self.dense_x_to_y(mha_x, x), self.dense_y_to_x(mha_y, y)
 
@@ -247,7 +260,6 @@ class TransformerEmbeddings(nn.Module):
         self.embedding = nn.Embedding(n_inp, embed_dim)
         self.pos_embedding = nn.Embedding(n_inp, embed_dim)
         self.dropout = nn.Dropout(p=dropout_p)
-        self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, instruction):
         projected_instruction = self.embedding(instruction)
@@ -256,7 +268,7 @@ class TransformerEmbeddings(nn.Module):
             + projected_instruction
         )
 
-        return self.dropout(self.norm(projected_instruction))
+        return self.dropout(projected_instruction)
 
 
 def nullable_one_hot(vec, cats):
@@ -334,12 +346,19 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         return encoding, encoding_mask
 
 
-def init_parameters(module):
+def init_parameters(module, scale=1e-2):
     if type(module) in [nn.LayerNorm]:
         return
 
+    if type(module) in [nn.MultiheadAttention]:
+        torch.nn.init.normal_(module.in_proj_weight, 0, scale)
+        return
+
+    if type(module) in [nn.Conv2d]:
+        return
+
     if getattr(module, "weight", None) is not None:
-        torch.nn.init.normal_(module.weight, 0, 1e-2)
+        torch.nn.init.normal_(module.weight, 0, scale)
 
     if getattr(module, "bias", None) is not None:
         torch.nn.init.zeros_(module.bias)
