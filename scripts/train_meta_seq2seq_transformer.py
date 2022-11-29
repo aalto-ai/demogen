@@ -470,25 +470,6 @@ class EncoderDecoderTransformer(nn.Module):
         self.pos_encoding = PositionalEncoding1D(hidden_size)
         self.dropout = nn.Dropout(dropout_p)
         self.pad_action_idx = pad_action_idx
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=hidden_size,
-                dim_feedforward=hidden_size * 4,
-                dropout=dropout_p,
-                nhead=nhead,
-                norm_first=norm_first,
-            ),
-            num_layers=nlayers,
-        )
-        self.decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(
-                d_model=hidden_size,
-                dim_feedforward=hidden_size * 4,
-                dropout=dropout_p,
-                nhead=nhead,
-            ),
-            num_layers=nlayers,
-        )
         self.transformer = nn.Transformer(
             d_model=hidden_size,
             dim_feedforward=hidden_size * 4,
