@@ -474,6 +474,7 @@ class EncoderDecoderTransformer(nn.Module):
             d_model=hidden_size,
             dim_feedforward=hidden_size * 4,
             dropout=dropout_p,
+            norm_first=norm_first,
             nhead=nhead,
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
