@@ -466,7 +466,7 @@ class EncoderDecoderTransformer(nn.Module):
         nlayers,
         nhead,
         pad_action_idx,
-        norm_first=False,
+        norm_first,
         dropout_p=0.1,
     ):
         #
@@ -496,7 +496,6 @@ class EncoderDecoderTransformer(nn.Module):
             d_model=hidden_size,
             dim_feedforward=hidden_size * 4,
             dropout=dropout_p,
-            norm_first=norm_first,
             nhead=nhead,
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
