@@ -291,6 +291,7 @@ class MetaNetRNN(nn.Module):
         nlayers,
         nhead,
         pad_word_idx,
+        pad_action_idx,
         norm_first=False,
         dropout_p=0.1,
         tie_encoders=True,
@@ -341,9 +342,10 @@ class MetaNetRNN(nn.Module):
             nhead=nhead,
             norm_first=norm_first,
             dropout_p=dropout_p,
-            pad_word_idx=pad_word_idx
+            pad_word_idx=pad_action_idx
         )
         self.pad_word_idx = pad_word_idx
+        self.pad_action_idx = pad_action_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
         self.tanh = nn.Tanh()
 
@@ -585,6 +587,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             nlayers,
             nhead,
             pad_word_idx,
+            pad_action_idx,
             norm_first,
             dropout_p,
         )
