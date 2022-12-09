@@ -66,7 +66,14 @@ class Attn(nn.Module):
 
 class EncoderTransformer(nn.Module):
     def __init__(
-        self, input_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
+        self,
+        input_size,
+        embedding_dim,
+        nlayers,
+        nhead,
+        norm_first,
+        dropout_p,
+        pad_word_idx,
     ):
         super().__init__()
         self.embedding = nn.Embedding(input_size, embedding_dim)
@@ -339,7 +346,15 @@ class MetaNetRNN(nn.Module):
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
         self.tanh = nn.Tanh()
 
-    def forward(self, query_state, support_state, x_supports, y_supports, x_queries):
+    def forward(
+        self,
+        query_state,
+        support_state,
+        x_supports,
+        y_supports,
+        support_mask,
+        x_queries,
+    ):
         #
         # Forward pass over an episode
         #
