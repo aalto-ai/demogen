@@ -1014,7 +1014,7 @@ def main():
     meta_train_dataset = ReshuffleOnIndexZeroDataset(
         PermuteActionsDataset(
             PaddingDataset(
-                meta_train_demonstrations,
+                ShuffleDemonstrationsDataset(meta_train_demonstrations),
                 (
                     None,
                     (8, 36)
