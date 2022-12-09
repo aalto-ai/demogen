@@ -162,7 +162,7 @@ class StateEncoderTransformer(nn.Module):
         )
 
     def forward(self, state_padded, z_padded):
-        state_padding_bits = torch.zeros_like(state_padded[..., 0])
+        state_padding_bits = torch.zeros_like(state_padded[..., 0]).bool()
         z_padding_bits = z_padded == self.pad_word_idx
 
         state_embed_seq = self.state_projection(self.state_embedding(state_padded))
@@ -238,7 +238,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         )
 
     def forward(self, state_padded, z_padded):
-        state_padding_bits = torch.zeros_like(state_padded[..., 0])
+        state_padding_bits = torch.zeros_like(state_padded[..., 0]).bool()
         z_padding_bits = z_padded == self.pad_word_idx
 
         state_embed_seq = self.state_projection(self.state_embedding(state_padded))
