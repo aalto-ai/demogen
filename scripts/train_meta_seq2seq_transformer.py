@@ -500,7 +500,6 @@ class EncoderDecoderTransformer(nn.Module):
             num_encoder_layers=nlayers,
             num_decoder_layers=nlayers,
         )
-        self.attn = Attn()
         self.out = nn.Linear(hidden_size, output_size)
 
     def forward(self, inputs, encoder_outputs, encoder_padding):
