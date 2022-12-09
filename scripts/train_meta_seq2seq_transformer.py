@@ -1021,9 +1021,9 @@ def main():
                     if isinstance(meta_train_demonstrations[0][1], list)
                     else None,
                     8,
-                    72,
+                    128,
                     (8, 8),
-                    (8, 72),
+                    (8, 128),
                 ),
                 (
                     None,
