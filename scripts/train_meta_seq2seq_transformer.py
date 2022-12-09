@@ -574,6 +574,8 @@ class ImaginationMetaLearner(pl.LightningModule):
         warmup_proportion=0.001,
         decay_power=-1,
         predict_steps=64,
+        metalearn_dropout_p=0.0,
+        metalearn_include_permutations=False,
     ):
         super().__init__()
         self.encoder = MetaNetRNN(
