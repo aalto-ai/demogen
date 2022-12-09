@@ -525,12 +525,7 @@ class EncoderDecoderTransformer(nn.Module):
         decoded = self.transformer(
             encoder_outputs,
             embedding.transpose(0, 1),
-            src_key_padding_mask=torch.cat(
-                [
-                    encoder_padding,
-                ],
-                dim=-1,
-            ),
+            src_key_padding_mask=encoder_padding,
             tgt_key_padding_mask=input_padding_bits,
             tgt_mask=torch.triu(
                 torch.full((inputs.shape[-1], inputs.shape[-1]), float("-inf")),
