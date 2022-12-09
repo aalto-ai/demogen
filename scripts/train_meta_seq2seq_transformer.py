@@ -264,6 +264,7 @@ class StateEncoderDecoderTransformer(nn.Module):
         encoded_seq = self.transformer(
             state_embed_seq.transpose(1, 0),
             z_embed_seq.transpose(1, 0),
+            src_key_padding_mask=state_padding_bits,
             tgt_key_padding_mask=padding_bits,
         )
 
