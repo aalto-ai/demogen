@@ -625,8 +625,27 @@ class ImaginationMetaLearner(pl.LightningModule):
         return self.decoder(decoder_in, encoder_outputs, encoder_padding)
 
     def forward(
-        self, query_state, support_state, x_supports, y_supports, queries, decoder_in
+        self,
+        x_permutation,
+        y_permutation,
+        query_state,
+        support_state,
+        x_supports,
+        y_supports,
+        support_mask,
+        queries,
+        decoder_in,
     ):
+        if self.hparams.metalearn_include_permutations:
+            # We concatenate the x and y permutations to the supports, this way
+            # they get encoded and also go through the attention process. The
+            # permutations are never masked.
+            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
+            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
+            support_mask = torch.cat(
+                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
+            )
+
         encoded = self.encoder(
             query_state,
             # We expand the support_state if it was not already expanded.
@@ -635,6 +654,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
             x_supports,
             y_supports,
+            support_mask,
             queries,
         )
         return self.decode_autoregressive(
@@ -642,16 +662,38 @@ class ImaginationMetaLearner(pl.LightningModule):
         )
 
     def training_step(self, x, idx):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         actions_mask = targets == self.pad_action_idx
 
         decoder_in = torch.cat(
             [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
         )
 
+        # Mask metalearn_dropout_p % of the supports
+        support_mask = torch.randperm(x_supports.shape[1], device=self.device).expand(
+            x_supports.shape[0], x_supports.shape[1]
+        ) < int(x_supports.shape[1] * self.hparams.metalearn_dropout_p)
+
         # Now do the training
         preds = self.forward(
-            query_state, support_state, x_supports, y_supports, queries, decoder_in
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
         )[:, :-1]
 
         # Ultimately we care about the cross entropy loss
@@ -678,16 +720,35 @@ class ImaginationMetaLearner(pl.LightningModule):
         return loss
 
     def validation_step(self, x, idx, dl_idx=0):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         actions_mask = targets == self.pad_action_idx
 
         decoder_in = torch.cat(
             [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
         )
 
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
         # Now do the training
         preds = self.forward(
-            query_state, support_state, x_supports, y_supports, queries, decoder_in
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
         )[:, :-1]
 
         # Ultimately we care about the cross entropy loss
@@ -712,9 +773,29 @@ class ImaginationMetaLearner(pl.LightningModule):
         )
 
     def predict_step(self, x, idx, dl_idx=0):
-        query_state, support_state, queries, targets, x_supports, y_supports = x
-
+        (
+            x_permutation,
+            y_permutation,
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
+        if self.hparams.metalearn_include_permutations:
+            # We concatenate the x and y permutations to the supports, this way
+            # they get encoded and also go through the attention process. The
+            # permutations are never masked.
+            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
+            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
+            support_mask = torch.cat(
+                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
+            )
+
         padding = queries == self.pad_word_idx
 
         # We do autoregressive prediction, predict for as many steps
@@ -730,6 +811,7 @@ class ImaginationMetaLearner(pl.LightningModule):
                 else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
                 x_supports,
                 y_supports,
+                support_mask,
                 queries,
             )
 
@@ -787,15 +869,15 @@ class PermuteActionsDataset(Dataset):
             np.copy(x) for x in self.dataset[idx]
         ]
 
+        x_permutation = np.arange(self.x_categories)
+        y_permutation = np.arange(self.y_categories)
+
         # Compute permutations of outputs
         if self.shuffle:
             # Do the permutation
-            x_permutation = np.arange(self.x_categories)
             x_permutation[0 : self.pad_word_idx] = x_permutation[0 : self.pad_word_idx][
                 self.generator.permutation(self.pad_word_idx)
             ]
-
-            y_permutation = np.arange(self.y_categories)
             y_permutation[0 : self.pad_action_idx] = y_permutation[
                 0 : self.pad_action_idx
             ][self.generator.permutation(self.pad_action_idx)]
@@ -806,6 +888,8 @@ class PermuteActionsDataset(Dataset):
             targets = y_permutation[targets]
 
         return (
+            pad_to(x_permutation, x_supports.shape[1], pad=self.pad_word_idx),
+            pad_to(y_permutation, y_supports.shape[1], pad=self.pad_action_idx),
             query_state,
             support_state,
             queries,
