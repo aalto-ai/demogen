@@ -424,14 +424,18 @@ class MetaNetRNN(nn.Module):
         #
         # Then if your values are
 
+        # Mask sequences that are actually padding and also those
+        # specified in support_mask
+        support_mask = (xs_padded[..., 0] == self.pad_word_idx).expand(
+            embed_xq_by_step.shape[0], -1, -1
+        ) | support_mask
+
         # Compute context based on key-value memory at each time step for queries
         value_by_step, attn_by_step = self.attn(
             embed_xq_by_step_expanded,  # (xq_seq_len) x bs x 1 x embedding_dim
             embed_xs_expanded,  # seq_len x bs x ns x e
             embed_ys_expanded,  # seq_len x bs x ns x e
-            (xs_padded[..., 0] == self.pad_word_idx).expand(
-                embed_xq_by_step.shape[0], -1, -1
-            ),
+            support_mask,
         )  # => (seq_len x bs x 1 x e)
 
         value_by_step = value_by_step.squeeze(-2)  # seq_len x bs x e
