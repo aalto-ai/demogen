@@ -899,6 +899,48 @@ class PermuteActionsDataset(Dataset):
         )
 
 
+class ShuffleDemonstrationsDataset(Dataset):
+    def __init__(self, dataset, seed=0):
+        super().__init__()
+        self.dataset = dataset
+        self.generator = np.random.default_rng(seed)
+
+    def state_dict(self):
+        return {"random_state": self.generator.__getstate__()}
+
+    def load_state_dict(self, sd):
+        if "random_state" in sd:
+            self.generator.__setstate__(sd["random_state"])
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = self.dataset[idx]
+        x_supports = np.copy(x_supports)
+        y_supports = np.copy(y_supports)
+
+        support_permutation = self.generator.permutation(x_supports.shape[0])
+
+        return (
+            query_state,
+            np.stack(support_state)[support_permutation]
+            if isinstance(support_state, list)
+            else support_state,
+            queries,
+            targets,
+            x_supports[support_permutation],
+            y_supports[support_permutation],
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
