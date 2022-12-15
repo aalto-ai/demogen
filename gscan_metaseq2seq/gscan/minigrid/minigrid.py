@@ -600,7 +600,7 @@ class MiniGridEnv(gym.Env):
         Generate random integer in [low,high[
         """
 
-        return self.np_random.randint(low, high)
+        return self.np_random.integers(low, high)
 
     def place_obj(self, obj, top=None, size=None, reject_fn=None, max_tries=math.inf):
         """
