@@ -458,10 +458,7 @@ def generate_relevant_instructions_gscan_oracle(
                     continue
 
                 proposed_support_instruction = (
-                    action_option
-                    + article_words
-                    + description_words
-                    + adverb_option,
+                    action_option + article_words + description_words + adverb_option,
                     target_object,
                 )
 
