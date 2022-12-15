@@ -29,7 +29,6 @@ def load_data(
     train_meta_trajectories_path, valid_trajectories_directory, dictionary_path
 ):
     meta_train_demonstrations = load_pickle_file(train_meta_trajectories_path)
-    np.random.shuffle(meta_train_demonstrations)
 
     valid_trajectories_dict = (
         {
