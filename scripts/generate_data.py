@@ -1037,6 +1037,8 @@ GENERATION_CONFIGS = {
 
 
 def main():
+    multiprocessing.set_start_method("forkserver")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--gscan-dataset", type=str, required=True)
     parser.add_argument("--output-directory", type=str, required=True)
