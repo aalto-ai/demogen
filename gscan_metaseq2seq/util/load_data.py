@@ -1,3 +1,5 @@
+import fnmatch
+import itertools
 import os
 import pickle
 import numpy as np
@@ -15,12 +17,16 @@ def load_data(
     meta_train_demonstrations = load_pickle_file(train_meta_trajectories_path)
     np.random.shuffle(meta_train_demonstrations)
 
-    valid_trajectories_dict = {
-        os.path.splitext(fname)[0]: load_pickle_file(
-            os.path.join(valid_trajectories_directory, fname)
-        )
-        for fname in sorted(os.listdir(valid_trajectories_directory))
-    }
+    valid_trajectories_dict = (
+        {
+            os.path.splitext(fname)[0]: load_pickle_file(
+                os.path.join(valid_trajectories_directory, fname)
+            )
+            for fname in sorted(os.listdir(valid_trajectories_directory))
+        }
+        if valid_trajectories_directory
+        else {}
+    )
 
     with open(dictionary_path, "rb") as f:
         WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
