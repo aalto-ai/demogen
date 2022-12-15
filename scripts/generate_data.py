@@ -333,7 +333,7 @@ def generate_relevant_instructions_gscan_oracle(
     situation,
     vocabulary_colors,
     vocabulary_nouns,
-    n_description_options=1,
+    n_description_options=None,
     demonstrate_target=True,
     allow_demonstration_splits=None,
 ):
