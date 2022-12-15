@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 import os
 from collections import defaultdict
 import pickle
+import multiprocessing
 
 import torch
 import pytorch_lightning as pl
@@ -602,8 +603,8 @@ def add_eos_to_actions(actions, eos_token_idx):
     return actions_pos
 
 
-def yield_metalearning_examples(
-    examples_set,
+def generate_supports_for_data_point(
+    data_example,
     world,
     vocabulary,
     sorted_example_indices_by_command,
@@ -617,47 +618,47 @@ def yield_metalearning_examples(
     search_relevant=False,
     allow_demonstration_splits=None,
 ):
-    for data_example in examples_set:
-        command = parse_command_repr(data_example["command"])
-        target_commands = parse_command_repr(data_example["target_commands"])
-        situation = Situation.from_representation(data_example["situation"])
+    command = parse_command_repr(data_example["command"])
+    target_commands = parse_command_repr(data_example["target_commands"])
+    situation = Situation.from_representation(data_example["situation"])
 
-        world_layout = add_positional_information_to_observation(
-            np.stack(
-                [
-                    parse_sparse_situation(
-                        t.to_dict(), t.grid_size, color2idx, noun2idx
-                    )
-                    for t in [situation]
-                ]
-            )
+    world_layout = add_positional_information_to_observation(
+        np.stack(
+            [
+                parse_sparse_situation(t.to_dict(), t.grid_size, color2idx, noun2idx)
+                for t in [situation]
+            ]
         )
-        query_instruction, query_target = labelled_situation_to_demonstration_tuple(
-            {"input": command, "target": target_commands},
-            instruction_word2idx,
-            action_word2idx,
+    )
+    query_instruction, query_target = labelled_situation_to_demonstration_tuple(
+        {"input": command, "target": target_commands},
+        instruction_word2idx,
+        action_word2idx,
+    )
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    relevant_instructions = generate_relevant_instructions_gscan_oracle(
+        command,
+        situation,
+        list(color2idx.keys()),
+        list(noun2idx.keys()),
+        n_description_options=num_irrelevant + 1
+        if num_irrelevant is not None
+        else None,
+        demonstrate_target=generate_relevant,
+        allow_demonstration_splits=allow_demonstration_splits,
+    )
+
+    if not relevant_instructions:
+        return (
+            f"Skipping for {command} {situation.target_object} / {situation.placed_objects} as no demonstrations are possible and it is training or Split A test data.\n",
+            None,
         )
-        support_instructions = []
-        support_targets = []
-        support_layouts = []
 
-        relevant_instructions = generate_relevant_instructions_gscan_oracle(
-            command,
-            situation,
-            list(color2idx.keys()),
-            list(noun2idx.keys()),
-            n_description_options=num_irrelevant + 1,
-            demonstrate_target=generate_relevant,
-            allow_demonstration_splits=allow_demonstration_splits,
-        )
-
-        if not relevant_instructions:
-            tqdm.write(
-                f"Skipping for {command} {situation.target_object} / {situation.placed_objects} as no demonstrations are possible and it is training or Split A test data.\n"
-            )
-            continue
-
-        for support_instruction_command, target_object in relevant_instructions:
+    for support_instruction_command, target_object in relevant_instructions:
+        if search_relevant:
             key = " ".join(support_instruction_command)
 
             if search_relevant and key in sorted_example_indices_by_command:
@@ -698,35 +699,37 @@ def yield_metalearning_examples(
                 support_targets.append(support_target)
                 continue
 
-            # Otherwise we have to generate
-            support_target_commands = demonstrate_command_oracle(
-                world,
-                vocabulary,
-                list(color2idx.keys()),
-                list(noun2idx.keys()),
-                support_instruction_command,
-                target_object,
-                situation,
-            )
-            (
-                support_instruction,
-                support_target,
-            ) = labelled_situation_to_demonstration_tuple(
-                {
-                    "input": support_instruction_command,
-                    "target": support_target_commands,
-                },
-                instruction_word2idx,
-                action_word2idx,
-            )
-            support_instructions.append(support_instruction)
-            support_targets.append(support_target)
+        # Otherwise we have to generate
+        support_target_commands = demonstrate_command_oracle(
+            world,
+            vocabulary,
+            list(color2idx.keys()),
+            list(noun2idx.keys()),
+            support_instruction_command,
+            target_object,
+            situation,
+        )
+        (
+            support_instruction,
+            support_target,
+        ) = labelled_situation_to_demonstration_tuple(
+            {
+                "input": support_instruction_command,
+                "target": support_target_commands,
+            },
+            instruction_word2idx,
+            action_word2idx,
+        )
+        support_instructions.append(support_instruction)
+        support_targets.append(support_target)
 
-            # We append here for consistency
-            if search_relevant:
-                support_layouts.append(world_layout)
+        # We append here for consistency
+        if search_relevant:
+            support_layouts.append(world_layout)
 
-        yield (
+    return (
+        None,
+        (
             world_layout,
             world_layout if not support_layouts else support_layouts,
             query_instruction,
@@ -736,7 +739,85 @@ def yield_metalearning_examples(
                 add_eos_to_actions(support_target, action_word2idx["[eos]"])
                 for support_target in support_targets
             ],
-        )
+        ),
+    )
+
+
+def generate_supports_for_data_point_star(args):
+    return generate_supports_for_data_point(*args)
+
+
+def yield_metalearning_examples(
+    examples_set,
+    world,
+    vocabulary,
+    sorted_example_indices_by_command,
+    train_examples,
+    instruction_word2idx,
+    action_word2idx,
+    color2idx,
+    noun2idx,
+    num_irrelevant=0,
+    generate_relevant=True,
+    search_relevant=False,
+    allow_demonstration_splits=None,
+    n_procs=8,
+):
+    if not search_relevant:
+        # Fast path for generation, we don't need to keep the whole dataset
+        # in memory in order to search for matching examples
+        with multiprocessing.Pool(processes=n_procs) as pool:
+            for error, result in pool.imap_unordered(
+                generate_supports_for_data_point_star,
+                map(
+                    lambda x: (
+                        x,
+                        world,
+                        vocabulary,
+                        None,  # sorted_example_indices_by_command,
+                        None,  # train_examples,
+                        instruction_word2idx,
+                        action_word2idx,
+                        color2idx,
+                        noun2idx,
+                        num_irrelevant,
+                        generate_relevant,
+                        search_relevant,
+                        allow_demonstration_splits,
+                    ),
+                    examples_set,
+                ),
+                chunksize=100,
+            ):
+                if error is not None:
+                    tqdm.write(error)
+                    continue
+
+                yield result
+    else:
+        # Slow path, we need to keep the whole dataset
+        for example in examples_set:
+            error, result = generate_supports_for_data_point(
+                example,
+                world,
+                vocabulary,
+                sorted_example_indices_by_command,
+                train_examples,
+                instruction_word2idx,
+                action_word2idx,
+                color2idx,
+                noun2idx,
+                num_irrelevant,
+                generate_relevant,
+                search_relevant,
+                allow_demonstration_splits,
+            )
+
+            if error is not None:
+                tqdm.write(error)
+                continue
+
+            yield result
 
 
 def demonstrate_target_commands(
