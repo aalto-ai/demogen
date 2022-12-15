@@ -448,31 +448,28 @@ def generate_relevant_instructions_gscan_oracle(
     )
     description_words_options = description_words_options[:n_description_options]
 
-    # Order description_words_options such that targets with a high
-    # similarity to the target object
+    # Start generating action/adverb/target combos.
     for action_option in action_options:
-        for adverb_option in (
-            filter(
-                lambda adverb_option: adverb_option != adverb_words, real_adverb_options
-            )
-            if action_option == action_words
-            else [adverb_words]
-        ):
+        for adverb_option in real_adverb_options:
             for description_words, target_object in description_words_options:
                 # We might be prohibited on the basis of the chosen action/adverb combination
                 # so check that again here
                 if is_prohibited_action_adverb_combo(action_option, adverb_option):
                     continue
 
-                support_instructions.append(
-                    (
-                        action_option
-                        + article_words
-                        + description_words
-                        + adverb_option,
-                        target_object,
-                    )
+                proposed_support_instruction = (
+                    action_option
+                    + article_words
+                    + description_words
+                    + adverb_option,
+                    target_object,
                 )
+
+                # Don't generate any instruction which is exactly the same as the query instruction
+                if proposed_support_instruction[0] == query_instruction:
+                    continue
+
+                support_instructions.append(proposed_support_instruction)
 
     # We can skip this data point if we cannot make any
     # demonstrations for it because none are allowed
