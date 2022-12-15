@@ -5,6 +5,19 @@ from torch.utils.data import Dataset, IterableDataset
 from .padding import pad_to, recursive_pad_array
 
 
+class MapDataset(Dataset):
+    def __init__(self, dataset, func):
+        super().__init__()
+        self.dataset = dataset
+        self.func = func
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.func(self.dataset[idx])
+
+
 class PaddingDataset(Dataset):
     def __init__(self, dataset, paddings, pad_values):
         super().__init__()
