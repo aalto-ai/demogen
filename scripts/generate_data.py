@@ -1156,6 +1156,7 @@ def main():
         "situational_2": "e",
         "contextual": "f",
         "adverb_2": "h",
+        "adverb_1": "g",
     }
     allow_demonstrations_of = {
         "train": [],
@@ -1165,6 +1166,7 @@ def main():
         "situational_1": ["A", "B", "C", "E", "F", "G", "H"],
         "situational_2": ["A", "B", "C", "D", "F", "G", "H"],
         "contextual": ["A", "B", "C", "D", "E", "G", "H"],
+        "adverb_1": ["A", "B", "C", "D", "E", "F", "G", "H"],
         "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
     }
 
