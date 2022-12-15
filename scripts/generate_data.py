@@ -930,6 +930,19 @@ class MetalearnSetToTransformerInputsDataset(IterableDataset):
         return result
 
 
+def batched(iterable, n):
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while True:
+        batch = list(itertools.islice(it, n))
+
+        if not batch:
+            break
+
+        yield batch
+
+
 def yield_transformer_model_examples(
     examples_set,
     transformer_model_path,
@@ -1152,18 +1165,19 @@ def main():
     if args.only_splits:
         splits = {k: v for k, v in splits.items() if k in args.only_splits}
 
-    split_examples = {
-        split_name: list(
-            bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
-                tqdm(d["examples"][split][: args.limit]),
-                allow_demonstration_splits=allow_demonstrations_of[split],
-                **GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
-            )
-        )
-        for split, split_name in splits.items()
-    }
-
     os.makedirs(f"{args.output_directory}/valid", exist_ok=True)
+
+    for split, split_name in tqdm(splits.items()):
+        os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
+        iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
+            tqdm(d["examples"][split][: args.limit]),
+            allow_demonstration_splits=allow_demonstrations_of[split],
+            **GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
+        )
+
+        for i, batch in enumerate(batched(iterable, 10000)):
+            with open(f"{args.output_directory}/{split_name}/{i}.pb", "wb") as f:
+                pickle.dump(batch, f)
 
     with open(f"{args.output_directory}/dictionary.pb", "wb") as f:
         pickle.dump(
@@ -1175,14 +1189,6 @@ def main():
             ),
             f,
         )
-
-    for split_name, examples in tqdm(split_examples.items()):
-        if split_name == "train":
-            with open(f"{args.output_directory}/train.pb", "wb") as f:
-                pickle.dump(examples, f)
-        else:
-            with open(f"{args.output_directory}/valid/{split_name}.pb", "wb") as f:
-                pickle.dump(examples, f)
 
 
 if __name__ == "__main__":
