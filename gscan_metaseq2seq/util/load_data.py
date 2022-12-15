@@ -11,6 +11,20 @@ def load_pickle_file(path):
         return pickle.load(f)
 
 
+def load_concat_pickle_files_from_directory(directory_path):
+    return list(
+        itertools.chain.from_iterable(
+            [
+                load_pickle_file(os.path.join(directory_path, filename))
+                for filename in sorted(
+                    fnmatch.filter(os.listdir(directory_path), "*.pb"),
+                    key=lambda k: int(os.path.splitext(k)[0]),
+                )
+            ]
+        )
+    )
+
+
 def load_data(
     train_meta_trajectories_path, valid_trajectories_directory, dictionary_path
 ):
@@ -27,6 +41,36 @@ def load_data(
         if valid_trajectories_directory
         else {}
     )
+
+    with open(dictionary_path, "rb") as f:
+        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+
+    return (
+        (
+            WORD2IDX,
+            ACTION2IDX,
+            color_dictionary,
+            noun_dictionary,
+        ),
+        (meta_train_demonstrations, valid_trajectories_dict),
+    )
+
+
+def load_data_directories(data_directory, dictionary_path):
+    assert os.path.isdir(os.path.join(data_directory, "train"))
+
+    meta_train_demonstrations = load_concat_pickle_files_from_directory(
+        os.path.join(data_directory, "train")
+    )
+    valid_trajectories_dict = {
+        fname: load_concat_pickle_files_from_directory(
+            os.path.join(data_directory, fname)
+        )
+        for fname in sorted(os.listdir(data_directory))
+        if os.path.isdir(os.path.join(data_directory, fname))
+        and fname not in ("train", "valid")
+
+    }
 
     with open(dictionary_path, "rb") as f:
         WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
