@@ -1017,6 +1017,10 @@ GENERATION_CONFIGS = {
         "yield_func": "metalearning",
         "kwargs": {"num_irrelevant": 3},
     },
+    "metalearn_all": {
+        "yield_func": "metalearning",
+        "kwargs": {"num_irrelevant": None},
+    },
     "metalearn_random_only": {
         "yield_func": "metalearning",
         "kwargs": {"num_irrelevant": 4, "generate_relevant": False},
