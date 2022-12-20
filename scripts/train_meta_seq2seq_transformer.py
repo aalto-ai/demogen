@@ -304,30 +304,36 @@ class MetaNetRNN(nn.Module):
         self.dropout_p = dropout_p
         self.attn = Attn()
         self.suppport_embedding = StateEncoderDecoderTransformer(
-            n_state_components,
-            input_size,
-            embedding_dim,
-            nlayers,
-            nhead,
-            norm_first,
-            dropout_p,
-            pad_word_idx,
+            n_state_components=n_state_components,
+            input_size=input_size,
+            embedding_dim=embedding_dim,
+            nlayers=nlayers,
+            nhead=nhead,
+            norm_first=norm_first,
+            dropout_p=dropout_p,
+            pad_word_idx=pad_word_idx,
         )
         if tie_encoders:
             self.query_embedding = self.suppport_embedding
         else:
             self.query_embedding = StateEncoderDecoderTransformer(
-                n_state_components,
-                input_size,
-                embedding_dim,
-                nlayers,
-                nhead,
-                norm_first,
-                dropout_p,
-                pad_word_idx,
+                n_state_components=n_state_components,
+                input_size=input_size,
+                embedding_dim=embedding_dim,
+                nlayers=nlayers,
+                nhead=nhead,
+                norm_first=norm_first,
+                dropout_p=dropout_p,
+                pad_word_idx=pad_word_idx,
             )
         self.output_embedding = EncoderTransformer(
-            output_size, embedding_dim, nlayers, nhead, norm_first, dropout_p, pad_word_idx
+            input_size=output_size,
+            embedding_dim=embedding_dim,
+            nlayers=nlayers,
+            nhead=nhead,
+            norm_first=norm_first,
+            dropout_p=dropout_p,
+            pad_word_idx=pad_word_idx
         )
         self.pad_word_idx = pad_word_idx
         self.hidden = nn.Linear(embedding_dim * 2, embedding_dim)
@@ -567,14 +573,14 @@ class ImaginationMetaLearner(pl.LightningModule):
             dropout_p,
         )
         self.decoder = EncoderDecoderTransformer(
-            n_state_components,
-            embed_dim,
-            y_categories,
-            nlayers,
-            nhead,
-            pad_action_idx,
-            norm_first,
-            dropout_p,
+            n_state_components=n_state_components,
+            hidden_size=embed_dim,
+            output_size=y_categories,
+            norm_first=norm_first,
+            nlayers=nlayers,
+            nhead=nhead,
+            pad_action_idx=pad_action_idx,
+            dropout_p=dropout_p,
         )
         self.y_categories = y_categories
         self.pad_word_idx = pad_word_idx
