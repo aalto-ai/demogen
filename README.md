@@ -22,8 +22,13 @@ Invoke it like this:
 
     python scripts/generate_data.py
            --gscan-dataset path/to/compositional_splits/dataset.txt
-           --output-directory data/metalearn_sample_environments
+           --output-directory data/baseline
            --generate-mode baseline
+
+    python scripts/generate_data.py
+           --gscan-dataset path/to/compositional_splits/dataset.txt
+           --output-directory data/metalearn
+           --generate-mode metalearn
 
 
 There are a few different `--generate-mode` options:
@@ -37,11 +42,26 @@ There are a few different `--generate-mode` options:
 
 # Training the models
 
-To train the models, use something like:
+To train the meta-learning models, use something like:
 
     python scripts/train_meta_seq2seq_transformer.py \
     --train-demonstrations data/metalearn/train.pb \
     --valid-demonstrations data/metalearn/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
+
+To train the baseline models, use something like:
+
+    python scripts/train_transformer.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
     --dictionary data/baseline/dictionary.pb \
     --seed 0
     --train-batch-size 32 \
