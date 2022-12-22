@@ -397,7 +397,9 @@ class InstructionDiffusionModel(pl.LightningModule):
             .expand(-1, self.hparams.instruction_samples, instruction.shape[-1])
             .flatten(0, 1)
         )
-        expand_instruction = F.one_hot(expand_instruction, self.vocab_size).float()
+        expand_instruction_one_hot = F.one_hot(
+            expand_instruction, self.vocab_size
+        ).float()
         state = (
             state[:, None]
             .expand(
