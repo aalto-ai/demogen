@@ -111,10 +111,15 @@ def p_sample(
     sqrt_one_minus_alphas_cumprod_t = extract(sqrt_one_minus_alphas_cumprod, t, x.shape)
     sqrt_recip_alphas_t = extract(sqrt_recip_alphas, t, x.shape)
 
+    logits_state = model((x, state, t), override_p_image_drop=0.0)
+    logits_null = model((x, state, t), override_p_image_drop=1.0)
+
+    logits = logits_null + (logits_state - logits_null) * 2
+
     # Equation 11 in the paper
     # Use our model (noise predictor) to predict the mean
     model_mean = sqrt_recip_alphas_t * (
-        x - betas_t * model((x, state, t)) / sqrt_one_minus_alphas_cumprod_t
+        x - betas_t * logits / sqrt_one_minus_alphas_cumprod_t
     )
 
     if t_index == 0:
@@ -236,10 +241,24 @@ class InstructionDiffusionModel(pl.LightningModule):
             warmup_proportion=self.hparams.warmup_proportion,
         )
 
-    def forward(self, x):
+    def forward(self, x, override_p_image_drop=None):
         noisy_instruction, state, timestep_idx = x
 
-        encoded_state = self.state_encoder(state)
+        null_state = torch.zeros_like(state)
+        drop_state_indicator = (
+            torch.arange(state.shape[0], device=self.device)
+            < (
+                (
+                    override_p_image_drop
+                    if override_p_image_drop is not None
+                    else self.hparams.p_image_drop
+                )
+                * state.shape[0]
+            )
+        )[:, None, None]
+        drop_state = null_state * drop_state_indicator + state * (~drop_state_indicator)
+
+        encoded_state = self.state_encoder(drop_state)
         projected_state = self.state_encoder_projection(encoded_state)
         encoded_instruction = self.projection_instructions(noisy_instruction)
         encoded_instruction = encoded_instruction + self.pe_instruction(
