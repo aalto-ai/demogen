@@ -1,15 +1,17 @@
 import argparse
+import itertools
 import os
 import math
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import sys
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader, Subset
 from positional_encodings.torch_encodings import PositionalEncoding1D
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+from tqdm.auto import trange
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
@@ -354,7 +356,7 @@ class InstructionDiffusionModel(pl.LightningModule):
         return self.out_projection(decoded_instruction)
 
     def training_step(self, x, idx):
-        instruction, _, state = x
+        instruction, state = x
         encoded_instruction = F.one_hot(instruction, self.vocab_size).float()
 
         # Lets mask x% of the tokens in the instruction, BERT style
@@ -390,7 +392,7 @@ class InstructionDiffusionModel(pl.LightningModule):
         return loss
 
     def predict_step(self, x, idx):
-        instruction, _, state = x
+        instruction, state = x
 
         expand_instruction = (
             instruction[:, None]
@@ -433,6 +435,46 @@ class InstructionDiffusionModel(pl.LightningModule):
             instruction.shape[-1],
             -1,
         ).permute(1, 2, 0, 3, 4)
+
+
+class MapDataset(Dataset):
+    def __init__(self, dataset, func):
+        super().__init__()
+        self.dataset = dataset
+        self.func = func
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.func(self.dataset[idx])
+
+
+def rebalance_training_data(training_data, WORD2IDX, IDX2WORD):
+    training_data_indices_by_command = {}
+    for i in range(len(training_data)):
+        if WORD2IDX["cautiously"] in training_data[i][0]:
+            continue
+
+        cmd = " ".join(map(lambda x: IDX2WORD[x], training_data[i][0]))
+        if cmd not in training_data_indices_by_command:
+            training_data_indices_by_command[cmd] = []
+        training_data_indices_by_command[cmd].append(i)
+
+    min_len = min(
+        [(cmd, len(x)) for cmd, x in training_data_indices_by_command.items()],
+        key=lambda x: x[-1],
+    )[-1]
+    balanced_training_data = list(
+        itertools.chain.from_iterable(
+            [
+                [training_data[i] for i in x[:min_len]]
+                for x in training_data_indices_by_command.values()
+            ]
+        )
+    )
+
+    return balanced_training_data
 
 
 def main():
@@ -507,11 +549,15 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
+    balanced_training_data = rebalance_training_data(
+        train_demonstrations, WORD2IDX, IDX2WORD
+    )
+
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
-            train_demonstrations,
-            (8, 72, None),
-            (pad_word, pad_action, None),
+            MapDataset(balanced_training_data, lambda x: (x[0], x[2])),
+            (8, None),
+            (WORD2IDX["[pad]"], None),
         )
     )
 
