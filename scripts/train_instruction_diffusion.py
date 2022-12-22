@@ -99,6 +99,7 @@ def add_q_noise(
 def p_sample(
     model,
     state,
+    masked_instruction,
     x,
     t,
     t_index,
@@ -111,8 +112,8 @@ def p_sample(
     sqrt_one_minus_alphas_cumprod_t = extract(sqrt_one_minus_alphas_cumprod, t, x.shape)
     sqrt_recip_alphas_t = extract(sqrt_recip_alphas, t, x.shape)
 
-    logits_state = model((x, state, t), override_p_image_drop=0.0)
-    logits_null = model((x, state, t), override_p_image_drop=1.0)
+    logits_state = model((masked_instruction, x, state, t), override_p_image_drop=0.0)
+    logits_null = model((masked_instruction, x, state, t), override_p_image_drop=1.0)
 
     logits = logits_null + (logits_state - logits_null) * 2
 
@@ -131,26 +132,76 @@ def p_sample(
         return model_mean + torch.sqrt(posterior_variance_t) * noise
 
 
-# Algorithm 2 (including returning all images)
+def make_masked_instruction(
+    base_instruction, pad_word_idx, mask_pct=0.3, contiguous_masking=False, device="cpu"
+):
+    instruction_mask = (
+        torch.stack(
+            [
+                torch.randperm(base_instruction.shape[-1])
+                for _ in range(base_instruction.shape[0])
+            ]
+        )
+        < (base_instruction.shape[-1] * mask_pct)
+    ).to(device)
+
+    if contiguous_masking:
+        mask_lowerbound = (
+            torch.arange(base_instruction.shape[0], device=device)
+            % (
+                base_instruction.shape[-1]
+                + math.floor(base_instruction.shape[1] * mask_pct)
+            )
+        ) - math.floor(base_instruction.shape[1] * mask_pct)
+        mask_upperbound = mask_lowerbound + math.floor(
+            base_instruction.shape[1] * mask_pct
+        )
+        instruction_mask_indices = torch.arange(
+            base_instruction.shape[1], device=device
+        )[None].expand(base_instruction.shape[0], -1)
+        instruction_mask = torch.bitwise_and(
+            instruction_mask_indices >= mask_lowerbound[:, None],
+            instruction_mask_indices <= mask_upperbound[:, None],
+        )
+
+    masked_instruction = base_instruction.clone()
+    masked_instruction[instruction_mask] = pad_word_idx
+
+    return masked_instruction
+
+
 def p_sample_loop(
     model,
     states,
+    base_instruction,
     base_noisy_instructions,
     timesteps,
     betas,
     sqrt_one_minus_alphas_cumprod,
     sqrt_recip_alphas,
     posterior_variance,
+    pad_word_idx,
+    mask_pct=0.3,
+    contiguous_masking=False,
 ):
     b = base_noisy_instructions.shape[0]
     # start from pure noise (for each example in the batch)
     imgs = []
     img = base_noisy_instructions
 
-    for i in reversed(range(0, timesteps)):
+    masked_instruction = make_masked_instruction(
+        base_instruction,
+        pad_word_idx,
+        mask_pct=mask_pct,
+        contiguous_masking=contiguous_masking,
+        device=model.device,
+    )
+
+    for i in reversed(trange(0, timesteps)):
         img = p_sample(
             model,
             states,
+            masked_instruction,
             img,
             torch.full(
                 (b,), i, device=base_noisy_instructions.device, dtype=torch.long
@@ -184,6 +235,7 @@ class InstructionDiffusionModel(pl.LightningModule):
     def __init__(
         self,
         vocab_size,
+        pad_word_idx,
         timesteps=200,
         lr=0.0001,
         wd=1e-2,
@@ -195,6 +247,9 @@ class InstructionDiffusionModel(pl.LightningModule):
         decay_power=-2,
         warmup_proportion=0.1,
         instruction_samples=16,
+        p_image_drop=0.1,
+        mask_pct=0.3,
+        contiguous_masking=False,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -203,6 +258,7 @@ class InstructionDiffusionModel(pl.LightningModule):
         self.pe_instruction = PositionalEncoding1D(emb_dim)
         self.time_embedding = SinusoidalPositionEmbeddings(emb_dim)
         self.state_encoder = BOWEmbedding(64, 7, emb_dim)
+        self.masked_instruction_encoder = nn.Embedding(vocab_size, emb_dim)
         self.state_encoder_projection = nn.Linear(7 * emb_dim, emb_dim)
         self.transformer = nn.Transformer(
             d_model=emb_dim,
@@ -215,6 +271,8 @@ class InstructionDiffusionModel(pl.LightningModule):
         )
         self.out_projection = nn.Linear(emb_dim, vocab_size)
         self.vocab_size = vocab_size
+        self.pad_word_idx = pad_word_idx
+
         self.timesteps = timesteps
 
         (
@@ -242,7 +300,7 @@ class InstructionDiffusionModel(pl.LightningModule):
         )
 
     def forward(self, x, override_p_image_drop=None):
-        noisy_instruction, state, timestep_idx = x
+        masked_instruction, noisy_instruction, state, timestep_idx = x
 
         null_state = torch.zeros_like(state)
         drop_state_indicator = (
@@ -258,6 +316,13 @@ class InstructionDiffusionModel(pl.LightningModule):
         )[:, None, None]
         drop_state = null_state * drop_state_indicator + state * (~drop_state_indicator)
 
+        # Masked instruction is part of the input,
+        # we decode the encoded_instruction
+        encoded_masked_instruction = self.masked_instruction_encoder(masked_instruction)
+        encoded_masked_instruction = encoded_masked_instruction + self.pe_instruction(
+            encoded_masked_instruction
+        )
+
         encoded_state = self.state_encoder(drop_state)
         projected_state = self.state_encoder_projection(encoded_state)
         encoded_instruction = self.projection_instructions(noisy_instruction)
@@ -267,10 +332,23 @@ class InstructionDiffusionModel(pl.LightningModule):
         timestep_embedding = self.time_embedding(timestep_idx)
 
         decoded_instruction = self.transformer(
-            projected_state.transpose(0, 1),
+            torch.cat(
+                [
+                    encoded_masked_instruction,
+                    projected_state,
+                ],
+                dim=1,
+            ).transpose(0, 1),
             torch.cat(
                 [encoded_instruction, timestep_embedding[:, None]], dim=-2
             ).transpose(0, 1),
+            src_key_padding_mask=torch.cat(
+                [
+                    masked_instruction == self.pad_word_idx,
+                    torch.zeros_like(state[..., 0]).bool(),
+                ],
+                dim=-1,
+            ),
         )[:-1].transpose(0, 1)
 
         return self.out_projection(decoded_instruction)
@@ -278,6 +356,15 @@ class InstructionDiffusionModel(pl.LightningModule):
     def training_step(self, x, idx):
         instruction, _, state = x
         encoded_instruction = F.one_hot(instruction, self.vocab_size).float()
+
+        # Lets mask x% of the tokens in the instruction, BERT style
+        masked_instruction = make_masked_instruction(
+            instruction,
+            self.pad_word_idx,
+            mask_pct=self.hparams.mask_pct,
+            contiguous_masking=self.hparams.contiguous_masking,
+            device=self.device,
+        )
 
         # Sample timesteps
         timestep_idx = torch.randint(
@@ -294,7 +381,9 @@ class InstructionDiffusionModel(pl.LightningModule):
             noise=instruction_noise,
         )
 
-        predicted_noise = self.forward((noisy_instructions, state, timestep_idx))
+        predicted_noise = self.forward(
+            (masked_instruction, noisy_instructions, state, timestep_idx)
+        )
         loss = F.smooth_l1_loss(instruction_noise, predicted_noise)
         self.log("loss", loss)
 
@@ -317,18 +406,22 @@ class InstructionDiffusionModel(pl.LightningModule):
             .flatten(0, 1)
         )
 
-        instruction_noise = torch.randn_like(expand_instruction)
+        instruction_noise = torch.randn_like(expand_instruction_one_hot)
 
         stacked_preds = torch.stack(
             p_sample_loop(
                 self,
                 state,
+                expand_instruction,
                 instruction_noise,
                 self.timesteps,
                 self.betas,
                 self.sqrt_one_minus_alphas_cumprod,
                 self.sqrt_recip_alphas,
                 self.posterior_variance,
+                pad_word_idx=self.pad_word_idx,
+                contiguous_masking=self.hparams.contiguous_masking,
+                mask_pct=self.hparams.mask_pct,
             )
         )
         return stacked_preds.view(
