@@ -544,7 +544,11 @@ def labelled_situation_to_demonstration_tuple(
 
 
 def parse_sparse_situation(
-    situation_representation: dict, grid_size: int, color2idx, noun2idx
+    situation_representation: dict,
+    grid_size: int,
+    color2idx,
+    noun2idx,
+    world_encoding_scheme,
 ) -> np.ndarray:
     """
     Each grid cell in a situation is fully specified by a vector:
@@ -556,29 +560,79 @@ def parse_sparse_situation(
     :param grid_size: int determining row/column number.
     :return: grid to be parsed by computational models.
     """
-    # attribute bits + agent + agent direction
-    num_grid_channels = 5
-
-    # Initialize the grid.
-    grid = np.zeros([grid_size, grid_size, num_grid_channels], dtype=int)
-
     # Place the agent.
     agent_row = int(situation_representation["agent_position"].row)
     agent_column = int(situation_representation["agent_position"].column)
     agent_direction = DIR_TO_INT[situation_representation["agent_direction"].name]
-    agent_representation = np.zeros([num_grid_channels], dtype=np.int)
-    agent_representation[-2] = 1
-    agent_representation[-1] = agent_direction
-    grid[agent_row, agent_column, :] = agent_representation
 
-    # Loop over the objects in the world and place them.
-    for placed_object in situation_representation["objects"]:
-        object_row = int(placed_object.position.row)
-        object_column = int(placed_object.position.column)
-        grid[object_row, object_column, 0] = int(placed_object.object.size)
-        grid[object_row, object_column, 1] = int(color2idx[placed_object.object.color])
-        grid[object_row, object_column, 2] = int(noun2idx[placed_object.object.shape])
+    grid = None
+
+    if world_encoding_scheme == "sequence":
+        # attribute bits + agent + agent direction + location
+        num_grid_channels = 7
+        grid = []
+        agent_representation = np.zeros([num_grid_channels], dtype=np.int)
+        agent_representation[-4] = 1
+        agent_representation[-3] = agent_direction
+        agent_representation[-2] = agent_row
+        agent_representation[-1] = agent_column
+        grid.append(agent_representation)
+
+        for placed_object in situation_representation["objects"]:
+            object_row = int(placed_object.position.row)
+            object_column = int(placed_object.position.column)
+            grid.append(
+                np.array(
+                    [
+                        int(placed_object.object.size),
+                        int(color2idx[placed_object.object.color]),
+                        int(noun2idx[placed_object.object.shape]),
+                        0,
+                        0,
+                        object_row,
+                        object_column,
+                    ]
+                )
+            )
+    elif world_encoding_scheme == "all":
+        # attribute bits + agent + agent direction
+        num_grid_channels = 5
+        grid = np.zeros([grid_size, grid_size, num_grid_channels], dtype=int)
+        agent_representation = np.zeros([num_grid_channels], dtype=np.int)
+        agent_representation[-2] = 1
+        agent_representation[-1] = agent_direction
+
+        grid[agent_row, agent_column, :] = agent_representation
+
+        # Loop over the objects in the world and place them.
+        for placed_object in situation_representation["objects"]:
+            object_row = int(placed_object.position.row)
+            object_column = int(placed_object.position.column)
+            grid[object_row, object_column, 0] = int(placed_object.object.size)
+            grid[object_row, object_column, 1] = int(
+                color2idx[placed_object.object.color]
+            )
+            grid[object_row, object_column, 2] = int(
+                noun2idx[placed_object.object.shape]
+            )
+
+        grid = add_positional_information_to_grid(grid)
+
     return grid
+
+
+def add_positional_information_to_grid(grid):
+    grid_pos = np.concatenate(
+        [
+            grid,
+            np.ones_like(grid[..., 0]).cumsum(axis=0)[..., None],
+            np.ones_like(grid[..., 0]).cumsum(axis=1)[..., None],
+        ],
+        axis=-1,
+    )
+    grid_pos = grid_pos.reshape(-1, grid_pos.shape[-1])
+
+    return grid_pos
 
 
 def add_positional_information_to_observation(observations):
@@ -613,6 +667,7 @@ def generate_supports_for_data_point(
     action_word2idx,
     color2idx,
     noun2idx,
+    world_encoding_scheme,
     num_irrelevant=0,
     generate_relevant=True,
     search_relevant=False,
@@ -622,13 +677,12 @@ def generate_supports_for_data_point(
     target_commands = parse_command_repr(data_example["target_commands"])
     situation = Situation.from_representation(data_example["situation"])
 
-    world_layout = add_positional_information_to_observation(
-        np.stack(
-            [
-                parse_sparse_situation(t.to_dict(), t.grid_size, color2idx, noun2idx)
-                for t in [situation]
-            ]
-        )
+    world_layout = parse_sparse_situation(
+        situation.to_dict(),
+        situation.grid_size,
+        color2idx,
+        noun2idx,
+        world_encoding_scheme,
     )
     query_instruction, query_target = labelled_situation_to_demonstration_tuple(
         {"input": command, "target": target_commands},
@@ -666,19 +720,15 @@ def generate_supports_for_data_point(
                     sorted_example_indices_by_command[key]
                 )
                 relevant_example = train_examples[relevant_example_idx]
-                relevant_layout = add_positional_information_to_observation(
-                    np.stack(
-                        [
-                            parse_sparse_situation(
-                                t.to_dict(), t.grid_size, color2idx, noun2idx
-                            )
-                            for t in [
-                                Situation.from_representation(
-                                    relevant_example["situation"]
-                                )
-                            ]
-                        ]
-                    )
+                relevant_situation = Situation.from_representation(
+                    relevant_example["situation"]
+                )
+                relevant_layout = parse_sparse_situation(
+                    relevant_situation.to_dict(),
+                    relevant_situation.grid_size,
+                    color2idx,
+                    noun2idx,
+                    world_encoding_scheme,
                 )
                 relevant_target_commands = parse_command_repr(
                     relevant_example["target_commands"]
@@ -757,6 +807,7 @@ def yield_metalearning_examples(
     action_word2idx,
     color2idx,
     noun2idx,
+    world_encoding_scheme,
     num_irrelevant=0,
     generate_relevant=True,
     search_relevant=False,
@@ -780,6 +831,7 @@ def yield_metalearning_examples(
                         action_word2idx,
                         color2idx,
                         noun2idx,
+                        world_encoding_scheme,
                         num_irrelevant,
                         generate_relevant,
                         search_relevant,
@@ -852,7 +904,12 @@ def yield_situations(d, split):
 
 
 def yield_baseline_examples(
-    situations, instruction_word2idx, action_word2idx, color2idx, noun2idx
+    situations,
+    instruction_word2idx,
+    action_word2idx,
+    color2idx,
+    noun2idx,
+    world_encoding_scheme,
 ):
     for situation in situations:
         instruction, target = labelled_situation_to_demonstration_tuple(
@@ -863,15 +920,13 @@ def yield_baseline_examples(
             instruction_word2idx,
             action_word2idx,
         )
-        world_layout = add_positional_information_to_observation(
-            np.stack(
-                [
-                    parse_sparse_situation(
-                        t.to_dict(), t.grid_size, color2idx, noun2idx
-                    )
-                    for t in [Situation.from_representation(situation["situation"])]
-                ]
-            )
+        situation_object = Situation.from_representation(situation["situation"])
+        world_layout = parse_sparse_situation(
+            situation_object.to_dict(),
+            situation_object.grid_size,
+            color2idx,
+            noun2idx,
+            world_encoding_scheme,
         )
 
         yield (
@@ -952,6 +1007,7 @@ def yield_transformer_model_examples(
     action_word2idx,
     color2idx,
     noun2idx,
+    world_encoding_scheme,
     transformer_batch_size=64,
     allow_demonstration_splits=None,
 ):
@@ -971,6 +1027,7 @@ def yield_transformer_model_examples(
             action_word2idx,
             color2idx,
             noun2idx,
+            world_encoding_scheme,
             allow_demonstration_splits=allow_demonstration_splits,
         )
     )
@@ -1050,6 +1107,9 @@ def main():
     parser.add_argument("--transformer-model", type=str, help="Transformer model")
     parser.add_argument("--inference-batch-size", type=int, default=64)
     parser.add_argument("--only-splits", nargs="*", type=str)
+    parser.add_argument(
+        "--world-encoding-scheme", choices=("sequence", "all"), default="sequence"
+    )
     args = parser.parse_args()
 
     with open(args.gscan_dataset, "r") as f:
@@ -1119,7 +1179,12 @@ def main():
 
     bound_funcs = {
         "baseline": lambda examples, **kwargs: yield_baseline_examples(
-            examples, INPUT_WORD2IDX, ACTION_WORD2IDX, COLOR2IDX, NOUN2IDX
+            examples,
+            INPUT_WORD2IDX,
+            ACTION_WORD2IDX,
+            COLOR2IDX,
+            NOUN2IDX,
+            args.world_encoding_scheme,
         ),
         "metalearning": lambda examples, **kwargs: yield_metalearning_examples(
             examples,
@@ -1131,6 +1196,7 @@ def main():
             ACTION_WORD2IDX,
             COLOR2IDX,
             NOUN2IDX,
+            args.world_encoding_scheme,
             **kwargs,
         ),
         "metalearning_transformer": lambda examples, **kwargs: yield_transformer_model_examples(
