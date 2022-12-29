@@ -1015,6 +1015,7 @@ def main():
     parser.add_argument("--version", type=str, default=None)
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--metalearn-demonstrations-limit", type=int, default=6)
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1070,13 +1071,13 @@ def main():
                 ),
                 (
                     None,
-                    (8, 36)
+                    (args.metalearn_demonstrations_limit, 36)
                     if isinstance(meta_train_demonstrations[0][1], list)
                     else None,
                     8,
                     128,
-                    (8, 8),
-                    (8, 128),
+                    (args.metalearn_demonstrations_limit, 8),
+                    (args.metalearn_demonstrations_limit, 128),
                 ),
                 (
                     None,
@@ -1172,11 +1173,13 @@ def main():
                     ),
                     (
                         None,
-                        (8, 36) if isinstance(demonstrations[0][1], list) else None,
+                        (args.metalearn_demonstrations_limit, 36)
+                        if isinstance(demonstrations[0][1], list)
+                        else None,
                         8,
                         128,
-                        (8, 8),
-                        (8, 128),
+                        (args.metalearn_demonstrations_limit, 8),
+                        (args.metalearn_demonstrations_limit, 128),
                     ),
                     (
                         None,
