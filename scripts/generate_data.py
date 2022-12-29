@@ -31,7 +31,7 @@ TYPE_GRAMMAR = "adverb"
 INTRANSITIVE_VERBS = "walk"
 TRANSITIVE_VERBS = "pull,push"
 ADVERBS = "cautiously,while spinning,hesitantly,while zigzagging"
-NOUNS = "square,cylinder,circle"
+NOUNS = "square,cylinder,circle,box"
 COLOR_ADJECTIVES = "red,green,yellow,blue"
 SIZE_ADJECTIVES = "big,small"
 
