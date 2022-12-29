@@ -1015,6 +1015,7 @@ def main():
     parser.add_argument("--version", type=str, default=None)
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
     parser.add_argument("--metalearn-demonstrations-limit", type=int, default=6)
     args = parser.parse_args()
 
@@ -1116,6 +1117,7 @@ def main():
         lr=args.lr,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
+        metalearn_dropout_p=args.metalearn_dropout_p,
     )
     print(meta_module)
 
