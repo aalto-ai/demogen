@@ -55,7 +55,7 @@ class DecoderTransformer(nn.Module):
                 dropout=dropout_p,
                 nhead=nhead,
                 norm_first=norm_first,
-                activation='gelu'
+                activation="gelu",
             ),
             num_layers=nlayers,
         )
