@@ -169,8 +169,12 @@ class TransformerCrossAttentionLayer(nn.Module):
         else:
             norm_x = x
             norm_y = y
-        mha_x, _ = self.mha_x_to_y(norm_x, norm_y, norm_y, key_padding_mask=y_key_padding_mask)
-        mha_y, _ = self.mha_y_to_x(norm_y, norm_x, norm_x, key_padding_mask=x_key_padding_mask)
+        mha_x, _ = self.mha_x_to_y(
+            norm_x, norm_y, norm_y, key_padding_mask=y_key_padding_mask
+        )
+        mha_y, _ = self.mha_y_to_x(
+            norm_y, norm_x, norm_x, key_padding_mask=x_key_padding_mask
+        )
 
         return self.dense_x_to_y(mha_x, x), self.dense_y_to_x(mha_y, y)
 
