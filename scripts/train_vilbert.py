@@ -638,12 +638,21 @@ def main():
                 logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=10
             ),
         ],
-        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb] + ([
-            StochasticWeightAveraging(
-                swa_lrs=1e-2,
-                annealing_epochs=int((iterations * args.batch_size_mult) // len(train_dataloader) * 0.2)
-            )
-        ] if args.swa else []),
+        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb]
+        + (
+            [
+                StochasticWeightAveraging(
+                    swa_lrs=1e-2,
+                    annealing_epochs=int(
+                        (iterations * args.batch_size_mult)
+                        // len(train_dataloader)
+                        * 0.2
+                    ),
+                )
+            ]
+            if args.swa
+            else []
+        ),
         max_steps=iterations,
         num_sanity_val_steps=10,
         gpus=1 if torch.cuda.is_available() else 0,
