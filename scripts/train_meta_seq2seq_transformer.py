@@ -15,7 +15,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
-from gscan_metaseq2seq.util.load_data import load_data
+from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 
@@ -998,8 +998,8 @@ def main():
             noun_dictionary,
         ),
         (meta_train_demonstrations, meta_valid_demonstrations_dict),
-    ) = load_data(
-        args.train_demonstrations, args.valid_demonstrations_directory, args.dictionary
+    ) = load_data_directories(
+        args.train_demonstrations, args.dictionary
     )
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
