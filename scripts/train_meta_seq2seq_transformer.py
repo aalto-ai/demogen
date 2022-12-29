@@ -342,7 +342,7 @@ class MetaNetRNN(nn.Module):
             nhead=nhead,
             norm_first=norm_first,
             dropout_p=dropout_p,
-            pad_word_idx=pad_action_idx
+            pad_word_idx=pad_action_idx,
         )
         self.pad_word_idx = pad_word_idx
         self.pad_action_idx = pad_action_idx
