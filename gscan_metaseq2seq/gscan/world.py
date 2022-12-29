@@ -499,7 +499,7 @@ class World(MiniGridEnv):
     The world can be cleared with clear_situation().
     """
 
-    AVAILABLE_SHAPES = {"circle", "square", "cylinder"}
+    AVAILABLE_SHAPES = {"circle", "square", "cylinder", "box"}
     AVAILABLE_COLORS = {"red", "blue", "green", "yellow"}
 
     def __init__(
