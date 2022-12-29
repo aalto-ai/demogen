@@ -1093,6 +1093,31 @@ GENERATION_CONFIGS = {
 }
 
 
+SPLITS_NAMES_MAP = {
+    "train": "train",
+    "test": "a",
+    "visual_easier": "b",
+    "visual": "c",
+    "situational_1": "d",
+    "situational_2": "e",
+    "contextual": "f",
+    "adverb_2": "h",
+    "adverb_1": "g",
+}
+
+SPLITS_ALLOW_ORACLE_DEMONSTRAITONS = {
+    "train": [],
+    "test": ["A", "B", "C", "D", "E", "F", "G", "H"],
+    "visual_easier": ["A", "C", "D", "E", "F", "G", "H"],
+    "visual": ["A", "B", "D", "E", "F", "G", "H"],
+    "situational_1": ["A", "B", "C", "E", "F", "G", "H"],
+    "situational_2": ["A", "B", "C", "D", "F", "G", "H"],
+    "contextual": ["A", "B", "C", "D", "E", "G", "H"],
+    "adverb_1": ["A", "B", "C", "D", "E", "F", "G", "H"],
+    "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
+}
+
+
 def main():
     multiprocessing.set_start_method("forkserver")
 
@@ -1208,33 +1233,13 @@ def main():
             ACTION_WORD2IDX,
             COLOR2IDX,
             NOUN2IDX,
+            args.world_encoding_scheme,
             transformer_batch_size=args.inference_batch_size,
             **kwargs,
         ),
     }
 
-    splits = {
-        "train": "train",
-        "test": "a",
-        "visual_easier": "b",
-        "visual": "c",
-        "situational_1": "d",
-        "situational_2": "e",
-        "contextual": "f",
-        "adverb_2": "h",
-        "adverb_1": "g",
-    }
-    allow_demonstrations_of = {
-        "train": [],
-        "test": ["A", "B", "C", "D", "E", "F", "G", "H"],
-        "visual_easier": ["A", "C", "D", "E", "F", "G", "H"],
-        "visual": ["A", "B", "D", "E", "F", "G", "H"],
-        "situational_1": ["A", "B", "C", "E", "F", "G", "H"],
-        "situational_2": ["A", "B", "C", "D", "F", "G", "H"],
-        "contextual": ["A", "B", "C", "D", "E", "G", "H"],
-        "adverb_1": ["A", "B", "C", "D", "E", "F", "G", "H"],
-        "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
-    }
+    splits = {s: SPLITS_NAMES_MAP.get(s, s) for s in list(d["examples"].keys())}
 
     if args.only_splits:
         splits = {k: v for k, v in splits.items() if k in args.only_splits}
@@ -1245,7 +1250,9 @@ def main():
         os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
             tqdm(d["examples"][split][: args.limit]),
-            allow_demonstration_splits=allow_demonstrations_of[split],
+            allow_demonstration_splits=SPLITS_ALLOW_ORACLE_DEMONSTRAITONS.get(
+                split, []
+            ),
             **GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
         )
 
