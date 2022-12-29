@@ -387,6 +387,9 @@ def main():
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--dataset-name", type=str, default="gscan")
+    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-actions-to", type=int, default=128)
+    parser.add_argument("--pad-state-to", type=int, default=36)
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -432,8 +435,8 @@ def main():
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
-            (8, 72, None),
-            (pad_word, pad_action, None),
+            (args.pad_instructions_to, args.pad_actions_to, (args.pad_state_to, 7)),
+            (pad_word, pad_action, 0),
         )
     )
 
@@ -513,8 +516,12 @@ def main():
                             : args.limit_val_size
                         ],
                     ),
-                    (8, 128, None),
-                    (pad_word, pad_action, None),
+                    (
+                        args.pad_instructions_to,
+                        args.pad_actions_to,
+                        (args.pad_state_to, 7),
+                    ),
+                    (pad_word, pad_action, 0),
                 ),
                 batch_size=max([args.train_batch_size, args.valid_batch_size]),
                 pin_memory=True,
