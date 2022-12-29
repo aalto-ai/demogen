@@ -1167,10 +1167,13 @@ def main():
                 list(
                     set(
                         itertools.chain.from_iterable(
-                            map(
-                                lambda s: s["command"].split(","),
-                                d["examples"]["train"],
+                            itertools.chain.from_iterable(
+                                map(
+                                    lambda s: s["command"].split(","),
+                                    d["examples"][split],
+                                )
                             )
+                            for split in d["examples"].keys()
                         )
                     )
                 )
