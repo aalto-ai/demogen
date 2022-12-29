@@ -942,6 +942,52 @@ class ShuffleDemonstrationsDataset(Dataset):
         )
 
 
+class ReorderSupportsByDistanceDataset(Dataset):
+    def __init__(self, dataset):
+        super().__init__()
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+            similarity_logit
+        ) = self.dataset[idx]
+
+        order = (-np.array(similarity_logit)).argsort()
+
+        return (
+            query_state,
+            np.stack(support_state)[order]
+            if isinstance(support_state, list)
+            else support_state,
+            queries,
+            targets,
+            [x_supports[i] for i in order],
+            [y_supports[i] for i in order],
+        )
+
+
+class MapDataset(Dataset):
+    def __init__(self, dataset, map_func):
+        super().__init__()
+        self.dataset = dataset
+        self.map_func = map_func
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        return self.map_func(self.dataset[i])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
@@ -1016,7 +1062,12 @@ def main():
     meta_train_dataset = ReshuffleOnIndexZeroDataset(
         PermuteActionsDataset(
             PaddingDataset(
-                ShuffleDemonstrationsDataset(meta_train_demonstrations),
+                ReorderSupportsByDistanceDataset(
+                    MapDataset(
+                        meta_train_demonstrations,
+                        lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                    )
+                ),
                 (
                     None,
                     (8, 36)
@@ -1113,7 +1164,12 @@ def main():
         DataLoader(
             PermuteActionsDataset(
                 PaddingDataset(
-                    Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_val_size]),
+                    ReorderSupportsByDistanceDataset(
+                        MapDataset(
+                            Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_val_size]),
+                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                        )
+                    ),
                     (
                         None,
                         (8, 36) if isinstance(demonstrations[0][1], list) else None,
