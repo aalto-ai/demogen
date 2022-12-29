@@ -4,6 +4,7 @@ import math
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+import numpy as np
 import sys
 from torch.utils.data import DataLoader, Subset
 from positional_encodings.torch_encodings import PositionalEncoding1D
@@ -380,6 +381,7 @@ def main():
     parser.add_argument("--decay-power", type=int, default=-1)
     parser.add_argument("--iterations", type=int, default=2500000)
     parser.add_argument("--check-val-every", type=int, default=1000)
+    parser.add_argument("--limit-val-size", type=int, default=None)
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--restore-from-checkpoint", action="store_true")
     parser.add_argument("--version", type=int, default=None)
@@ -506,7 +508,12 @@ def main():
         [
             DataLoader(
                 PaddingDataset(
-                    demonstrations,
+                    Subset(
+                        demonstrations,
+                        np.random.permutation(len(demonstrations))[
+                            : args.limit_val_size
+                        ],
+                    ),
                     (8, 128, None),
                     (pad_word, pad_action, None),
                 ),
