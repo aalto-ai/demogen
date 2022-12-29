@@ -18,6 +18,7 @@ from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroD
 from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
+from gscan_metaseq2seq.util.padding import pad_to
 
 
 class Attn(nn.Module):
