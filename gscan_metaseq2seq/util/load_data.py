@@ -28,6 +28,9 @@ def load_concat_pickle_files_from_directory(directory_path):
 def load_data(
     train_meta_trajectories_path, valid_trajectories_directory, dictionary_path
 ):
+    with open(dictionary_path, "rb") as f:
+        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+
     meta_train_demonstrations = load_pickle_file(train_meta_trajectories_path)
 
     valid_trajectories_dict = (
@@ -40,9 +43,6 @@ def load_data(
         if valid_trajectories_directory
         else {}
     )
-
-    with open(dictionary_path, "rb") as f:
-        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
 
     return (
         (
