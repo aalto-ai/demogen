@@ -24,6 +24,10 @@ def pad_to(sequence, length, pad=-1):
     if length is None:
         return sequence
 
+    if len(sequence) == 0:
+        return np.ones(length, dtype=np.int32) * pad
+
+
     length = (length,) if isinstance(length, int) else length
     # pad_width = [(0, l - sequence.shape[i]) for i, l in enumerate(length)]
 
