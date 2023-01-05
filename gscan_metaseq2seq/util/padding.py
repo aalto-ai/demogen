@@ -1,7 +1,6 @@
 import collections.abc
 import numpy as np
 
-
 def recursive_mod(sequence, depth, func):
     if depth == 0:
         return func(sequence)
