@@ -62,6 +62,13 @@ class Attn(nn.Module):
         )  # ... x batch_size x n_queries x n_memory
         R = torch.bmm(attn_weights, V)  # ... x batch_size x n_queries x value_dim
 
+        # Hack to ensure that where all elements are padded, which
+        # result in attn_weights being nan, we discard those and just use
+        # the existing queries
+        if K_padding_mask is not None:
+            all_padded_mask = K_padding_mask.flatten(0, -2).all(dim=-1)[:, None, None]
+            R = R.masked_fill(all_padded_mask, 0) + Q.masked_fill(~all_padded_mask, 0)
+
         return R.view(orig_q_shape), attn_weights
 
 
