@@ -1021,6 +1021,9 @@ def main():
     parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
     parser.add_argument("--metalearn-demonstrations-limit", type=int, default=6)
     parser.add_argument("--metalearn-include-permutations", action="store_true")
+    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-actions-to", type=int, default=128)
+    parser.add_argument("--pad-state-to", type=int, default=36)
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1070,23 +1073,32 @@ def main():
             PaddingDataset(
                 ReorderSupportsByDistanceDataset(
                     MapDataset(
-                        meta_train_demonstrations,
-                        lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                        MapDataset(
+                            meta_train_demonstrations,
+                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                        ),
+                        lambda x: (
+                            x[0],
+                            [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                            x[2],
+                            x[3],
+                            x[4],
+                            x[5],
+                            x[6]
+                        )
                     )
                 ),
                 (
-                    None,
-                    (args.metalearn_demonstrations_limit, 36)
-                    if isinstance(meta_train_demonstrations[0][1], list)
-                    else None,
-                    8,
-                    128,
-                    (args.metalearn_demonstrations_limit, 8),
-                    (args.metalearn_demonstrations_limit, 128),
+                    (args.pad_state_to, 7),
+                    (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
+                    args.pad_instructions_to,
+                    args.pad_actions_to,
+                    (args.metalearn_demonstrations_limit, args.pad_instructions_to),
+                    (args.metalearn_demonstrations_limit, args.pad_actions_to),
                 ),
                 (
-                    None,
-                    0 if isinstance(meta_train_demonstrations[0][1], list) else None,
+                    0,
+                    0,
                     pad_word,
                     pad_action,
                     pad_word,
@@ -1174,23 +1186,32 @@ def main():
                 PaddingDataset(
                     ReorderSupportsByDistanceDataset(
                         MapDataset(
-                            Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_val_size]),
-                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                            MapDataset(
+                                Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_val_size]),
+                                lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                            ),
+                            lambda x: (
+                                x[0],
+                                [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                                x[2],
+                                x[3],
+                                x[4],
+                                x[5],
+                                x[6]
+                            )
                         )
                     ),
                     (
-                        None,
-                        (args.metalearn_demonstrations_limit, 36)
-                        if isinstance(demonstrations[0][1], list)
-                        else None,
-                        8,
-                        128,
-                        (args.metalearn_demonstrations_limit, 8),
-                        (args.metalearn_demonstrations_limit, 128),
+                        (args.pad_state_to, 7),
+                        (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
+                        args.pad_instructions_to,
+                        args.pad_actions_to,
+                        (args.metalearn_demonstrations_limit, args.pad_instructions_to),
+                        (args.metalearn_demonstrations_limit, args.pad_actions_to),
                     ),
                     (
-                        None,
-                        0 if isinstance(demonstrations[0][1], list) else None,
+                        0,
+                        0,
                         pad_word,
                         pad_action,
                         pad_word,
