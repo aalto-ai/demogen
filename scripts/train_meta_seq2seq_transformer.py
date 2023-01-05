@@ -939,9 +939,7 @@ class ShuffleDemonstrationsDataset(Dataset):
 
         return (
             query_state,
-            np.stack(support_state)[support_permutation]
-            if isinstance(support_state, list)
-            else support_state,
+            [support_state[i] for i in support_permutation] if isinstance(support_state, list) else support_state,
             queries,
             targets,
             x_supports[support_permutation],
@@ -972,9 +970,7 @@ class ReorderSupportsByDistanceDataset(Dataset):
 
         return (
             query_state,
-            np.stack(support_state)[order]
-            if isinstance(support_state, list)
-            else support_state,
+            [support_state[i] for i in order] if isinstance(support_state, list) else support_state,
             queries,
             targets,
             [x_supports[i] for i in order],
