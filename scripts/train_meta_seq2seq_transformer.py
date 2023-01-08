@@ -948,9 +948,10 @@ class ShuffleDemonstrationsDataset(Dataset):
 
 
 class ReorderSupportsByDistanceDataset(Dataset):
-    def __init__(self, dataset):
+    def __init__(self, dataset, limit):
         super().__init__()
         self.dataset = dataset
+        self.limit = limit
 
     def __len__(self):
         return len(self.dataset)
@@ -966,7 +967,7 @@ class ReorderSupportsByDistanceDataset(Dataset):
             similarity_logit
         ) = self.dataset[idx]
 
-        order = (-np.array(similarity_logit)).argsort()
+        order = (-np.array(similarity_logit)).argsort()[:self.limit]
 
         return (
             query_state,
@@ -1086,11 +1087,12 @@ def main():
                             x[5],
                             x[6]
                         )
-                    )
+                    ),
+                    args.metalearn_demonstrations_limit
                 ),
                 (
-                    (args.pad_state_to, 7),
-                    (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
+                    (args.pad_state_to, None),
+                    (args.metalearn_demonstrations_limit, args.pad_state_to, None),
                     args.pad_instructions_to,
                     args.pad_actions_to,
                     (args.metalearn_demonstrations_limit, args.pad_instructions_to),
@@ -1139,7 +1141,7 @@ def main():
     print(meta_module)
 
     train_dataloader = DataLoader(
-        meta_train_dataset, batch_size=args.train_batch_size, pin_memory=True
+        meta_train_dataset, batch_size=args.train_batch_size
     )
 
     check_val_opts = {}
@@ -1199,7 +1201,8 @@ def main():
                                 x[5],
                                 x[6]
                             )
-                        )
+                        ),
+                        args.metalearn_demonstrations_limit
                     ),
                     (
                         (args.pad_state_to, 7),
