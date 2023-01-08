@@ -30,6 +30,13 @@ def pad_to(sequence, length, pad=-1):
     length = (length,) if isinstance(length, int) else length
     # pad_width = [(0, l - sequence.shape[i]) for i, l in enumerate(length)]
 
+    # Truncate the sequences on the first dimension. This avoids
+    # extra work if the sequence is very long
+    for dim_idx in range(len(length)):
+        sequence = recursive_mod(
+            sequence, dim_idx, lambda x: x[:length[dim_idx]]
+        )
+
     # First pad the sequences on the last dimension
     dim_idx = len(length)
 
