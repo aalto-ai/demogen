@@ -9,6 +9,9 @@ def recursive_mod(sequence, depth, func):
 
 
 def pad_subsequence_to(subsequence, length, pad):
+    if len(subsequence) == length:
+        return subsequence
+
     pad_width = tuple(
         [(0, length - min(len(subsequence), length))]
         + [(0, 0)] * (subsequence.ndim - 1)
@@ -43,9 +46,13 @@ def pad_to(sequence, length, pad=-1):
     while dim_idx != 0:
         dim_idx -= 1
 
-        sequence = recursive_mod(
-            sequence, dim_idx, lambda x: pad_subsequence_to(x, length[dim_idx], pad)
-        )
+        if length[dim_idx] != None:
+            if dim_idx == 0:
+                sequence = pad_subsequence_to(sequence, length[dim_idx], pad)
+            else:
+                sequence = recursive_mod(
+                    sequence, dim_idx, lambda x: pad_subsequence_to(x, length[dim_idx], pad)
+                )
 
         if dim_idx != 0:
             sequence = recursive_mod(sequence, dim_idx - 1, lambda x: np.stack(x))
