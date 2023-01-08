@@ -22,6 +22,33 @@ def pad_subsequence_to(subsequence, length, pad):
     return padded
 
 
+def fast_array_pad(np_array, expected_shape, pad_value):
+    expected_shape = (
+        [expected_shape] if isinstance(expected_shape, int) else expected_shape
+    )
+    expected_shape = tuple(
+        [(s or np_a_s) for s, np_a_s in zip(expected_shape, np_array.shape)]
+    )
+    truncated_np_array = np_array[tuple([slice(0, s) for s in expected_shape])]
+    pad_width = tuple(
+        [(0, s - np_a_s) for s, np_a_s in zip(expected_shape, truncated_np_array.shape)]
+    )
+    return np.pad(
+        truncated_np_array, pad_width, mode="constant", constant_values=pad_value
+    )
+
+
+def fast_2d_pad(list_of_arrays, expected_shape, pad_value):
+    lens = np.array([len(item) for item in list_of_arrays])
+    if expected_shape[-1] == None:
+        expected_shape[-1] = lens.max()
+
+    mask = lens[:, None] > np.arange(expected_shape[-1])
+    out = np.ones(expected_shape, dtype=int) * pad_value
+    out[mask] = np.concatenate(list_of_arrays)
+    return out
+
+
 def pad_to(sequence, length, pad=-1):
     if length is None:
         return sequence
@@ -29,13 +56,31 @@ def pad_to(sequence, length, pad=-1):
     if len(sequence) == 0:
         return np.ones(length, dtype=np.int32) * pad
 
-
     length = (length,) if isinstance(length, int) else length
     # pad_width = [(0, l - sequence.shape[i]) for i, l in enumerate(length)]
 
     # First pad the sequences on the last dimension
     dim_idx = len(length)
 
+    # Some fast paths, first if we already have an array
+    # we can just pad it directly
+    if isinstance(sequence, np.ndarray):
+        return fast_array_pad(sequence, length, pad_value=pad)
+
+    # If we have a list of arrays and they're all the same size, just stack
+    # and pad
+    if (
+        isinstance(sequence[0], np.ndarray)
+        and np.array([len(s) for s in sequence]).max()
+        == np.array([len(s) for s in sequence]).min()
+    ):
+        return fast_array_pad(np.stack(sequence), length, pad_value=pad)
+
+    # Two dimensional ragged arrays have a fast padding method
+    if dim_idx == 2:
+        return fast_2d_pad(sequence, length, pad_value=pad)
+
+    # Slow recursive fallback
     while dim_idx != 0:
         dim_idx -= 1
 
@@ -44,11 +89,10 @@ def pad_to(sequence, length, pad=-1):
                 sequence = pad_subsequence_to(sequence, length[dim_idx], pad)
             else:
                 sequence = recursive_mod(
-                    sequence, dim_idx, lambda x: pad_subsequence_to(x, length[dim_idx], pad)
+                    sequence,
+                    dim_idx,
+                    lambda x: pad_subsequence_to(np.stack(x), length[dim_idx], pad),
                 )
-
-        if dim_idx != 0:
-            sequence = recursive_mod(sequence, dim_idx - 1, lambda x: np.stack(x))
 
     return np.stack(sequence)
 
