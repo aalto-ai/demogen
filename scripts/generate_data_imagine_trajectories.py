@@ -182,7 +182,12 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
     state = state.to(transformer_learner.device)
     instruction = instruction.to(transformer_learner.device)
     encodings, key_padding_mask = transformer_learner.encode(state, instruction)
-    dummy_targets = torch.zeros(instruction.shape[0], decode_len, dtype=torch.long, device=transformer_learner.device)
+    dummy_targets = torch.zeros(
+        instruction.shape[0],
+        decode_len,
+        dtype=torch.long,
+        device=transformer_learner.device,
+    )
 
     decoded, logits, exacts, _ = autoregressive_model_unroll_predictions(
         transformer_learner,
@@ -190,7 +195,7 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
         dummy_targets,
         transformer_learner.sos_action_idx,
         transformer_learner.eos_action_idx,
-        transformer_learner.pad_action_idx
+        transformer_learner.pad_action_idx,
     )
 
     return decoded, logits
