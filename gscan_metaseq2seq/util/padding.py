@@ -48,6 +48,8 @@ def fast_2d_pad(list_of_arrays, expected_shape, pad_value):
     mask = lens[:, None] > np.arange(expected_shape[-1])
     out = np.ones((lens.shape[0], expected_shape[-1]), dtype=int) * pad_value
     out[mask] = np.concatenate(list_of_arrays)
+
+    out = np.pad(out, ((0, expected_shape[0] - lens.shape[0]), (0, 0)), mode="constant", constant_values=pad_value)
     return out
 
 
