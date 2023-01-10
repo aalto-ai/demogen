@@ -1747,8 +1747,7 @@ def main():
     parser.add_argument("--gscan-dataset", type=str, required=True)
     parser.add_argument("--output-directory", type=str, required=True)
     parser.add_argument(
-        "--generate-mode",
-        choices=tuple(GENERATION_CONFIGS.keys()),
+        "--generate-mode", choices=tuple(GENERATION_CONFIGS.keys()), required=True
     )
     parser.add_argument("--limit", type=int, help="Data generation limit", default=None)
     parser.add_argument("--transformer-model", type=str, help="Transformer model")
