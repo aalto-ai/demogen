@@ -220,15 +220,29 @@ def autoregressive_model_unroll_predictions(
             decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
 
         decoded = decoder_in
-        # these are shifted off by one
-        decoded_eq_mask = (
-            (decoded == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
-        )
         decoded = decoded[:, 1:]
-        decoded[decoded_eq_mask] = -1
         logits = torch.stack(logits, dim=1)
 
     exacts = (decoded == target).all(dim=-1).cpu().numpy()
+
+    return ([
+        decoded,
+        logits,
+        exacts,
+        target
+    ])
+
+
+def filter_out_padding(decoded, target, logits, eos_target_idx)
+    # these are shifted off by one
+    decoded_eq_mask = (
+        (decoded == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
+    )
+    decoded_eq_mask = torch.cat([
+        torch.zeros_like(decoded_eq_mask[:, :1]),
+        decoded_eq_mask
+    ])
+    decoded[decoded_eq_mask] = -1
 
     decoded = decoded.cpu().numpy()
     decoded_select_mask = decoded != -1
@@ -240,7 +254,7 @@ def autoregressive_model_unroll_predictions(
     logits = logits.cpu().numpy()
     logits = [l[m] for l, m in zip(logits, decoded_select_mask)]
 
-    return tuple([decoded, logits, exacts, target])
+    return tuple([decoded, logits, target])
 
 
 class TransformerLearner(pl.LightningModule):
