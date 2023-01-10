@@ -338,6 +338,7 @@ def generate_relevant_instructions_gscan_oracle(
     allow_demonstration_splits=None,
     allow_any_example=False,
     num_demos=16,
+    pick_random=False,
 ):
     action_words = []
     article_words = []
@@ -481,6 +482,13 @@ def generate_relevant_instructions_gscan_oracle(
         return []
 
     assert len(support_instructions) > 0
+
+    # Now we downsample if necessary
+    if pick_random:
+        return [
+            support_instructions[i]
+            for i in np.random.permutation(len(support_instructions))[:num_demos]
+        ]
 
     # Ordered by priority
     return support_instructions[:num_demos]
