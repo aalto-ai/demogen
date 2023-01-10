@@ -337,6 +337,7 @@ def generate_relevant_instructions_gscan_oracle(
     demonstrate_target=True,
     allow_demonstration_splits=None,
     allow_any_example=False,
+    num_demos=16,
 ):
     action_words = []
     article_words = []
@@ -480,7 +481,9 @@ def generate_relevant_instructions_gscan_oracle(
         return []
 
     assert len(support_instructions) > 0
-    return support_instructions
+
+    # Ordered by priority
+    return support_instructions[:num_demos]
 
 
 def demonstrate_command_oracle(
