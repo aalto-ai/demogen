@@ -1,4 +1,5 @@
 import argparse
+from bisect import bisect_left
 import json
 import itertools
 import numpy as np
@@ -120,6 +121,73 @@ def sort_indices_by_command(examples):
         command_examples[" ".join(example["command"].split(","))].append(index)
 
     return dict(command_examples)
+
+
+def sort_indices_by_offsets(examples):
+    commands_by_offsets = defaultdict(lambda: defaultdict(list))
+
+    for index, example in enumerate(examples):
+        situation = Situation.from_representation(example["situation"])
+        x_offset = situation.target_object.position.column - situation.agent_pos.column
+        y_offset = situation.target_object.position.row - situation.agent_pos.row
+
+        commands_by_offsets[x_offset][y_offset].append(index)
+
+    return commands_by_offsets
+
+
+def sort_indices_by_target_positions(examples):
+    commands_by_positions = defaultdict(lambda: defaultdict(list))
+
+    for index, example in enumerate(examples):
+        situation = Situation.from_representation(example["situation"])
+        x = situation.target_object.position.column
+        y = situation.target_object.position.row
+
+        commands_by_positions[x][y].append(index)
+
+    return commands_by_positions
+
+
+def sort_indices_by_target_diff_and_description(examples):
+    # x
+    commands_by_offsets_and_descriptions = defaultdict(
+        # y
+        lambda: defaultdict(
+            # size
+            lambda: defaultdict(
+                # shape
+                lambda: defaultdict(
+                    # color
+                    lambda: defaultdict(list)
+                )
+            )
+        )
+    )
+
+    for index, example in enumerate(examples):
+        situation = Situation.from_representation(example["situation"])
+        x_diff = situation.target_object.position.column - situation.agent_pos.column
+        y_diff = situation.target_object.position.row - situation.agent_pos.row
+        size = situation.target_object.object.size
+        shape = situation.target_object.object.shape
+        color = situation.target_object.object.color
+
+        commands_by_offsets_and_descriptions[x_diff][y_diff][size][shape][color].append(
+            index
+        )
+
+    return commands_by_offsets_and_descriptions
+
+
+def sort_indices_by_serialized_situation(examples):
+    command_examples = defaultdict(list)
+
+    for index, example in enumerate(examples):
+        situation = Situation.from_representation(example["situation"])
+        command_examples[serialize_situation(situation)].append(index)
+
+    return command_examples
 
 
 action_options = [["walk", "to"], ["push"], ["pull"]]
@@ -682,38 +750,17 @@ def add_eos_to_actions(actions, eos_token_idx):
     return actions_pos
 
 
-def generate_supports_for_data_point(
-    data_example,
-    world,
-    vocabulary,
-    sorted_example_indices_by_command,
-    train_examples,
-    instruction_word2idx,
-    action_word2idx,
-    color2idx,
-    noun2idx,
-    world_encoding_scheme,
-    num_irrelevant=0,
-    generate_relevant=True,
-    search_relevant=False,
-    allow_demonstration_splits=None,
+def generate_relevant_supports_oracle(
+    command, target_commands, situation, world, vocabulary, payload, options
 ):
-    command = parse_command_repr(data_example["command"])
-    target_commands = parse_command_repr(data_example["target_commands"])
-    situation = Situation.from_representation(data_example["situation"])
+    (colors, nouns, allow_demonstration_splits) = payload
 
-    world_layout = parse_sparse_situation(
-        situation.to_dict(),
-        situation.grid_size,
-        color2idx,
-        noun2idx,
-        world_encoding_scheme,
-    )
-    query_instruction, query_target = labelled_situation_to_demonstration_tuple(
-        {"input": command, "target": target_commands},
-        instruction_word2idx,
-        action_word2idx,
-    )
+    n_description_options = options.get("n_description_options", None)
+    demonstrate_target = options.get("demonstrate_target", True)
+    allow_any_example = options.get("allow_any_example", False)
+    num_demos = options.get("num_demos", 16)
+    pick_random = options.get("pick_random", False)
+
     support_instructions = []
     support_targets = []
     support_layouts = []
@@ -721,99 +768,394 @@ def generate_supports_for_data_point(
     relevant_instructions = generate_relevant_instructions_gscan_oracle(
         command,
         situation,
-        list(color2idx.keys()),
-        list(noun2idx.keys()),
-        n_description_options=num_irrelevant + 1
-        if num_irrelevant is not None
-        else None,
-        demonstrate_target=generate_relevant,
+        colors,
+        nouns,
+        n_description_options=n_description_options,
+        demonstrate_target=demonstrate_target,
         allow_demonstration_splits=allow_demonstration_splits,
+        allow_any_example=allow_any_example,
+        num_demos=num_demos,
+        pick_random=pick_random,
     )
 
     if not relevant_instructions:
         return (
             f"Skipping for {command} {situation.target_object} / {situation.placed_objects} as no demonstrations are possible and it is training or Split A test data.\n",
-            None,
+            (None, None, None),
         )
 
     for support_instruction_command, target_object in relevant_instructions:
-        if search_relevant:
-            key = " ".join(support_instruction_command)
-
-            if search_relevant and key in sorted_example_indices_by_command:
-                relevant_example_idx = np.random.choice(
-                    sorted_example_indices_by_command[key]
-                )
-                relevant_example = train_examples[relevant_example_idx]
-                relevant_situation = Situation.from_representation(
-                    relevant_example["situation"]
-                )
-                relevant_layout = parse_sparse_situation(
-                    relevant_situation.to_dict(),
-                    relevant_situation.grid_size,
-                    color2idx,
-                    noun2idx,
-                    world_encoding_scheme,
-                )
-                relevant_target_commands = parse_command_repr(
-                    relevant_example["target_commands"]
-                )
-                (
-                    support_instruction,
-                    support_target,
-                ) = labelled_situation_to_demonstration_tuple(
-                    {
-                        "input": support_instruction_command,
-                        "target": relevant_target_commands,
-                    },
-                    instruction_word2idx,
-                    action_word2idx,
-                )
-                support_layouts.append(relevant_layout)
-                support_instructions.append(support_instruction)
-                support_targets.append(support_target)
-                continue
-
-        # Otherwise we have to generate
+        # Demonstrate the command using the oracle
         support_target_commands = demonstrate_command_oracle(
             world,
             vocabulary,
-            list(color2idx.keys()),
-            list(noun2idx.keys()),
+            colors,
+            nouns,
             support_instruction_command,
             target_object,
             situation,
         )
-        (
-            support_instruction,
-            support_target,
-        ) = labelled_situation_to_demonstration_tuple(
-            {
-                "input": support_instruction_command,
-                "target": support_target_commands,
-            },
-            instruction_word2idx,
-            action_word2idx,
-        )
-        support_instructions.append(support_instruction)
-        support_targets.append(support_target)
+        support_instructions.append(support_instruction_command)
+        support_targets.append(support_target_commands)
 
-        # We append here for consistency
-        if search_relevant:
-            support_layouts.append(world_layout)
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def generate_instructions_find_support_in_any_layout(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        sorted_example_indices_by_command,
+        train_examples,
+        colors,
+        nouns,
+        allow_demonstration_splits,
+    ) = payload
+    n_description_options = options.get("n_description_options", None)
+    demonstrate_target = options.get("demonstrate_target", True)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    relevant_instructions = generate_relevant_instructions_gscan_oracle(
+        command,
+        situation,
+        colors,
+        nouns,
+        n_description_options=n_description_options,
+        demonstrate_target=demonstrate_target,
+        allow_demonstration_splits=allow_demonstration_splits,
+    )
+
+    for support_instruction_command, target_object in relevant_instructions:
+        key = " ".join(support_instruction_command)
+
+        # If its not there, we just don't add it. This might result
+        # in some of the supports being empty, but that's fine.
+        if key not in sorted_example_indices_by_command:
+            continue
+
+        relevant_example_idx = np.random.choice(sorted_example_indices_by_command[key])
+        relevant_example = train_examples[relevant_example_idx]
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def generate_random_instructions_find_support_in_any_layout(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        sorted_example_indices_by_command,
+        train_examples,
+        nouns,
+        colors,
+        allow_demonstration_splits,
+    ) = payload
+    num_demos = options.get("num_demos", 16)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    command_key = " ".join(command)
+    random_instructions = np.random.choice(
+        list(set(sorted_example_indices_by_command.keys()) - set([command_key])),
+        size=num_demos,
+        replace=False,
+    )
+
+    for support_instruction_command in random_instructions:
+        key = " ".join(support_instruction_command)
+
+        # If its not there, we just don't add it. This might result
+        # in some of the supports being empty, but that's fine.
+        if key not in sorted_example_indices_by_command:
+            continue
+
+        relevant_example_idx = np.random.choice(sorted_example_indices_by_command[key])
+        relevant_example = train_examples[relevant_example_idx]
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def find_in_sorted_list(a, x):
+    "Locate the leftmost value exactly equal to x"
+    i = bisect_left(a, x)
+    if i != len(a) and a[i] == x:
+        return True
+    return False
+
+
+def find_supports_with_same_agent_target_offset(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        sorted_example_indices_by_x_y_distance_to_agent,
+        sorted_example_indices_by_command,
+        train_examples,
+    ) = payload
+    num_demos = options.get("num_demos", 16)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    agent_pos = situation.agent_pos
+    target_object = situation.target_object
+
+    x_diff = target_object.position.column - agent_pos.column
+    y_diff = target_object.position.row - agent_pos.row
+
+    command_key = " ".join(command)
+    possible_demos = sorted_example_indices_by_x_y_distance_to_agent[x_diff][y_diff]
+    possible_demos = [
+        p
+        for p in possible_demos
+        if not find_in_sorted_list(sorted_example_indices_by_command[command_key], p)
+    ]
+    relevant_demos = np.random.choice(
+        possible_demos, size=min(len(possible_demos), num_demos), replace=True
+    )
+
+    for example_idx in relevant_demos:
+        relevant_example = train_examples[example_idx]
+        support_instruction_command = parse_command_repr(relevant_example["command"])
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def find_supports_with_any_target_object_in_same_position(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        sorted_example_indices_by_target_x_y,
+        sorted_example_indices_by_command,
+        train_examples,
+    ) = payload
+    num_demos = options.get("num_demos", 16)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    target_object = situation.target_object
+
+    x_pos = target_object.position.column
+    y_pos = target_object.position.row
+
+    command_key = " ".join(command)
+    possible_demos = sorted_example_indices_by_target_x_y[x_pos][y_pos]
+    possible_demos = [
+        p
+        for p in possible_demos
+        if not find_in_sorted_list(sorted_example_indices_by_command[command_key], p)
+    ]
+
+    relevant_demos = np.random.choice(
+        possible_demos, size=min(len(possible_demos), num_demos), replace=True
+    )
+
+    for example_idx in relevant_demos:
+        relevant_example = train_examples[example_idx]
+        support_instruction_command = parse_command_repr(relevant_example["command"])
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def find_supports_by_matching_object_in_same_diff(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        example_indices_by_target_x_y_diff_object,
+        sorted_example_indices_by_command,
+        train_examples,
+    ) = payload
+    num_demos = options.get("num_demos", 16)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    agent_pos = situation.agent_pos
+    target_object = situation.target_object
+    target_object_size = target_object.object.size
+    target_object_shape = target_object.object.shape
+    target_object_color = target_object.object.color
+
+    x_diff = target_object.position.column - agent_pos.column
+    y_diff = target_object.position.row - agent_pos.row
+
+    command_key = " ".join(command)
+    possible_demos = example_indices_by_target_x_y_diff_object[x_diff][y_diff][
+        target_object_size
+    ][target_object_shape][target_object_color]
+    possible_demos = [
+        p
+        for p in possible_demos
+        if not find_in_sorted_list(sorted_example_indices_by_command[command_key], p)
+    ]
+    relevant_demos = np.random.choice(
+        possible_demos, size=min(len(possible_demos), num_demos), replace=False
+    )
+
+    for example_idx in relevant_demos:
+        relevant_example = train_examples[example_idx]
+        support_instruction_command = parse_command_repr(relevant_example["command"])
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+def serialize_situation(situation):
+    return "_".join(
+        [
+            f"agent_{situation.agent_pos.column}_{situation.agent_pos.row}"
+            f"target_{''.join(map(str, situation.target_object.vector))}_{situation.target_object.position.row}_{situation.target_object.position.column}"
+        ]
+        + [
+            f"object_{''.join(map(str, o.vector))}_{o.position.row}_{o.position.column}"
+            for o in sorted(
+                situation.placed_objects,
+                key=lambda x: (x.position.row, x.position.column),
+            )
+        ]
+    )
+
+
+def find_supports_by_matching_environment_layout(
+    command, target_commands, situation, world, vocabulary, payload, options
+):
+    (
+        example_indices_by_matching_environment,
+        sorted_example_indices_by_command,
+        train_examples,
+    ) = payload
+    num_demos = options.get("num_demos", 16)
+
+    support_instructions = []
+    support_targets = []
+    support_layouts = []
+
+    environment_string = serialize_situation(situation)
+
+    command_key = " ".join(command)
+    possible_demos = example_indices_by_matching_environment[environment_string]
+    possible_demos = [
+        p
+        for p in possible_demos
+        if not find_in_sorted_list(sorted_example_indices_by_command[command_key], p)
+    ]
+    relevant_demos = np.random.choice(
+        possible_demos, size=min(len(possible_demos), num_demos), replace=True
+    )
+
+    for example_idx in relevant_demos:
+        relevant_example = train_examples[example_idx]
+        support_instruction_command = parse_command_repr(relevant_example["command"])
+        relevant_situation = Situation.from_representation(
+            relevant_example["situation"]
+        )
+        relevant_target_commands = parse_command_repr(
+            relevant_example["target_commands"]
+        )
+        support_layouts.append(relevant_situation.to_dict())
+        support_instructions.append(support_instruction_command)
+        support_targets.append(relevant_target_commands)
+
+    return (None, (support_instructions, support_targets, support_layouts))
+
+
+GENERATION_STRATEGIES = {
+    "generate_oracle": generate_relevant_supports_oracle,
+    "generate_find_matching": generate_instructions_find_support_in_any_layout,
+    "random_find_matching": generate_random_instructions_find_support_in_any_layout,
+    "find_by_environment_layout": find_supports_by_matching_environment_layout,
+    "find_by_matching_same_object_in_same_diff": find_supports_by_matching_object_in_same_diff,
+    "find_by_matching_any_object_in_same_target_position": find_supports_with_any_target_object_in_same_position,
+    "find_by_matching_any_object_in_same_diff": find_supports_with_same_agent_target_offset,
+}
+
+
+def generate_supports_for_data_point(
+    data_example,
+    world,
+    vocabulary,
+    generation_mode,
+    generation_payload,
+    generation_options,
+):
+    command = parse_command_repr(data_example["command"])
+    target_commands = parse_command_repr(data_example["target_commands"])
+    situation = Situation.from_representation(data_example["situation"])
+
+    error, (
+        support_instruction_commands,
+        support_target_commands,
+        support_layouts,
+    ) = GENERATION_STRATEGIES[generation_mode](
+        command,
+        target_commands,
+        situation,
+        world,
+        vocabulary,
+        generation_payload,
+        generation_options,
+    )
 
     return (
-        None,
+        error,
         (
-            world_layout,
-            world_layout if not support_layouts else support_layouts,
-            query_instruction,
-            add_eos_to_actions(query_target, action_word2idx["[eos]"]),
-            support_instructions,
-            [
-                add_eos_to_actions(support_target, action_word2idx["[eos]"])
-                for support_target in support_targets
-            ],
+            command,
+            target_commands,
+            data_example["situation"],
+            support_instruction_commands,
+            support_target_commands,
+            support_layouts,
         ),
     )
 
@@ -826,20 +1168,12 @@ def yield_metalearning_examples(
     examples_set,
     world,
     vocabulary,
-    sorted_example_indices_by_command,
-    train_examples,
-    instruction_word2idx,
-    action_word2idx,
-    color2idx,
-    noun2idx,
-    world_encoding_scheme,
-    num_irrelevant=0,
-    generate_relevant=True,
-    search_relevant=False,
-    allow_demonstration_splits=None,
+    generation_mode,
+    generation_payload,
+    generation_options,
     n_procs=8,
 ):
-    if not search_relevant:
+    if generation_options.get("can_parallel", False):
         # Fast path for generation, we don't need to keep the whole dataset
         # in memory in order to search for matching examples
         with multiprocessing.Pool(processes=n_procs) as pool:
@@ -850,17 +1184,9 @@ def yield_metalearning_examples(
                         x,
                         world,
                         vocabulary,
-                        None,  # sorted_example_indices_by_command,
-                        None,  # train_examples,
-                        instruction_word2idx,
-                        action_word2idx,
-                        color2idx,
-                        noun2idx,
-                        world_encoding_scheme,
-                        num_irrelevant,
-                        generate_relevant,
-                        search_relevant,
-                        allow_demonstration_splits,
+                        generation_mode,
+                        generation_payload,
+                        generation_options,
                     ),
                     examples_set,
                 ),
@@ -878,16 +1204,9 @@ def yield_metalearning_examples(
                 example,
                 world,
                 vocabulary,
-                sorted_example_indices_by_command,
-                train_examples,
-                instruction_word2idx,
-                action_word2idx,
-                color2idx,
-                noun2idx,
-                num_irrelevant,
-                generate_relevant,
-                search_relevant,
-                allow_demonstration_splits,
+                generation_mode,
+                generation_payload,
+                generation_options,
             )
 
             if error is not None:
@@ -895,6 +1214,99 @@ def yield_metalearning_examples(
                 continue
 
             yield result
+
+
+def encode_metalearning_example(
+    world_encoding_scheme,
+    instruction_word2idx,
+    action_word2idx,
+    color2idx,
+    noun2idx,
+    example,
+):
+    (
+        command,
+        target_commands,
+        situation_representation,
+        support_instructions,
+        support_targets,
+        support_situation_representations,
+    ) = example
+    situation = Situation.from_representation(situation_representation)
+
+    world_layout = parse_sparse_situation(
+        situation.to_dict(),
+        situation.grid_size,
+        color2idx,
+        noun2idx,
+        world_encoding_scheme,
+    )
+    query_instruction, query_target = labelled_situation_to_demonstration_tuple(
+        {"input": command, "target": target_commands},
+        instruction_word2idx,
+        action_word2idx,
+    )
+    support_layouts = [
+        parse_sparse_situation(
+            support_situation_representation,
+            support_situation_representation["grid_size"],
+            color2idx,
+            noun2idx,
+            world_encoding_scheme,
+        )
+        for support_situation_representation in support_situation_representations
+    ]
+    if support_instructions:
+        support_instructions, support_targets = list(
+            zip(
+                *[
+                    labelled_situation_to_demonstration_tuple(
+                        {"input": support_instruction, "target": support_target},
+                        instruction_word2idx,
+                        action_word2idx,
+                    )
+                    for support_instruction, support_target in zip(
+                        support_instructions, support_targets
+                    )
+                ]
+            )
+        )
+    else:
+        support_instructions = np.array([], dtype=int)
+        support_targets = np.array([], dtype=int)
+
+    return (
+        query_instruction,
+        add_eos_to_actions(query_target, action_word2idx["[eos]"]),
+        world_layout,
+        world_layout if not support_layouts else support_layouts,
+        support_instructions,
+        [
+            add_eos_to_actions(support_target, action_word2idx["[eos]"])
+            for support_target in support_targets
+        ],
+        # Priorities, which in this case, are always ordered.
+        np.array(list(reversed(range(len(support_instructions))))),
+    )
+
+
+def encode_metalearning_examples(
+    metalearning_examples,
+    world_encoding_scheme,
+    instruction_word2idx,
+    action_word2idx,
+    color2idx,
+    noun2idx,
+):
+    for ml_example in metalearning_examples:
+        yield encode_metalearning_example(
+            world_encoding_scheme,
+            instruction_word2idx,
+            action_word2idx,
+            color2idx,
+            noun2idx,
+            ml_example,
+        )
 
 
 def demonstrate_target_commands(
@@ -1092,28 +1504,202 @@ def yield_transformer_model_examples(
     yield from data_array
 
 
+def baseline_payload(dataset, vocabulary, current_split):
+    return None
+
+
+def generate_oracle_payload(dataset, vocabulary, current_split):
+    return (
+        vocabulary.get_nouns(),
+        vocabulary.get_color_adjectives(),
+        SPLITS_ALLOW_ORACLE_DEMONSTRATIONS.get(current_split, []),
+    )
+
+
+def generate_oracle_find_any_matching_payload(dataset, vocabulary, current_split):
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (
+        sorted_example_indices_by_command,
+        dataset["examples"]["train"],
+        vocabulary.get_nouns(),
+        vocabulary.get_color_adjectives(),
+        SPLITS_ALLOW_ORACLE_DEMONSTRATIONS.get(current_split, []),
+    )
+
+
+def generate_random_instructions_find_in_any_layout_payload(
+    dataset, vocabulary, current_split
+):
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (sorted_example_indices_by_command, dataset["examples"]["train"])
+
+
+def find_supports_with_same_agent_target_offset_payload(
+    dataset, vocabulary, current_split
+):
+    sorted_example_indices_by_offsets = sort_indices_by_offsets(
+        dataset["examples"]["train"]
+    )
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (
+        sorted_example_indices_by_offsets,
+        sorted_example_indices_by_command,
+        dataset["examples"]["train"],
+    )
+
+
+def find_supports_with_any_target_object_in_same_position_payload(
+    dataset, vocabulary, current_split
+):
+    sorted_example_indices_by_target_positions = sort_indices_by_target_positions(
+        dataset["examples"]["train"]
+    )
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (
+        sorted_example_indices_by_target_positions,
+        sorted_example_indices_by_command,
+        dataset["examples"]["train"],
+    )
+
+
+def find_supports_by_matching_object_in_same_diff_payload(
+    dataset, vocabulary, current_split
+):
+    sorted_example_indices_by_diff_and_description = (
+        sort_indices_by_target_diff_and_description(dataset["examples"]["train"])
+    )
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (
+        sorted_example_indices_by_diff_and_description,
+        sorted_example_indices_by_command,
+        dataset["examples"]["train"],
+    )
+
+
+def find_supports_by_matching_environment_layout_payload(
+    dataset, vocabulary, current_split
+):
+    sorted_examples_by_serialized_layouts = sort_indices_by_serialized_situation(
+        dataset["examples"]["train"]
+    )
+    sorted_example_indices_by_command = sort_indices_by_command(
+        dataset["examples"]["train"]
+    )
+
+    return (
+        sorted_examples_by_serialized_layouts,
+        sorted_example_indices_by_command,
+        dataset["examples"]["train"],
+    )
+
+
 GENERATION_CONFIGS = {
-    "baseline": {"yield_func": "baseline"},
-    "metalearn": {"yield_func": "metalearning"},
+    "baseline": {"yield_func": "baseline", "generate_mode": "baseline"},
+    "metalearn": {
+        "yield_func": "metalearning",
+        "generate_mode": "generate_oracle",
+        "kwargs": {"n_description_options": 1, "can_parallel": True},
+    },
+    "metalearn_allow_any": {
+        "yield_func": "metalearning",
+        "generate_mode": "generate_oracle",
+        "kwargs": {
+            "n_description_options": 1,
+            "can_parallel": True,
+            "allow_any_example": True,
+        },
+    },
     "metalearn_distractors": {
         "yield_func": "metalearning",
-        "kwargs": {"num_irrelevant": 3},
+        "generate_mode": "generate_oracle",
+        "kwargs": {"n_description_options": 3, "can_parallel": True},
     },
     "metalearn_all": {
         "yield_func": "metalearning",
-        "kwargs": {"num_irrelevant": None},
+        "generate_mode": "generate_oracle",
+        "kwargs": {"n_description_options": None, "can_parallel": True},
     },
-    "metalearn_random_only": {
+    "metalearn_all_allow_any": {
         "yield_func": "metalearning",
-        "kwargs": {"num_irrelevant": 4, "generate_relevant": False},
+        "generate_mode": "generate_oracle",
+        "kwargs": {
+            "n_description_options": None,
+            "can_parallel": True,
+            "allow_any_example": True,
+        },
     },
-    "metalearn_sample_environments": {
+    "metalearn_random_instructions_same_layout": {
         "yield_func": "metalearning",
-        "kwargs": {"search_relevant": True},
+        "generate_mode": "generate_oracle",
+        "kwargs": {
+            "n_description_options": None,
+            "demonstrate_target": False,
+            "can_parallel": True,
+            "num_demos": 16,
+            "pick_random": True,
+        },
     },
-    "metalearn_transformer_actions": {
-        "yield_func": "metalearning_transformer",
-        "kwargs": {},
+    "metalearn_random_instructions_same_layout_allow_any": {
+        "yield_func": "metalearning",
+        "generate_mode": "generate_oracle",
+        "kwargs": {
+            "n_description_options": None,
+            "demonstrate_target": False,
+            "can_parallel": True,
+            "num_demos": 16,
+            "pick_random": True,
+            "allow_any_example": True,
+        },
+    },
+    "metalearn_random_layouts": {
+        "yield_func": "metalearning",
+        "generate_mode": "random_find_matching",
+        "kwargs": {"num_demos": 16, "can_parallel": False},
+    },
+    "metalearn_find_matching_instruction_demos": {
+        "yield_func": "metalearning",
+        "generate_mode": "generate_find_matching",
+        "kwargs": {"can_parallel": False},
+    },
+    "metalearn_find_matching_instruction_demos_allow_any": {
+        "yield_func": "metalearning",
+        "generate_mode": "generate_find_matching",
+        "kwargs": {"can_parallel": False, "allow_any_example": True},
+    },
+    "metalearn_find_matching_environment_layout": {
+        "yield_func": "metalearning",
+        "generate_mode": "find_by_environment_layout",
+        "kwargs": {"can_parallel": False, "num_demos": 16},
+    },
+    "metalearn_find_matching_target_location_demos": {
+        "yield_func": "metalearning",
+        "generate_mode": "find_by_matching_any_object_in_same_target_position",
+        "kwargs": {"can_parallel": False, "num_demos": 16},
+    },
+    "metalearn_find_matching_diff_demos": {
+        "yield_func": "metalearning",
+        "generate_mode": "find_by_matching_any_object_in_same_diff",
+        "kwargs": {"can_parallel": False, "num_demos": 16},
+    },
+    "metalearn_find_matching_object_same_diff_demos": {
+        "yield_func": "metalearning",
+        "generate_mode": "find_by_matching_same_object_in_same_diff",
+        "kwargs": {"can_parallel": False, "num_demos": 16},
     },
 }
 
@@ -1130,7 +1716,7 @@ SPLITS_NAMES_MAP = {
     "adverb_1": "g",
 }
 
-SPLITS_ALLOW_ORACLE_DEMONSTRAITONS = {
+SPLITS_ALLOW_ORACLE_DEMONSTRATIONS = {
     "train": [],
     "test": ["A", "B", "C", "D", "E", "F", "G", "H"],
     "visual_easier": ["A", "C", "D", "E", "F", "G", "H"],
@@ -1140,6 +1726,17 @@ SPLITS_ALLOW_ORACLE_DEMONSTRAITONS = {
     "contextual": ["A", "B", "C", "D", "E", "G", "H"],
     "adverb_1": ["A", "B", "C", "D", "E", "F", "G", "H"],
     "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
+}
+
+PREPROCESSING_PAYLOAD_GENERATOR = {
+    "baseline": baseline_payload,
+    "generate_oracle": generate_oracle_payload,
+    "generate_find_matching": generate_oracle_find_any_matching_payload,
+    "random_find_matching": generate_oracle_find_any_matching_payload,
+    "find_by_environment_layout": find_supports_by_matching_environment_layout_payload,
+    "find_by_matching_same_object_in_same_diff": find_supports_by_matching_object_in_same_diff_payload,
+    "find_by_matching_any_object_in_same_target_position": find_supports_with_any_target_object_in_same_position_payload,
+    "find_by_matching_any_object_in_same_diff": find_supports_with_same_agent_target_offset_payload,
 }
 
 
@@ -1180,10 +1777,6 @@ def main():
 
     nouns = sorted(vocabulary.get_nouns())
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
-
-    seen_instructions = list(
-        map(lambda x: x.split(","), set([e["command"] for e in d["examples"]["train"]]))
-    )
 
     INPUT_WORD2IDX = {
         w: i
@@ -1228,10 +1821,8 @@ def main():
     ACTION_WORD2IDX["[sos]"] = len(ACTION_WORD2IDX.values())
     ACTION_WORD2IDX["[eos]"] = len(ACTION_WORD2IDX.values())
 
-    sorted_example_indices_by_command = sort_indices_by_command(d["examples"]["train"])
-
     bound_funcs = {
-        "baseline": lambda examples, **kwargs: yield_baseline_examples(
+        "baseline": lambda examples, payload, kwargs: yield_baseline_examples(
             examples,
             INPUT_WORD2IDX,
             ACTION_WORD2IDX,
@@ -1239,31 +1830,20 @@ def main():
             NOUN2IDX,
             args.world_encoding_scheme,
         ),
-        "metalearning": lambda examples, **kwargs: yield_metalearning_examples(
-            examples,
-            world,
-            vocabulary,
-            sorted_example_indices_by_command,
-            d["examples"]["train"],
+        "metalearning": lambda examples, payload, kwargs: encode_metalearning_examples(
+            yield_metalearning_examples(
+                examples,
+                world,
+                vocabulary,
+                GENERATION_CONFIGS[args.generate_mode]["generate_mode"],
+                payload,
+                kwargs,
+            ),
+            args.world_encoding_scheme,
             INPUT_WORD2IDX,
             ACTION_WORD2IDX,
             COLOR2IDX,
             NOUN2IDX,
-            args.world_encoding_scheme,
-            **kwargs,
-        ),
-        "metalearning_transformer": lambda examples, **kwargs: yield_transformer_model_examples(
-            examples,
-            args.transformer_model,
-            world,
-            vocabulary,
-            INPUT_WORD2IDX,
-            ACTION_WORD2IDX,
-            COLOR2IDX,
-            NOUN2IDX,
-            args.world_encoding_scheme,
-            transformer_batch_size=args.inference_batch_size,
-            **kwargs,
         ),
     }
 
@@ -1275,13 +1855,15 @@ def main():
     os.makedirs(f"{args.output_directory}/valid", exist_ok=True)
 
     for split, split_name in tqdm(splits.items()):
+        payload = PREPROCESSING_PAYLOAD_GENERATOR[
+            GENERATION_CONFIGS[args.generate_mode]["generate_mode"]
+        ](d, vocabulary, split)
+
         os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
             tqdm(d["examples"][split][: args.limit]),
-            allow_demonstration_splits=SPLITS_ALLOW_ORACLE_DEMONSTRAITONS.get(
-                split, []
-            ),
-            **GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
+            payload,
+            GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
         )
 
         for i, batch in enumerate(batched(iterable, 10000)):
