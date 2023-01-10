@@ -1026,6 +1026,7 @@ def main():
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--dataloader-ncpus", type=int, default=1)
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1142,7 +1143,7 @@ def main():
     print(meta_module)
 
     train_dataloader = DataLoader(
-        meta_train_dataset, batch_size=args.train_batch_size
+        meta_train_dataset, batch_size=args.train_batch_size, num_workers=args.dataloader_ncpus
     )
 
     check_val_opts = {}
