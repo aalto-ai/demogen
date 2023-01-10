@@ -1025,6 +1025,7 @@ def main():
     parser.add_argument("--pad-instructions-to", type=int, default=8)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
+    parser.add_argument("--limit-load", type=int, default=None)
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1057,7 +1058,7 @@ def main():
         ),
         (meta_train_demonstrations, meta_valid_demonstrations_dict),
     ) = load_data_directories(
-        args.train_demonstrations, args.dictionary
+        args.train_demonstrations, args.dictionary, limit_load=args.limit_load
     )
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
