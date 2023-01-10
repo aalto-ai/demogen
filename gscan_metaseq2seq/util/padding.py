@@ -43,8 +43,7 @@ def fast_array_pad(np_array, expected_shape, pad_value):
 def fast_2d_pad(list_of_arrays, expected_shape, pad_value):
     list_of_arrays = list_of_arrays[:expected_shape[0]]
     lens = np.array([len(item) for item in list_of_arrays])
-    if expected_shape[-1] == None:
-        expected_shape[-1] = lens.max()
+    expected_shape = (expected_shape[0], expected_shape[-1] if expected_shape[-1] else lens.max())
 
     mask = lens[:, None] > np.arange(expected_shape[-1])
     out = np.ones(expected_shape, dtype=int) * pad_value
