@@ -457,12 +457,19 @@ def generate_relevant_instructions_gscan_oracle(
     description_words_options = description_words_options[:n_description_options]
 
     # Start generating action/adverb/target combos.
-    for action_option in action_options:
-        for adverb_option in real_adverb_options:
-            for description_words, target_object in description_words_options:
+    #
+    # We start first with the description/target loop,
+    # so that the target object gets generated first and all of its
+    # adverb/actions get priority
+    for description_words, target_object in description_words_options:
+        for action_option in action_options:
+            for adverb_option in real_adverb_options:
                 # We might be prohibited on the basis of the chosen action/adverb combination
                 # so check that again here
-                if is_prohibited_action_adverb_combo(action_option, adverb_option):
+                if (
+                    is_prohibited_action_adverb_combo(action_option, adverb_option)
+                    and not allow_any_example
+                ):
                     continue
 
                 proposed_support_instruction = (
