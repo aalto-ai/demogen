@@ -12,6 +12,8 @@ def pad_subsequence_to(subsequence, length, pad):
     if len(subsequence) == length:
         return subsequence
 
+    subsequence = np.asarray(subsequence)
+
     pad_width = tuple(
         [(0, length - min(len(subsequence), length))]
         + [(0, 0)] * (subsequence.ndim - 1)
