@@ -11,7 +11,7 @@ def load_pickle_file(path):
         return pickle.load(f)
 
 
-def load_concat_pickle_files_from_directory(directory_path):
+def load_concat_pickle_files_from_directory(directory_path, limit_load=None):
     return list(
         itertools.chain.from_iterable(
             [
@@ -19,7 +19,7 @@ def load_concat_pickle_files_from_directory(directory_path):
                 for filename in sorted(
                     fnmatch.filter(os.listdir(directory_path), "*.pb"),
                     key=lambda k: int(os.path.splitext(k)[0]),
-                )
+                )[:limit_load]
             ]
         )
     )
@@ -55,7 +55,7 @@ def load_data(
     )
 
 
-def load_data_directories(data_directory, dictionary_path):
+def load_data_directories(data_directory, dictionary_path, limit_load=None):
     assert os.path.isdir(os.path.join(data_directory, "train"))
 
     meta_train_demonstrations = load_concat_pickle_files_from_directory(
@@ -63,12 +63,11 @@ def load_data_directories(data_directory, dictionary_path):
     )
     valid_trajectories_dict = {
         fname: load_concat_pickle_files_from_directory(
-            os.path.join(data_directory, fname)
+            os.path.join(data_directory, fname), limit_load=limit_load
         )
         for fname in sorted(os.listdir(data_directory))
         if os.path.isdir(os.path.join(data_directory, fname))
         and fname not in ("train", "valid")
-
     }
 
     with open(dictionary_path, "rb") as f:
