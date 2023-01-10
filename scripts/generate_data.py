@@ -114,6 +114,7 @@ def reinitialize_world(
 def sort_indices_by_command(examples):
     command_examples = defaultdict(list)
 
+    # Necessarily sorted, because we iterate front to back and append
     for index, example in enumerate(examples):
         command_examples[" ".join(example["command"].split(","))].append(index)
 
