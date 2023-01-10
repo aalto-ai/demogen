@@ -75,8 +75,10 @@ def pad_to(sequence, length, pad=-1):
     # and pad
     if (
         isinstance(sequence[0], np.ndarray)
-        and np.array([len(s) for s in sequence]).max()
-        == np.array([len(s) for s in sequence]).min()
+        and (
+            np.array([len(s) for s in sequence]).max()
+            == np.array([len(s) for s in sequence]).min()
+        )
     ):
         return fast_array_pad(np.stack(sequence), length, pad_value=pad)
 
