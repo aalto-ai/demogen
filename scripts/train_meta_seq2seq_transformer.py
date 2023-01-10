@@ -1208,8 +1208,8 @@ def main():
                         args.metalearn_demonstrations_limit
                     ),
                     (
-                        (args.pad_state_to, 7),
-                        (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
+                        (args.pad_state_to, None),
+                        (args.metalearn_demonstrations_limit, args.pad_state_to, None),
                         args.pad_instructions_to,
                         args.pad_actions_to,
                         (args.metalearn_demonstrations_limit, args.pad_instructions_to),
