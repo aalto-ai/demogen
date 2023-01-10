@@ -10,17 +10,12 @@ import pickle
 import multiprocessing
 import random
 
-import torch
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader, IterableDataset
-
 from tqdm.auto import tqdm
 
 from gscan_metaseq2seq.gscan.world import Situation, ObjectVocabulary, World
 from gscan_metaseq2seq.gscan.vocabulary import Vocabulary
 
 from gscan_metaseq2seq.util.dataset import PaddingIterableDataset
-from train_transformer import TransformerLearner
 
 GRID_SIZE = 6
 MIN_OTHER_OBJECTS = 0
@@ -1373,137 +1368,6 @@ def yield_baseline_examples(
         )
 
 
-class MetalearnSetToTransformerInputsDataset(IterableDataset):
-    def __init__(self, metalearn_examples):
-        super().__init__()
-        self.count = 0
-        self.support_count = 0
-        self.metalearn_examples = metalearn_examples
-
-    def __iter__(self):
-        self.count = 0
-        self.support_count = 0
-        return self
-
-    def __next__(self):
-        (
-            query_state,
-            support_state,
-            query_instruction,
-            target,
-            support_instructions,
-            support_targets,
-        ) = self.metalearn_examples[self.count]
-
-        if self.support_count == len(support_instructions):
-            self.support_count = 0
-            self.count += 1
-
-            if self.count == len(self.metalearn_examples):
-                raise StopIteration()
-
-            (
-                query_state,
-                support_state,
-                query_instruction,
-                target,
-                support_instructions,
-                support_targets,
-            ) = self.metalearn_examples[self.count]
-
-        result = (
-            support_instructions[self.support_count],
-            support_targets[self.support_count],
-            query_state,
-            self.count,
-        )
-
-        self.support_count += 1
-        return result
-
-
-def batched(iterable, n):
-    if n < 1:
-        raise ValueError("n must be at least one")
-    it = iter(iterable)
-    while True:
-        batch = list(itertools.islice(it, n))
-
-        if not batch:
-            break
-
-        yield batch
-
-
-def yield_transformer_model_examples(
-    examples_set,
-    transformer_model_path,
-    world,
-    vocabulary,
-    instruction_word2idx,
-    action_word2idx,
-    color2idx,
-    noun2idx,
-    world_encoding_scheme,
-    transformer_batch_size=64,
-    allow_demonstration_splits=None,
-):
-    module = TransformerLearner.load_from_checkpoint(transformer_model_path)
-    trainer = pl.Trainer(precision=16, accelerator="gpu")
-
-    # We need to buffer up the metalearning_examples as we
-    # need the ability to do random access later on
-    metalearning_examples = list(
-        yield_metalearning_examples(
-            examples_set,
-            world,
-            vocabulary,
-            {},
-            [],
-            instruction_word2idx,
-            action_word2idx,
-            color2idx,
-            noun2idx,
-            world_encoding_scheme,
-            allow_demonstration_splits=allow_demonstration_splits,
-        )
-    )
-    train_preds = trainer.predict(
-        module,
-        DataLoader(
-            PaddingIterableDataset(
-                MetalearnSetToTransformerInputsDataset(metalearning_examples),
-                (8, 128, 36, None),
-                (instruction_word2idx["[pad]"], action_word2idx["[pad]"], 0, None),
-            ),
-            batch_size=transformer_batch_size,
-        ),
-    )
-
-    num_datapoints = (max([b[-1].max() for b in train_preds]) + 1).item()
-
-    data_array = [[None, None, None, None, [], []] for _ in range(num_datapoints)]
-
-    for (
-        state_batch,
-        support_instruction,
-        decoded,
-        logits,
-        exacts,
-        target,
-        index,
-    ) in tqdm(train_preds):
-        for i, index in enumerate(index.numpy()):
-            data_array[index][0] = state_batch[i]
-            data_array[index][1] = state_batch[i]
-            data_array[index][2] = metalearning_examples[index][2]
-            data_array[index][3] = metalearning_examples[index][3]
-            data_array[index][4].append(support_instruction[i])
-            data_array[index][5].append(decoded[i])
-
-    yield from data_array
-
-
 def baseline_payload(dataset, vocabulary, current_split):
     return None
 
@@ -1750,8 +1614,6 @@ def main():
         "--generate-mode", choices=tuple(GENERATION_CONFIGS.keys()), required=True
     )
     parser.add_argument("--limit", type=int, help="Data generation limit", default=None)
-    parser.add_argument("--transformer-model", type=str, help="Transformer model")
-    parser.add_argument("--inference-batch-size", type=int, default=64)
     parser.add_argument("--only-splits", nargs="*", type=str)
     parser.add_argument(
         "--world-encoding-scheme", choices=("sequence", "all"), default="sequence"
