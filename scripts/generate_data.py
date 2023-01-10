@@ -336,6 +336,7 @@ def generate_relevant_instructions_gscan_oracle(
     n_description_options=None,
     demonstrate_target=True,
     allow_demonstration_splits=None,
+    allow_any_example=False,
 ):
     action_words = []
     article_words = []
@@ -411,15 +412,19 @@ def generate_relevant_instructions_gscan_oracle(
     # but when testing split B, we allow an example from split D. Otherwise
     # there's a risk that there would just be no supports and we would
     # have to exclude the entire data point.
-    filtered_sorted_other_description_words = list(
-        filter(
-            lambda description_words: not is_prohibited_description(
-                situation.agent_pos,
-                description_words[1],
-                description_words[0],
-                allow_demonstration_splits=allow_demonstration_splits,
-            ),
-            sorted_other_description_words,
+    filtered_sorted_other_description_words = (
+        sorted_other_description_words
+        if allow_any_example
+        else list(
+            filter(
+                lambda description_words: not is_prohibited_description(
+                    situation.agent_pos,
+                    description_words[1],
+                    description_words[0],
+                    allow_demonstration_splits=allow_demonstration_splits,
+                ),
+                sorted_other_description_words,
+            )
         )
     )
 
