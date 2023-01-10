@@ -438,15 +438,15 @@ def generate_relevant_instructions_gscan_oracle(
     # - in this case we allow a demonstration (such cases are not very
     # interesting anyway, since there are no distractors, you just have to
     # identify any non-empty cell)
-    if (
-        is_prohibited_description(
+    if filtered_sorted_other_description_words:
+        if not demonstrate_target:
+            target_description_words = []
+        elif not allow_any_example and is_prohibited_description(
             situation.agent_pos,
             target_description_words[0][1],
             target_description_words[0][0],
-        )
-        or not demonstrate_target
-    ) and filtered_sorted_other_description_words:
-        target_description_words = []
+        ):
+            target_description_words = []
 
     # We have these options. Then we take then in accordance with n_description_options.
     # n_description_options == 1 basically means only show the target or the next
