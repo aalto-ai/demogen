@@ -72,30 +72,14 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
     return decoded, logits
 
 
-def generate_instructions_and_rank(
-    instruction_gen_model,
-    instruction_clip_model,
-    transformer_prediction_model,
-    dataloader,
-    sample_n,
-    batch_size,
-    noise_level,
-    decode_len,
-    pad_word_idx,
-    device="cpu",
+def make_gscan_instruction_gen_closure(
+    instruction_gen_model, device="cpu", noise_level=0.2
 ):
     instruction_gen_model.to(device)
     instruction_gen_model.eval()
-    instruction_clip_model.to(device)
-    instruction_clip_model.eval()
-    transformer_prediction_model.to(device)
-    transformer_prediction_model.eval()
 
-    instruction_clip_model.positional_encoding.cached_penc = None
-
-    for batch in dataloader:
-        instruction, targets, state = batch
-
+    def generate_instruction(inputs, sample_n):
+        state, instruction = inputs
         result_instrs, result_samples, result_samples_mask = sample_from_mlm(
             instruction_gen_model,
             instruction,
@@ -104,98 +88,191 @@ def generate_instructions_and_rank(
             device=device,
         )
 
+        is_same_mask = (result_samples == instruction[:, None]).all(dim=-1)
+
+        return [
+            s[~m].reshape(-1, s.shape[-1]) for s, m in zip(result_samples, is_same_mask)
+        ]
+
+    return generate_instruction
+
+
+def make_gscan_clip_ranking_closure(clip_ranking_model, pad_word_idx, device="cpu"):
+    clip_ranking_model.to(device)
+    clip_ranking_model.eval()
+
+    clip_ranking_model.positional_encoding.cached_penc = None
+
+    def compute_scores(instructions, inputs):
+        states, query_instructions = inputs
+
+        states = states.to(device)
+        instructions = instructions.to(device)
+
+        instruction_pad = instructions == pad_word_idx
+        state_pad = torch.zeros_like(states[..., 0])
+        state_pad = state_pad.to(torch.bool)
+
+        with torch.inference_mode():
+            encoded_state = clip_ranking_model.state_encoder(states)
+            projected_state = clip_ranking_model.state_encoder_projection(encoded_state)
+            encoded_instruction = clip_ranking_model.embedding_instructions(
+                instructions
+            )
+            encoded_instruction = (
+                encoded_instruction
+                + clip_ranking_model.positional_encoding(encoded_instruction)
+            )
+
+            decoded_instruction = clip_ranking_model.transformer_encoder_instruction(
+                encoded_instruction, instruction_pad
+            )
+            decoded_state = clip_ranking_model.transformer_encoder_state(
+                projected_state, state_pad
+            )
+
+            # Take the componentwise product
+            scores = (decoded_instruction * decoded_state).sum(dim=-1)
+
+            return scores
+
+    return compute_scores
+
+
+def make_gscan_generate_targets_closure(
+    transformer_model, pad_word_idx, pad_action_idx, device="cpu"
+):
+    transformer_model.to(device)
+    transformer_model.eval()
+
+    transformer_model.encoder.pos_encoding.cached_penc = None
+    transformer_model.decoder.pos_encoding.cached_penc = None
+
+    def compute_targets(instructions, inputs, decode_len):
+        states, query_instructions = inputs
+
+        predicted_targets, logits = transformer_predict(
+            transformer_model,
+            states,
+            instructions,
+            decode_len,
+        )
+
+        return predicted_targets
+
+    return compute_targets
+
+
+def make_gscan_format_output_closure():
+    def format_output(inputs, targets, sample_scores):
+        (generated_instructions, generated_targets, scores) = list(zip(*sample_scores))
+        query_state, query_instruction = inputs
+
+        return (
+            query_instruction.numpy(),
+            targets.numpy(),
+            query_state.numpy(),
+            query_state.numpy(),
+            generated_instructions,
+            generated_targets,
+            scores,
+        )
+
+    return format_output
+
+
+def generate_instructions_and_rank(
+    instruction_gen_closure,
+    instruction_ranking_closure,
+    target_gen_closure,
+    format_output_closure,
+    dataloader,
+    sample_n,
+    batch_size,
+    decode_len,
+    device="cpu",
+):
+    for batch in dataloader:
+        inputs, targets = batch
+
+        sampled_instructions = instruction_gen_closure(inputs, sample_n)
+
         # Now for each element in the batch, we take
         # the set (involves a conversion back to tuples
         # but its fine)
-        result_sets = [
-            set([tuple(x.tolist()) for x in result_sample])
-            for result_sample in result_samples
+        sampled_instructions_sets = [
+            set([tuple(x.tolist()) for x in sampled_instruction])
+            for sampled_instruction in sampled_instructions
         ]
-        result_set_ids = np.concatenate(
-            [np.array([i] * len(s)) for i, s in enumerate(result_sets)]
+        sampled_instruction_set_ids = np.concatenate(
+            [np.array([i] * len(s)) for i, s in enumerate(sampled_instructions_sets)]
         )
-        result_set_states = np.concatenate(
+        # We want batches of inputs, so we transpose here
+        sampled_instruction_set_inputs = [
+            np.concatenate(
+                [
+                    np.repeat(
+                        input_element[None].numpy(),
+                        len(sampled_instruction_set),
+                        axis=0,
+                    )
+                    for input_element, sampled_instruction_set in zip(
+                        input_elements_batch, sampled_instructions_sets
+                    )
+                ],
+                axis=0,
+            )
+            for input_elements_batch in inputs
+        ]
+        concat_sampled_instruction_set_inputs = np.concatenate(
             [
-                np.repeat(s[None], len(result_set), axis=0)
-                for s, result_set in zip(state, result_sets)
-            ]
-        )
-
-        result_sets_concat = np.concatenate(
-            [
-                np.stack([np.array(x) for x in result_sample_set])
-                for result_sample_set in result_sets
+                np.stack([np.array(x) for x in sampled_instruction_set])
+                for sampled_instruction_set in sampled_instructions_sets
             ]
         )
 
         per_id_results = defaultdict(list)
 
-        # Now we take the result sets and we split into batches
-        # of size 128 each and use that with the CLIP model
-        for i in range(result_sets_concat.shape[0] // batch_size + 1):
-            result_set_ids_batch = result_set_ids[i * batch_size : (i + 1) * batch_size]
-            result_set_states_batch = result_set_states[
-                i * batch_size : (i + 1) * batch_size
-            ]
-            result_set_batch = result_sets_concat[i * batch_size : (i + 1) * batch_size]
-
-            result_set_ids_batch = torch.from_numpy(result_set_ids_batch).to(device)
-            result_set_states_batch = torch.from_numpy(result_set_states_batch).to(
-                device
+        for i in range(
+            concat_sampled_instruction_set_inputs.shape[0] // batch_size + 1
+        ):
+            first_index = i * batch_size
+            last_index = (i + 1) * batch_size
+            sampled_instruction_set_ids_batch = torch.from_numpy(
+                sampled_instruction_set_ids[first_index:last_index]
+            ).to(device)
+            sampled_instruction_set_inputs_batch = tuple(
+                [
+                    torch.from_numpy(
+                        sampled_instruction_set_inputs_elements[first_index:last_index]
+                    ).to(device)
+                    for sampled_instruction_set_inputs_elements in sampled_instruction_set_inputs
+                ]
             )
-            result_set_batch = torch.from_numpy(result_set_batch).to(device)
-
-            instruction_pad = result_set_batch == pad_word_idx
-            state_pad = torch.zeros_like(result_set_states_batch[..., 0])
-            state_pad = state_pad.to(torch.bool)
-
-            with torch.inference_mode():
-                encoded_state = instruction_clip_model.state_encoder(
-                    result_set_states_batch
-                )
-                projected_state = instruction_clip_model.state_encoder_projection(
-                    encoded_state
-                )
-                encoded_instruction = instruction_clip_model.embedding_instructions(
-                    result_set_batch
-                )
-                encoded_instruction = (
-                    encoded_instruction
-                    + instruction_clip_model.positional_encoding(encoded_instruction)
-                )
-
-                decoded_instruction = (
-                    instruction_clip_model.transformer_encoder_instruction(
-                        encoded_instruction, instruction_pad
-                    )
-                )
-                decoded_state = instruction_clip_model.transformer_encoder_state(
-                    projected_state, state_pad
-                )
-
-                # Take the componentwise product
-                scores = (decoded_instruction * decoded_state).sum(dim=-1)
-
-            predicted_targets, logits = transformer_predict(
-                transformer_prediction_model,
-                result_set_states_batch,
-                result_set_batch,
+            sampled_instruction_set_batch = torch.from_numpy(
+                concat_sampled_instruction_set_inputs[first_index:last_index]
+            ).to(device)
+            sampled_instruction_set_scores = instruction_ranking_closure(
+                sampled_instruction_set_batch, sampled_instruction_set_inputs_batch
+            )
+            sampled_instruction_set_targets = target_gen_closure(
+                sampled_instruction_set_batch,
+                sampled_instruction_set_inputs_batch,
                 decode_len,
             )
 
             # Now we populate per_id_results with the score
             # and the result_set_ids
             for batch_id, sample_result, predicted_target, score in zip(
-                result_set_ids_batch.cpu(),
-                result_set_batch.cpu(),
-                predicted_targets.cpu(),
-                scores.cpu(),
+                sampled_instruction_set_ids_batch.cpu(),
+                sampled_instruction_set_batch.cpu(),
+                sampled_instruction_set_targets.cpu(),
+                sampled_instruction_set_scores.cpu(),
             ):
                 batch_id = batch_id.item()
-                if not (sample_result == instruction[batch_id]).all():
-                    per_id_results[batch_id].append(
-                        (sample_result.numpy(), predicted_target.numpy(), score.item())
-                    )
+                per_id_results[batch_id].append(
+                    (sample_result.numpy(), predicted_target.numpy(), score.item())
+                )
 
         # Now we sort the per_id_results ascending by score
         per_id_results = {
@@ -208,14 +285,8 @@ def generate_instructions_and_rank(
         for batch_id, sample_scores in sorted(
             per_id_results.items(), key=lambda x: x[0]
         ):
-            yield (
-                instruction[batch_id].numpy(),
-                targets[batch_id].numpy(),
-                state[batch_id].numpy(),
-                state[batch_id].numpy(),
-                [s[0] for s in sample_scores],
-                [s[1] for s in sample_scores],
-                [s[2] for s in sample_scores],
+            yield format_output_closure(
+                tuple([i[batch_id] for i in inputs]), targets[batch_id], sample_scores
             )
 
 
