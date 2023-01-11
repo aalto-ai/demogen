@@ -567,7 +567,8 @@ def main():
     print(args.offset, args.offset + args.limit)
 
     # Make an index from the training data
-    index = faiss.IndexFlatL2(len(ACTION2IDX))
+    np.random.seed(args.seed)
+    index = faiss.IndexFlatL2(len(WORD2IDX) + len(ACTION2IDX))
     count_matrix = to_count_matrix(
         [actions for instruction, actions, state in train_demonstrations],
         len(ACTION2IDX),
