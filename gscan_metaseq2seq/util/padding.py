@@ -83,7 +83,7 @@ def pad_to(sequence, length, pad=-1):
         return fast_array_pad(np.stack(sequence), length, pad_value=pad)
 
     # Two dimensional ragged arrays have a fast padding method
-    if dim_idx == 2:
+    if dim_idx == 2 and all([isinstance(x, int) or x is None for x in length]):
         return fast_2d_pad(sequence, length, pad_value=pad)
 
     # Slow recursive fallback
