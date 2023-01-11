@@ -23,7 +23,7 @@ from gscan_metaseq2seq.util.dataset import (
     ReshuffleOnIndexZeroDataset,
     MapDataset,
 )
-from gscan_metaseq2seq.util.load_data import load_data
+from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 
@@ -520,7 +520,7 @@ def main():
             noun_dictionary,
         ),
         (train_demonstrations, valid_demonstrations_dict),
-    ) = load_data(args.training_data, args.validation_data_directory, args.dictionary)
+    ) = load_data_directories(args.training_data, args.dictionary)
 
     pad_action = ACTION2IDX["[pad]"]
     pad_word = WORD2IDX["[pad]"]
