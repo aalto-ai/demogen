@@ -349,13 +349,16 @@ def main():
         [(cmd, len(x)) for cmd, x in training_data_indices_by_command.items()],
         key=lambda x: x[-1],
     )[-1]
-    balanced_training_data = list(
-        itertools.chain.from_iterable(
-            [
-                [train_demonstrations[i] for i in x[:min_len]]
-                for x in training_data_indices_by_command.values()
-            ]
+    balanced_training_data_indices = np.array(
+        list(
+            itertools.chain.from_iterable(
+                [x[:min_len] for x in training_data_indices_by_command.values()]
+            )
         )
+    )
+
+    balanced_training_data_subset = Subset(
+        datasets["train"], balanced_training_data_indices
     )
 
     model = train_mlm(
