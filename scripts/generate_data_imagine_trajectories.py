@@ -53,7 +53,6 @@ def batched(iterable, n):
 def transformer_predict(transformer_learner, state, instruction, decode_len):
     state = state.to(transformer_learner.device)
     instruction = instruction.to(transformer_learner.device)
-    encodings, key_padding_mask = transformer_learner.encode(state, instruction)
     dummy_targets = torch.zeros(
         instruction.shape[0],
         decode_len,
