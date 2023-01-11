@@ -167,9 +167,7 @@ def train_clip(
     check_val_every = 500
 
     clip_train_dataloader = DataLoader(
-        ReshuffleOnIndexZeroDataset(
-            MapDataset(balanced_training_data, lambda x: (x[0][1], x[0][0])),
-        ),
+        ReshuffleOnIndexZeroDataset(balanced_training_data),
         batch_size=train_batch_size,
         pin_memory=True,
         shuffle=True,
@@ -177,7 +175,7 @@ def train_clip(
 
     clip_valid_dataloaders = [
         DataLoader(
-            MapDataset(data, lambda x: (x[0][1], x[0][0])),
+            data,
             batch_size=train_batch_size,
             pin_memory=True,
         )
