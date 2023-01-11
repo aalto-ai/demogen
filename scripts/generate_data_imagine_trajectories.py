@@ -302,7 +302,7 @@ def main():
     parser.add_argument("--save-mlm-model", type=str)
     parser.add_argument("--load-transformer-model", type=str, required=True)
     parser.add_argument("--load-clip-model", type=str)
-    parser.add_argument("--save-mlm-model", type=str)
+    parser.add_argument("--save-clip-model", type=str)
     parser.add_argument("--data-output-directory", type=str, required=True)
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
