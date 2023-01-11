@@ -1604,6 +1604,19 @@ PREPROCESSING_PAYLOAD_GENERATOR = {
 }
 
 
+def batched(iterable, n):
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while True:
+        batch = list(itertools.islice(it, n))
+
+        if not batch:
+            break
+
+        yield batch
+
+
 def main():
     multiprocessing.set_start_method("forkserver")
 
