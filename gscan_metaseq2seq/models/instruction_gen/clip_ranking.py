@@ -168,11 +168,7 @@ def train_clip(
 
     clip_train_dataloader = DataLoader(
         ReshuffleOnIndexZeroDataset(
-            PaddingDataset(
-                MapDataset(balanced_training_data, lambda x: (x[0], x[2])),
-                (8, None),
-                (pad_word, None),
-            )
+            MapDataset(balanced_training_data, lambda x: (x[0][1], x[0][0])),
         ),
         batch_size=train_batch_size,
         pin_memory=True,
@@ -181,10 +177,8 @@ def train_clip(
 
     clip_valid_dataloaders = [
         DataLoader(
-            PaddingDataset(
-                MapDataset(data, lambda x: (x[0], x[2])), (8, None), (pad_word, None)
-            ),
-            batch_size=16,
+            MapDataset(data, lambda x: (x[0][1], x[0][0])),
+            batch_size=train_batch_size,
             pin_memory=True,
         )
         for data in valid_demonstrations_dict.values()
