@@ -294,8 +294,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--training-data", type=str, required=True)
     parser.add_argument("--validation-data-directory", type=str, required=True)
-    parser.add_argument("--dictionary", type=str, required=True)
+    parser.add_argument("--data-output-directory", type=str, required=True)
+    parser.add_argument(
+        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
+    parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=None)
+
+    parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--mlm-train-iterations", type=int, default=100000)
     parser.add_argument("--clip-train-iterations", type=int, default=100000)
     parser.add_argument("--load-mlm-model", type=str)
@@ -303,15 +312,7 @@ def main():
     parser.add_argument("--load-transformer-model", type=str, required=True)
     parser.add_argument("--load-clip-model", type=str)
     parser.add_argument("--save-clip-model", type=str)
-    parser.add_argument("--data-output-directory", type=str, required=True)
-    parser.add_argument(
-        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
-    )
-    parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
-    parser.add_argument("--offset", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--limit-load", type=int, default=None)
-    parser.add_argument("--batch-size", type=int, default=128)
     args = parser.parse_args()
 
     seed = args.seed
