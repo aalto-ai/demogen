@@ -448,7 +448,7 @@ def main():
         for split, demos in zip(
             itertools.chain.from_iterable([valid_demonstrations_dict.keys(), "train"]),
             itertools.chain.from_iterable(
-                [valid_demonstrations_dict.values(), train_demonstrations]
+                [valid_demonstrations_dict.values(), [train_demonstrations]]
             ),
         )
         if not args.only_splits or split in args.only_splits
