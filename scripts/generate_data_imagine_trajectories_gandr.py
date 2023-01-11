@@ -423,12 +423,16 @@ class TransformerLearner(pl.LightningModule):
         return tuple([state, instruction, decoded, logits, exacts, target] + x[3:])
 
 
-def to_count_matrix(actions_arrays, action_vocab_size):
-    count_matrix = np.zeros((len(actions_arrays), action_vocab_size))
+def to_count_matrix(action_word_arrays, word_vocab_size, action_vocab_size):
+    count_matrix = np.zeros(
+        (len(action_word_arrays), word_vocab_size + action_vocab_size)
+    )
 
-    for i, array in enumerate(actions_arrays):
-        for element in array:
+    for i, (word_array, action_array) in enumerate(action_word_arrays):
+        for element in word_array:
             count_matrix[i, element] += 1
+        for element in action_array:
+            count_matrix[i, element + word_vocab_size] += 1
 
     return count_matrix
 
@@ -445,7 +449,9 @@ def gandr_like_search(
     dataloader,
     sample_n,
     decode_len,
+    pad_word_idx,
     pad_action_idx,
+    word_vocab_size,
     action_vocab_size,
     device="cpu",
 ):
@@ -466,7 +472,11 @@ def gandr_like_search(
             to_tfidf(
                 tfidf_transformer,
                 to_count_matrix(
-                    [t[t != pad_action_idx] for t in predicted_targets],
+                    [
+                        (i[i != pad_word_idx], t[t != pad_action_idx])
+                        for i, t in zip(instruction, predicted_targets)
+                    ],
+                    word_vocab_size,
                     action_vocab_size,
                 ),
             ),
