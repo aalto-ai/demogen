@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 import pytorch_lightning as pl
+
 import faiss
 from sklearn.feature_extraction.text import TfidfTransformer
 from pytorch_lightning.loggers import TensorBoardLogger
