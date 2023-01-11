@@ -424,20 +424,23 @@ def main():
 
     dataloader_splits = {
         split: DataLoader(
-            PaddingDataset(
-                Subset(
-                    demos,
-                    np.arange(
-                        min(args.offset, len(demos)),
-                        min(
-                            args.offset
-                            + (len(demos) if not args.limit else args.limit),
-                            len(demos),
+            MapDataset(
+                PaddingDataset(
+                    Subset(
+                        demos,
+                        np.arange(
+                            min(args.offset, len(demos)),
+                            min(
+                                args.offset
+                                + (len(demos) if not args.limit else args.limit),
+                                len(demos),
+                            ),
                         ),
                     ),
+                    (8, 128, (36, 7)),
+                    (pad_word, pad_action, 0),
                 ),
-                (8, 128, (36, 7)),
-                (pad_word, pad_action, 0),
+                lambda x: ((x[2], x[0]), x[1]),
             ),
             batch_size=16,
             pin_memory=True,
