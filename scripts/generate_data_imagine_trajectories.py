@@ -307,9 +307,10 @@ def main():
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
     )
-    parser.add_argument(
-        "--only-splits", nargs="*", description="Which splits to include"
-    )
+    parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
+    parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=128)
     args = parser.parse_args()
 
@@ -325,7 +326,9 @@ def main():
             noun_dictionary,
         ),
         (train_demonstrations, valid_demonstrations_dict),
-    ) = load_data(args.training_data, args.validation_data_directory, args.dictionary)
+    ) = load_data_directories(
+        args.training_data, args.dictionary, limit_load=args.limit_load
+    )
 
     pad_action = ACTION2IDX["[pad]"]
     pad_word = WORD2IDX["[pad]"]
@@ -417,9 +420,25 @@ def main():
         ],
     )
 
+    print(args.offset, args.offset + (args.limit or 0))
+
     dataloader_splits = {
         split: DataLoader(
-            PaddingDataset(demos, (8, 128, None), (pad_word, pad_action, None)),
+            PaddingDataset(
+                Subset(
+                    demos,
+                    np.arange(
+                        min(args.offset, len(demos)),
+                        min(
+                            args.offset
+                            + (len(demos) if not args.limit else args.limit),
+                            len(demos),
+                        ),
+                    ),
+                ),
+                (8, 128, (36, 7)),
+                (pad_word, pad_action, 0),
+            ),
             batch_size=16,
             pin_memory=True,
         )
