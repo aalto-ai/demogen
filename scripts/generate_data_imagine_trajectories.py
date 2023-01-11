@@ -413,7 +413,7 @@ def main():
                     PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
                     np.random.permutation(512),
                 ),
-                batch_size=16,
+                batch_size=args.batch_size,
                 pin_memory=True,
             )
             for data in valid_demonstrations_dict.values()
