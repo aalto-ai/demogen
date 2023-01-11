@@ -570,7 +570,11 @@ def main():
     np.random.seed(args.seed)
     index = faiss.IndexFlatL2(len(WORD2IDX) + len(ACTION2IDX))
     count_matrix = to_count_matrix(
-        [actions for instruction, actions, state in train_demonstrations],
+        [
+            (instruction, actions)
+            for instruction, actions, state in train_demonstrations
+        ],
+        len(WORD2IDX),
         len(ACTION2IDX),
     )
     tfidf_transformer = TfidfTransformer()
