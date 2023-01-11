@@ -443,6 +443,19 @@ def gscan_load_data(args):
     return ((WORD2IDX, ACTION2IDX), dataset_splits, (color_dictionary, noun_dictionary))
 
 
+def gscan_add_subparser(subparsers):
+    gscan_parser = subparsers.add_parser("gscan", help="gscan generation help")
+    gscan_parser.add_argument("--dictionary", type=str, required=True)
+    gscan_parser.add_argument("--mlm-train-iterations", type=int, default=100000)
+    gscan_parser.add_argument("--clip-train-iterations", type=int, default=100000)
+    gscan_parser.add_argument("--load-mlm-model", type=str)
+    gscan_parser.add_argument("--save-mlm-model", type=str)
+    gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
+    gscan_parser.add_argument("--load-clip-model", type=str)
+    gscan_parser.add_argument("--save-clip-model", type=str)
+    gscan_parser.add_argument("--limit-load", type=int, default=None)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-directory", type=str, required=True)
@@ -457,16 +470,8 @@ def main():
     parser.add_argument("--limit", type=int, default=None)
     subparsers = parser.add_subparsers()
 
-    gscan_parser = subparsers.add_parser("gscan", help="gscan generation help")
-    gscan_parser.add_argument("--dictionary", type=str, required=True)
-    gscan_parser.add_argument("--mlm-train-iterations", type=int, default=100000)
-    gscan_parser.add_argument("--clip-train-iterations", type=int, default=100000)
-    gscan_parser.add_argument("--load-mlm-model", type=str)
-    gscan_parser.add_argument("--save-mlm-model", type=str)
-    gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
-    gscan_parser.add_argument("--load-clip-model", type=str)
-    gscan_parser.add_argument("--save-clip-model", type=str)
-    gscan_parser.add_argument("--limit-load", type=int, default=None)
+    gscan_add_subparser(subparsers)
+
     args = parser.parse_args()
 
     dictionaries, datasets, extra_data = gscan_load_data(args)
