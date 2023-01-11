@@ -454,7 +454,7 @@ def main():
         if not args.only_splits or split in args.only_splits
     }
 
-    for split, dataloader in tqdm(dataloader_splits):
+    for split, dataloader in tqdm(dataloader_splits.items()):
         os.makedirs(os.path.join(args.data_output_directory, split), exist_ok=True)
 
         for i, batch in enumerate(
