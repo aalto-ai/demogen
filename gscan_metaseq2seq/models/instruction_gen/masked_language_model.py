@@ -176,9 +176,7 @@ def train_mlm(
     device="cpu",
 ):
     dataset = ReshuffleOnIndexZeroDataset(
-        PaddingDataset(
-            MapDataset(balanced_training_data, lambda x: (x[0],)), (8,), (pad_word,)
-        )
+        MapDataset(balanced_training_data, lambda x: (x[0][1],))
     )
 
     nlayers = 4
@@ -209,7 +207,7 @@ def train_mlm(
     valid_dataloaders = [
         DataLoader(
             Subset(
-                PaddingDataset(MapDataset(data, lambda x: (x[0],)), (8,), (pad_word,)),
+                MapDataset(data, lambda x: (x[0][1],)),
                 np.random.permutation(len(data))[:512],
             ),
             batch_size=train_batch_size,
