@@ -460,16 +460,20 @@ def main():
         for i, batch in enumerate(
             batched(
                 generate_instructions_and_rank(
-                    model,
-                    instruction_clip,
-                    transformer_model,
+                    make_gscan_instruction_gen_closure(
+                        model, device=args.device, noise_level=0.1
+                    ),
+                    make_gscan_clip_ranking_closure(
+                        instruction_clip, pad_word, device=args.device
+                    ),
+                    make_gscan_generate_targets_closure(
+                        transformer_model, pad_word, pad_action, device=args.device
+                    ),
+                    make_gscan_format_output_closure(),
                     tqdm(dataloader),
                     256,
                     batch_size=args.batch_size,
-                    noise_level=0.1,
                     decode_len=128,
-                    pad_word_idx=pad_word,
-                    device=args.device,
                 ),
                 1000,
             )
