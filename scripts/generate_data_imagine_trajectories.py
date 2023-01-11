@@ -410,7 +410,7 @@ def main():
         [
             DataLoader(
                 Subset(
-                    PaddingDataset(data, (8, 128, None), (pad_word, pad_action, None)),
+                    PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
                     np.random.permutation(512),
                 ),
                 batch_size=16,
