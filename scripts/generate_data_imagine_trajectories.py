@@ -19,7 +19,7 @@ from gscan_metaseq2seq.util.dataset import (
     ReshuffleOnIndexZeroDataset,
     MapDataset,
 )
-from gscan_metaseq2seq.util.load_data import load_data
+from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
