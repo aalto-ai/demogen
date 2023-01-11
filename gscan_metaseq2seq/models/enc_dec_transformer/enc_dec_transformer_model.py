@@ -233,7 +233,7 @@ def autoregressive_model_unroll_predictions(
     ])
 
 
-def filter_out_padding(decoded, target, logits, eos_target_idx)
+def filter_out_padding(decoded, target, logits, eos_target_idx):
     # these are shifted off by one
     decoded_eq_mask = (
         (decoded == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
