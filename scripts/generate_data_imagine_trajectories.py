@@ -330,8 +330,11 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     )
 
     model = train_mlm(
-        balanced_training_data_subset,
-        {k: v for k, v in datasets.items() if k != "train"},
+        MapDataset(balanced_training_data_subset, lambda x: (x[0][1],)),
+        {
+            k: MapDataset(v, lambda x: (x[0][1],))
+            for k, v in datasets.items() if k != "train"
+        },
         args.seed,
         0 if args.load_mlm_model else args.mlm_iterations,
         pad_word,
@@ -347,7 +350,11 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         torch.save(model.state_dict(), args.save_mlm_model)
 
     instruction_clip = train_clip(
-        balanced_training_data_subset,
+        MapDataset(balanced_training_data_subset, lambda x: (x[0][1], x[0][0])),
+        {
+            k: MapDataset(v, lambda x: (x[0][1], x[0][0]))
+            for k, v in datasets.items() if k != "train"
+        },
         {k: v for k, v in datasets.items() if k != "train"},
         args.seed,
         0 if args.load_clip_model else args.clip_iterations,
