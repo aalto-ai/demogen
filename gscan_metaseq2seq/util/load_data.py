@@ -59,7 +59,7 @@ def load_data_directories(data_directory, dictionary_path, limit_load=None):
     assert os.path.isdir(os.path.join(data_directory, "train"))
 
     meta_train_demonstrations = load_concat_pickle_files_from_directory(
-        os.path.join(data_directory, "train")
+        os.path.join(data_directory, "train"), limit_load=limit_load
     )
     valid_trajectories_dict = {
         fname: load_concat_pickle_files_from_directory(
