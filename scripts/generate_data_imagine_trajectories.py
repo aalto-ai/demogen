@@ -362,34 +362,34 @@ def main():
         balanced_training_data,
         valid_demonstrations_dict,
         seed,
-        0 if args.load_mlm else mlm_iterations,
+        0 if args.load_mlm_model else mlm_iterations,
         pad_word,
         WORD2IDX["[sos]"],
         len(WORD2IDX),
         device=args.device,
     )
 
-    if args.load_mlm:
-        model.load_state_dict(torch.load(args.load_mlm))
+    if args.load_mlm_model:
+        model.load_state_dict(torch.load(args.load_mlm_model))
 
-    if args.save_mlm:
-        torch.save(model.state_dict(), args.save_mlm)
+    if args.save_mlm_model:
+        torch.save(model.state_dict(), args.save_mlm_model)
 
     instruction_clip = train_clip(
         balanced_training_data,
         valid_demonstrations_dict,
         seed,
-        0 if args.load_clip else clip_iterations,
+        0 if args.load_clip_model else clip_iterations,
         pad_word,
         len(WORD2IDX),
         device=args.device,
     )
 
-    if args.load_clip:
-        instruction_clip.load_state_dict(torch.load(args.load_clip))
+    if args.load_clip_model:
+        instruction_clip.load_state_dict(torch.load(args.load_clip_model))
 
-    if args.save_clip:
-        torch.save(instruction_clip.state_dict(), args.save_clip)
+    if args.save_clip_model:
+        torch.save(instruction_clip.state_dict(), args.save_clip_model)
 
     instruction_clip.positional_encoding.cached_penc = None
 
