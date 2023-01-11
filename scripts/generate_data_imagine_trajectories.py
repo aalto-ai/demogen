@@ -292,8 +292,7 @@ def generate_instructions_and_rank(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--training-data", type=str, required=True)
-    parser.add_argument("--validation-data-directory", type=str, required=True)
+    parser.add_argument("--data-directory", type=str, required=True)
     parser.add_argument("--data-output-directory", type=str, required=True)
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
