@@ -290,50 +290,18 @@ def generate_instructions_and_rank(
             )
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-directory", type=str, required=True)
-    parser.add_argument("--data-output-directory", type=str, required=True)
-    parser.add_argument(
-        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
-    )
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
-    parser.add_argument("--offset", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=None)
-
-    parser.add_argument("--dictionary", type=str, required=True)
-    parser.add_argument("--mlm-train-iterations", type=int, default=100000)
-    parser.add_argument("--clip-train-iterations", type=int, default=100000)
-    parser.add_argument("--load-mlm-model", type=str)
-    parser.add_argument("--save-mlm-model", type=str)
-    parser.add_argument("--load-transformer-model", type=str, required=True)
-    parser.add_argument("--load-clip-model", type=str)
-    parser.add_argument("--save-clip-model", type=str)
-    parser.add_argument("--limit-load", type=int, default=None)
-    args = parser.parse_args()
-
-    seed = args.seed
-    mlm_iterations = args.mlm_train_iterations
-    clip_iterations = args.clip_train_iterations
-
-    (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
-        (train_demonstrations, valid_demonstrations_dict),
-    ) = load_data_directories(
-        args.training_data, args.dictionary, limit_load=args.limit_load
-    )
+def gscan_make_closures(args, dictionaries, datasets, extra_data):
+    WORD2IDX, ACTION2IDX = dictionaries
 
     pad_action = ACTION2IDX["[pad]"]
     pad_word = WORD2IDX["[pad]"]
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
+
+    # Punching through the abstraction a bit, we reach
+    # through the MapDataset and PaddingDataset to get the underlying
+    # demonstrations without any padding
+    train_demonstrations = datasets["train"].dataset.dataset
 
     training_data_indices_by_command = {}
     for i in range(len(train_demonstrations)):
@@ -362,10 +330,10 @@ def main():
     )
 
     model = train_mlm(
-        balanced_training_data,
-        valid_demonstrations_dict,
-        seed,
-        0 if args.load_mlm_model else mlm_iterations,
+        balanced_training_data_subset,
+        {k: v for k, v in datasets.items() if k != "train"},
+        args.seed,
+        0 if args.load_mlm_model else args.mlm_iterations,
         pad_word,
         WORD2IDX["[sos]"],
         len(WORD2IDX),
@@ -379,10 +347,10 @@ def main():
         torch.save(model.state_dict(), args.save_mlm_model)
 
     instruction_clip = train_clip(
-        balanced_training_data,
-        valid_demonstrations_dict,
-        seed,
-        0 if args.load_clip_model else clip_iterations,
+        balanced_training_data_subset,
+        {k: v for k, v in datasets.items() if k != "train"},
+        args.seed,
+        0 if args.load_clip_model else args.clip_iterations,
         pad_word,
         len(WORD2IDX),
         device=args.device,
@@ -412,50 +380,116 @@ def main():
         transformer_model,
         [
             DataLoader(
-                Subset(
-                    PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
-                    np.random.permutation(512),
+                MapDataset(
+                    Subset(data, np.random.permutation(512)),
+                    lambda x: (x[0][1], x[1], x[0][0]),
                 ),
                 batch_size=args.batch_size,
                 pin_memory=True,
             )
-            for data in valid_demonstrations_dict.values()
+            for data in {k: v for k, v in datasets.items() if k != "train"}.values()
         ],
     )
+
+    return (
+        make_gscan_instruction_gen_closure(model, device=args.device, noise_level=0.1),
+        make_gscan_clip_ranking_closure(instruction_clip, pad_word, device=args.device),
+        make_gscan_generate_targets_closure(
+            transformer_model, pad_word, pad_action, device=args.device
+        ),
+        make_gscan_format_output_closure(),
+    )
+
+
+def gscan_load_data(args):
+    (
+        (
+            WORD2IDX,
+            ACTION2IDX,
+            color_dictionary,
+            noun_dictionary,
+        ),
+        (train_demonstrations, valid_demonstrations_dict),
+    ) = load_data_directories(
+        args.data_directory, args.dictionary, limit_load=args.limit_load
+    )
+
+    dataset_splits = {
+        split: MapDataset(
+            PaddingDataset(
+                demos,
+                (8, 128, (36, 7)),
+                (WORD2IDX["[pad]"], ACTION2IDX["[pad]"], 0),
+            ),
+            lambda x: ((x[2], x[0]), x[1]),
+        )
+        for split, demos in zip(
+            itertools.chain.from_iterable(
+                [valid_demonstrations_dict.keys(), ["train"]]
+            ),
+            itertools.chain.from_iterable(
+                [valid_demonstrations_dict.values(), [train_demonstrations]]
+            ),
+        )
+    }
+
+    return ((WORD2IDX, ACTION2IDX), dataset_splits, (color_dictionary, noun_dictionary))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-directory", type=str, required=True)
+    parser.add_argument("--data-output-directory", type=str, required=True)
+    parser.add_argument(
+        "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
+    parser.add_argument("--offset", type=int, default=0)
+    parser.add_argument("--limit", type=int, default=None)
+    subparsers = parser.add_subparsers()
+
+    gscan_parser = subparsers.add_parser("gscan", help="gscan generation help")
+    gscan_parser.add_argument("--dictionary", type=str, required=True)
+    gscan_parser.add_argument("--mlm-train-iterations", type=int, default=100000)
+    gscan_parser.add_argument("--clip-train-iterations", type=int, default=100000)
+    gscan_parser.add_argument("--load-mlm-model", type=str)
+    gscan_parser.add_argument("--save-mlm-model", type=str)
+    gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
+    gscan_parser.add_argument("--load-clip-model", type=str)
+    gscan_parser.add_argument("--save-clip-model", type=str)
+    gscan_parser.add_argument("--limit-load", type=int, default=None)
+    args = parser.parse_args()
+
+    dictionaries, datasets, extra_data = gscan_load_data(args)
 
     print(args.offset, args.offset + (args.limit or 0))
 
     dataloader_splits = {
         split: DataLoader(
-            MapDataset(
-                PaddingDataset(
-                    Subset(
-                        demos,
-                        np.arange(
-                            min(args.offset, len(demos)),
-                            min(
-                                args.offset
-                                + (len(demos) if not args.limit else args.limit),
-                                len(demos),
-                            ),
-                        ),
+            Subset(
+                dataset,
+                np.arange(
+                    min(args.offset, len(dataset)),
+                    min(
+                        args.offset + (len(dataset) if not args.limit else args.limit),
+                        len(dataset),
                     ),
-                    (8, 128, (36, 7)),
-                    (pad_word, pad_action, 0),
                 ),
-                lambda x: ((x[2], x[0]), x[1]),
             ),
             batch_size=16,
             pin_memory=True,
         )
-        for split, demos in zip(
-            itertools.chain.from_iterable([valid_demonstrations_dict.keys(), "train"]),
-            itertools.chain.from_iterable(
-                [valid_demonstrations_dict.values(), [train_demonstrations]]
-            ),
-        )
+        for split, dataset in datasets.items()
         if not args.only_splits or split in args.only_splits
     }
+    (
+        instruction_gen_closure,
+        ranking_closure,
+        generate_targets_closure,
+        format_output_closure,
+    ) = gscan_make_closures(args, dictionaries, datasets, extra_data)
 
     for split, dataloader in tqdm(dataloader_splits.items()):
         os.makedirs(os.path.join(args.data_output_directory, split), exist_ok=True)
@@ -463,16 +497,10 @@ def main():
         for i, batch in enumerate(
             batched(
                 generate_instructions_and_rank(
-                    make_gscan_instruction_gen_closure(
-                        model, device=args.device, noise_level=0.1
-                    ),
-                    make_gscan_clip_ranking_closure(
-                        instruction_clip, pad_word, device=args.device
-                    ),
-                    make_gscan_generate_targets_closure(
-                        transformer_model, pad_word, pad_action, device=args.device
-                    ),
-                    make_gscan_format_output_closure(),
+                    instruction_gen_closure,
+                    ranking_closure,
+                    generate_targets_closure,
+                    format_output_closure,
                     tqdm(dataloader),
                     256,
                     batch_size=args.batch_size,
