@@ -482,3 +482,7 @@ def main():
                 os.path.join(args.data_output_directory, split, f"{i}.pb"), "wb"
             ) as f:
                 pickle.dump(batch, f)
+
+
+if __name__ == "__main__":
+    main()
