@@ -355,7 +355,6 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
             k: MapDataset(v, lambda x: (x[0][1], x[0][0]))
             for k, v in datasets.items() if k != "train"
         },
-        {k: v for k, v in datasets.items() if k != "train"},
         args.seed,
         0 if args.load_clip_model else args.clip_iterations,
         pad_word,
