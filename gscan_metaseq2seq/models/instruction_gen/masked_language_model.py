@@ -175,7 +175,7 @@ def train_mlm(
     vocab_size,
     device="cpu",
 ):
-    dataset = ReshuffleOnIndexZeroDataset(data)
+    dataset = ReshuffleOnIndexZeroDataset(balanced_training_data)
 
     nlayers = 4
     nhead = 8
