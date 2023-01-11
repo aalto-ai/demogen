@@ -455,6 +455,15 @@ def gscan_add_subparser(subparsers):
     gscan_parser.add_argument("--limit-load", type=int, default=None)
 
 
+DATASET_CONFIGS = {
+    "gscan": {
+        "add_subparser": gscan_add_subparser,
+        "load_data": gscan_load_data,
+        "make_closures": gscan_make_closures
+    }
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-directory", type=str, required=True)
@@ -467,13 +476,14 @@ def main():
     parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(dest="dataset")
 
-    gscan_add_subparser(subparsers)
+    for config_name, config_values in DATASET_CONFIGS.items():
+        config_values["add_subparser"](subparsers)
 
     args = parser.parse_args()
 
-    dictionaries, datasets, extra_data = gscan_load_data(args)
+    dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](args)
 
     print(args.offset, args.offset + (args.limit or 0))
 
@@ -500,7 +510,7 @@ def main():
         ranking_closure,
         generate_targets_closure,
         format_output_closure,
-    ) = gscan_make_closures(args, dictionaries, datasets, extra_data)
+    ) = DATASET_CONFIGS[args.dataset]["make_closures"](args, dictionaries, datasets, extra_data)
 
     for split, dataloader in tqdm(dataloader_splits.items()):
         os.makedirs(os.path.join(args.data_output_directory, split), exist_ok=True)
