@@ -71,6 +71,53 @@ class StateEncoderTransformer(nn.Module):
         return encoded_seq, padding_bits
 
 
+class SequenceEncoderTransformer(nn.Module):
+    def __init__(
+        self,
+        input_size,
+        embedding_dim,
+        nlayers,
+        nhead,
+        dropout_p,
+        norm_first,
+        pad_word_idx,
+    ):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.embedding = nn.Embedding(input_size, embedding_dim)
+        self.embedding_projection = nn.Linear(embedding_dim * 2, embedding_dim)
+        self.dropout = nn.Dropout(dropout_p)
+        self.encoding = nn.Parameter(torch.randn(embedding_dim))
+        self.pos_encoding = PositionalEncoding1D(embedding_dim)
+        self.pad_word_idx = pad_word_idx
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                d_model=embedding_dim,
+                nhead=nhead,
+                dim_feedforward=embedding_dim * 4,
+                dropout=dropout_p,
+                norm_first=norm_first,
+            ),
+            num_layers=nlayers,
+        )
+
+    def forward(self, z_padded):
+        z_padding_bits = z_padded == self.pad_word_idx
+
+        z_embed_seq = self.embedding(z_padded)
+        z_embed_seq = torch.cat([self.pos_encoding(z_embed_seq), z_embed_seq], dim=-1)
+        z_embed_seq = self.embedding_projection(z_embed_seq)
+        z_embed_seq = self.dropout(z_embed_seq)
+
+        encoded_seq = self.transformer_encoder(
+            z_embed_seq.transpose(1, 0),
+            src_key_padding_mask=z_padding_bits,
+        )
+
+        # bs x emb_dim, z_seq_len x bs x emb_dim
+        return encoded_seq, z_padding_bits
+
+
 class DecoderTransformer(nn.Module):
     def __init__(
         self,
@@ -263,6 +310,108 @@ def filter_out_padding(decoded, target, logits, eos_target_idx):
     logits = [l[m] for l, m in zip(logits, decoded_select_mask)]
 
     return tuple([decoded, logits, target])
+
+
+class SequenceTransformerLearner(pl.LightningModule):
+    def __init__(
+        self,
+        x_categories,
+        y_categories,
+        embed_dim,
+        dropout_p,
+        nlayers,
+        nhead,
+        pad_word_idx,
+        pad_action_idx,
+        sos_action_idx,
+        eos_action_idx,
+        norm_first=False,
+        lr=1e-4,
+        wd=1e-2,
+        warmup_proportion=0.001,
+        decay_power=-1,
+        predict_steps=64,
+    ):
+        super().__init__()
+        self.encoder = SequenceEncoderTransformer(
+            x_categories,
+            embed_dim,
+            nlayers,
+            nhead,
+            dropout_p,
+            norm_first,
+            pad_word_idx,
+        )
+        self.decoder = DecoderTransformer(
+            embed_dim,
+            y_categories,
+            nlayers,
+            nhead,
+            pad_action_idx,
+            dropout_p=dropout_p,
+            norm_first=norm_first,
+        )
+        self.y_categories = y_categories
+        self.pad_word_idx = pad_word_idx
+        self.pad_action_idx = pad_action_idx
+        self.sos_action_idx = sos_action_idx
+        self.eos_action_idx = eos_action_idx
+
+        self.apply(init_parameters)
+        self.save_hyperparameters()
+
+    def configure_optimizers(self):
+        return transformer_optimizer_config(
+            self,
+            self.hparams.lr,
+            warmup_proportion=self.hparams.warmup_proportion,
+            weight_decay=self.hparams.wd,
+            decay_power=self.hparams.decay_power,
+        )
+
+    def encode(self, queries):
+        return self.encoder(queries)
+
+    def decode_autoregressive(self, decoder_in, encoder_outputs, encoder_padding):
+        return self.decoder(decoder_in, encoder_outputs, encoder_padding)
+
+    def forward(self, queries, decoder_in):
+        encoded, encoder_padding = self.encoder(queries)
+        return self.decode_autoregressive(decoder_in, encoded, encoder_padding)
+
+    def training_step(self, x, idx):
+        query, targets = x
+        stats = compute_encoder_decoder_model_loss_and_stats(
+            self, (query, ), targets, self.sos_action_idx, self.pad_action_idx
+        )
+        self.log("tloss", stats["loss"], prog_bar=True)
+        self.log("texact", stats["exacts"], prog_bar=True)
+        self.log("tacc", stats["acc"], prog_bar=True)
+
+        return stats["loss"]
+
+    def validation_step(self, x, idx, dl_idx=0):
+        query, targets = x
+        stats = compute_encoder_decoder_model_loss_and_stats(
+            self, (query, ), targets, self.sos_action_idx, self.pad_action_idx
+        )
+        self.log("vloss", stats["loss"], prog_bar=True)
+        self.log("vexact", stats["exacts"], prog_bar=True)
+        self.log("vacc", stats["acc"], prog_bar=True)
+
+    def predict_step(self, x, idx, dl_idx=0):
+        instruction, target, state = x[:3]
+
+        decoded, logits, exacts, _ = autoregressive_model_unroll_predictions(
+            self,
+            (instruction, ),
+            target,
+            self.sos_action_idx,
+            self.eos_action_idx,
+            self.pad_action_idx,
+        )
+
+        return tuple([instruction, state, decoded, logits, exacts, target] + x[3:])
 
 
 class TransformerLearner(pl.LightningModule):
