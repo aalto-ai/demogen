@@ -433,6 +433,7 @@ def generate_relevant_instructions_gscan_oracle(
     allow_any_example=False,
     num_demos=16,
     pick_random=False,
+    limit_verb_adverb=False
 ):
     action_words = []
     article_words = []
@@ -787,6 +788,7 @@ def generate_relevant_supports_oracle(
     allow_any_example = options.get("allow_any_example", False)
     num_demos = options.get("num_demos", 16)
     pick_random = options.get("pick_random", False)
+    limit_verb_adverb = options.get("limit_verb_adverb", False)
 
     support_instructions = []
     support_targets = []
@@ -803,6 +805,7 @@ def generate_relevant_supports_oracle(
         allow_any_example=allow_any_example,
         num_demos=num_demos,
         pick_random=pick_random,
+        limit_verb_adverb=limit_verb_adverb
     )
 
     if not relevant_instructions:
@@ -840,6 +843,7 @@ def generate_instructions_find_support_in_any_layout(
     ) = payload
     n_description_options = options.get("n_description_options", None)
     demonstrate_target = options.get("demonstrate_target", True)
+    limit_verb_adverb = options.get("limit_verb_adverb", False)
 
     support_instructions = []
     support_targets = []
@@ -853,6 +857,7 @@ def generate_instructions_find_support_in_any_layout(
         n_description_options=n_description_options,
         demonstrate_target=demonstrate_target,
         allow_demonstration_splits=allow_demonstration_splits,
+        limit_verb_adverb=limit_verb_adverb
     )
 
     for support_instruction_command, target_object in relevant_instructions:
@@ -1509,7 +1514,7 @@ GENERATION_CONFIGS = {
     "metalearn": {
         "yield_func": "metalearning",
         "generate_mode": "generate_oracle",
-        "kwargs": {"n_description_options": 1, "can_parallel": True},
+        "kwargs": {"n_description_options": 1, "can_parallel": True, "limit_verb_adverb": True},
     },
     "metalearn_allow_any": {
         "yield_func": "metalearning",
@@ -1518,6 +1523,7 @@ GENERATION_CONFIGS = {
             "n_description_options": 1,
             "can_parallel": True,
             "allow_any_example": True,
+            "limit_verb_adverb": True
         },
     },
     "metalearn_distractors": {
@@ -1570,12 +1576,12 @@ GENERATION_CONFIGS = {
     "metalearn_find_matching_instruction_demos": {
         "yield_func": "metalearning",
         "generate_mode": "generate_find_matching",
-        "kwargs": {"can_parallel": False},
+        "kwargs": {"can_parallel": False, "limit_verb_adverb": True},
     },
     "metalearn_find_matching_instruction_demos_allow_any": {
         "yield_func": "metalearning",
         "generate_mode": "generate_find_matching",
-        "kwargs": {"can_parallel": False, "allow_any_example": True},
+        "kwargs": {"can_parallel": False, "allow_any_example": True, "limit_verb_adverb": True},
     },
     "metalearn_find_matching_environment_layout": {
         "yield_func": "metalearning",
