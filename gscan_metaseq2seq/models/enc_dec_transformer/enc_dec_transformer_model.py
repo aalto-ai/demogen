@@ -74,7 +74,6 @@ class StateEncoderTransformer(nn.Module):
 class DecoderTransformer(nn.Module):
     def __init__(
         self,
-        n_state_components,
         hidden_size,
         output_size,
         nlayers,
@@ -91,7 +90,6 @@ class DecoderTransformer(nn.Module):
         #  dropout_p : dropout applied to symbol embeddings and Transformers
         #
         super().__init__()
-        self.n_state_components = n_state_components
         self.nlayers = nlayers
         self.hidden_size = hidden_size
         self.output_size = output_size
