@@ -71,15 +71,10 @@ def load_data_directories(data_directory, dictionary_path, limit_load=None):
     }
 
     with open(dictionary_path, "rb") as f:
-        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+        dictionaries = pickle.load(f)
 
     return (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        dictionaries,
         (meta_train_demonstrations, valid_trajectories_dict),
     )
 
