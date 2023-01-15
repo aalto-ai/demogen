@@ -185,8 +185,8 @@ def sort_indices_by_serialized_situation(examples):
     return command_examples
 
 
-action_options = [["walk", "to"], ["push"], ["pull"]]
-adverb_options = [["while spinning"], ["while zigzagging"], ["hesitantly"], []]
+ALL_ACTION_OPTIONS = [["walk", "to"], ["push"], ["pull"]]
+ALL_ADVERB_OPTIONS = [["while spinning"], ["while zigzagging"], ["hesitantly"], []]
 
 
 def is_prohibited_action_adverb_combo(action_words, adverb_words):
@@ -393,6 +393,35 @@ def sort_description_words_by_query_match(
         mode = next_mode[mode]
 
 
+def generate_words_options(words, possible_options, limit_to_words):
+    if not limit_to_words:
+        return possible_options
+
+    return [o for o in possible_options if all([w in words for w in o])]
+
+
+def generate_limited_adverb_verb_combos(possible_verbs, possible_adverbs, verb_words_in_instruction, adverb_words_in_instruction):
+    for possible_verb, possible_adverb in itertools.product(possible_verbs, possible_adverbs):
+        verb_is_in_instruction = all([w in verb_words_in_instruction for w in possible_verb])
+        adverb_is_in_instruction = (
+            (
+                possible_adverb and all([w in adverb_words_in_instruction for w in possible_adverb])
+            ) or (
+                not adverb_words_in_instruction and not possible_adverb
+            )
+        )
+
+        # If the adverb is in the instruction, we can generate all possible verbs
+        if adverb_is_in_instruction:
+            yield (possible_verb, possible_adverb)
+            continue
+
+        # If the verb is in the instruction, we can generate all possible adverbs
+        if verb_is_in_instruction:
+            yield (possible_verb, possible_adverb)
+            continue
+
+
 def generate_relevant_instructions_gscan_oracle(
     query_instruction,
     situation,
@@ -412,11 +441,10 @@ def generate_relevant_instructions_gscan_oracle(
 
     support_instructions = []
 
-    real_adverb_options = adverb_options
-
     # We generate "cautiously" only if "cautiously" appears in the query instrunction
+    real_adverb_options = ALL_ADVERB_OPTIONS
     if "cautiously" in query_instruction:
-        real_adverb_options = real_adverb_options + [["cautiously"]]
+        real_adverb_options = ALL_ADVERB_OPTIONS + [["cautiously"]]
 
     vocabulary_descriptors = vocabulary_colors + vocabulary_nouns + ["big", "small"]
     vocabulary_verbs = ["walk", "to", "push", "pull"]
@@ -442,6 +470,11 @@ def generate_relevant_instructions_gscan_oracle(
 
     description_words_options = generate_description_words_options(
         situation, description_words
+    )
+    adverb_verb_combos = list(
+        itertools.product(ALL_ACTION_OPTIONS, real_adverb_options)
+        if not limit_verb_adverb else
+        generate_limited_adverb_verb_combos(ALL_ACTION_OPTIONS, real_adverb_options, action_words, adverb_words)
     )
 
     # Split into the actual target and other possible targets
@@ -527,26 +560,25 @@ def generate_relevant_instructions_gscan_oracle(
     # so that the target object gets generated first and all of its
     # adverb/actions get priority
     for description_words, target_object in description_words_options:
-        for action_option in action_options:
-            for adverb_option in real_adverb_options:
-                # We might be prohibited on the basis of the chosen action/adverb combination
-                # so check that again here
-                if (
-                    is_prohibited_action_adverb_combo(action_option, adverb_option)
-                    and not allow_any_example
-                ):
-                    continue
+        for action_option, adverb_option in adverb_verb_combos:
+            # We might be prohibited on the basis of the chosen action/adverb combination
+            # so check that again here
+            if (
+                is_prohibited_action_adverb_combo(action_option, adverb_option)
+                and not allow_any_example
+            ):
+                continue
 
-                proposed_support_instruction = (
-                    action_option + article_words + description_words + adverb_option,
-                    target_object,
-                )
+            proposed_support_instruction = (
+                action_option + article_words + description_words + adverb_option,
+                target_object,
+            )
 
-                # Don't generate any instruction which is exactly the same as the query instruction
-                if proposed_support_instruction[0] == query_instruction:
-                    continue
+            # Don't generate any instruction which is exactly the same as the query instruction
+            if proposed_support_instruction[0] == query_instruction:
+                continue
 
-                support_instructions.append(proposed_support_instruction)
+            support_instructions.append(proposed_support_instruction)
 
     # We can skip this data point if we cannot make any
     # demonstrations for it because none are allowed
