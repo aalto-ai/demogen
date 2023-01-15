@@ -289,16 +289,6 @@ def autoregressive_model_unroll_predictions(
 
 
 def filter_out_padding(decoded, target, logits, eos_target_idx):
-    # these are shifted off by one
-    decoded_eq_mask = (
-        (decoded == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
-    )
-    decoded_eq_mask = torch.cat([
-        torch.zeros_like(decoded_eq_mask[:, :1]),
-        decoded_eq_mask
-    ])
-    decoded[decoded_eq_mask] = -1
-
     decoded = decoded.cpu().numpy()
     decoded_select_mask = decoded != -1
     decoded = [d[m] for d, m in zip(decoded, decoded_select_mask)]
