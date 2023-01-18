@@ -155,6 +155,7 @@ class TransformerMLP(nn.Module):
 class TransformerCrossAttentionLayer(nn.Module):
     def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
+        self.norm_first = norm_first
         self.norm_x = nn.LayerNorm(emb_dim)
         self.norm_y = nn.LayerNorm(emb_dim)
         self.mha_x_to_y = nn.MultiheadAttention(emb_dim, nhead, dropout=dropout_p)
