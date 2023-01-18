@@ -308,15 +308,12 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         dropout_p=0.1,
     ):
         super().__init__()
-        self.state_embedding = OneHotEmbedding(state_component_sizes)
-        self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
-        self.state_encoder = StateCNN(
-            self.state_embedding.output_size,
-            50,
-            embed_dim,
-            [1, 5, 7],
-            dropout_p=dropout_p,
+        n_state_components = len(state_component_sizes) + 2
+        self.state_embedding = nn.Sequential(
+            BOWEmbedding(64, n_state_components, embed_dim),
+            nn.Linear(7 * embed_dim, embed_dim)
         )
+        self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
         self.cross_encoder = TransformerCrossEncoder(
             nlayers,
             embed_dim,
@@ -326,25 +323,14 @@ class ViLBERTStateEncoderTransformer(nn.Module):
             dropout_p=dropout_p,
         )
 
-    def forward(self, state, instruction, instruction_key_padding_mask=None):
+    def forward(self, state, instruction, state_key_padding_mask=None, instruction_key_padding_mask=None):
         projected_state = self.state_embedding(state)
-        state_seq_dim = projected_state.shape[-2]
-        state_w_dim = int(math.sqrt(state_seq_dim))
-        state_h_dim = state_w_dim
-
-        projected_state = projected_state.view(
-            -1, state_w_dim, state_h_dim, projected_state.shape[-1]
-        )
-
-        projected_state = self.state_encoder(projected_state)
-        projected_state = projected_state.flatten(-3, -2)
-
         projected_instruction = self.embedding(instruction)
 
         encoding, encoding_mask = self.cross_encoder(
             projected_state,
             projected_instruction,
-            x_key_padding_mask=None,
+            x_key_padding_mask=state_key_padding_mask,
             y_key_padding_mask=instruction_key_padding_mask,
         )
 
@@ -431,11 +417,12 @@ class ViLBERTLeaner(pl.LightningModule):
 
     def forward(self, states, queries, decoder_in):
         instruction_mask = queries == self.pad_word_idx
+        state_mask = (states == 0).all(dim=-1)
         encoded, encoding_mask = self.encoder(
-            states, queries, instruction_key_padding_mask=instruction_mask
+            states, queries, state_key_padding_mask=state_mask, instruction_key_padding_mask=instruction_mask
         )
         padding = torch.cat(
-            [torch.zeros_like(states[..., 0]).bool(), instruction_mask],
+            [state_mask, instruction_mask],
             dim=-1,
         )
         return self.decode_autoregressive(decoder_in, encoded, padding)
@@ -582,8 +569,8 @@ def main():
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
-            (8, 72, None),
-            (pad_word, pad_action, None),
+            (8, 72, (36, 7)),
+            (pad_word, pad_action, 0),
         )
     )
 
@@ -673,8 +660,8 @@ def main():
             DataLoader(
                 PaddingDataset(
                     demonstrations,
-                    (8, 128, None),
-                    (pad_word, pad_action, None),
+                    (8, 128, (36, 7)),
+                    (pad_word, pad_action, 0),
                 ),
                 batch_size=max([args.train_batch_size, args.valid_batch_size]),
                 pin_memory=True,
