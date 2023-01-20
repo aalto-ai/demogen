@@ -207,13 +207,15 @@ def gandr_like_search(
     for batch in dataloader:
         instruction, targets, state = batch
 
-        with torch.inference_mode():
-            state_encodings = (
-                state_autoencoder_transformer.encode_to_vector(state.to(device))
-                .detach()
-                .cpu()
-                .numpy()
-            )
+        state_encodings = None
+        if state_autoencoder_transformer is not None:
+            with torch.inference_mode():
+                state_encodings = (
+                    state_autoencoder_transformer.encode_to_vector(state.to(device))
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
 
         predicted_targets, logits = transformer_predict(
             transformer_prediction_model,
@@ -233,7 +235,11 @@ def gandr_like_search(
                 action_vocab_size,
             ),
         )
-        unscaled_vectors = np.concatenate([tfidf_vectors, state_encodings], axis=-1)
+        unscaled_vectors = (
+            np.concatenate([tfidf_vectors, state_encodings], axis=-1)
+            if state_encodings is not None
+            else tfidf_vectors
+        )
         scaled_vectors = scaler.transform(unscaled_vectors)
 
         near_neighbour_distances_batch, near_neighbour_indices_batch = index.search(
@@ -525,6 +531,7 @@ def main():
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=128)
+    parser.add_argument("--include-state", action="store_true")
     args = parser.parse_args()
 
     (
@@ -544,25 +551,30 @@ def main():
 
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
-    state_autoencoder_transformer = train_state_autoencoder(
-        args.load_state_autoencoder_transformer,
-        PaddingDataset(
-            MapDataset(train_demonstrations, lambda x: (x[-1],)), ((36, 7),), (0,)
-        ),
-        args.seed,
-        args.state_autoencoder_transformer_iterations
-        if args.save_state_autoencoder_transformer
-        else 0,
-        args.batch_size,
-        hidden_size=args.hidden_size,
-        device=args.device,
-    )
+    # Set to None by default at least so that we can handle it not being there
+    state_autoencoder_transformer = None
+    state_encodings_by_split = None
 
-    if args.save_state_autoencoder_transformer:
-        torch.save(
-            state_autoencoder_transformer.state_dict(),
-            args.save_state_autoencoder_transformer,
+    if args.include_state:
+        state_autoencoder_transformer = train_state_autoencoder(
+            args.load_state_autoencoder_transformer,
+            PaddingDataset(
+                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((36, 7),), (0,)
+            ),
+            args.seed,
+            args.state_autoencoder_transformer_iterations
+            if args.save_state_autoencoder_transformer
+            else 0,
+            args.batch_size,
+            hidden_size=args.hidden_size,
+            device=args.device,
         )
+
+        if args.save_state_autoencoder_transformer:
+            torch.save(
+                state_autoencoder_transformer.state_dict(),
+                args.save_state_autoencoder_transformer,
+            )
 
     transformer_validation_datasets = [
         Subset(
@@ -621,23 +633,28 @@ def main():
 
     print(args.offset, args.offset + (0 if args.limit is None else args.limit))
 
-    if args.load_state_encodings:
-        state_encodings_by_split = load_state_encodings(args.load_state_encodings)
-    else:
-        state_encodings_by_split = generate_state_encodings(
-            state_autoencoder_transformer,
-            train_demonstrations,
-            valid_demonstrations_dict,
-            args.batch_size,
-            device=args.device,
-        )
+    if args.include_state:
+        if args.load_state_encodings:
+            state_encodings_by_split = load_state_encodings(args.load_state_encodings)
+        else:
+            state_encodings_by_split = generate_state_encodings(
+                state_autoencoder_transformer,
+                train_demonstrations,
+                valid_demonstrations_dict,
+                args.batch_size,
+                device=args.device,
+            )
 
-    if args.save_state_encodings:
-        save_state_encodings(state_encodings_by_split, args.save_state_encodings)
+        if args.save_state_encodings:
+            save_state_encodings(state_encodings_by_split, args.save_state_encodings)
 
     # Make an index from the training data
     np.random.seed(args.seed)
-    index = faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX) + args.hidden_size)
+    index = (
+        faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX) + args.hidden_size)
+        if args.include_states
+        else faiss.IndexFlatL2(len(WORD2IDX) + len(ACTION2IDX))
+    )
     count_matrix = to_count_matrix(
         [
             (instruction, actions)
@@ -648,13 +665,18 @@ def main():
     )
     tfidf_transformer = TfidfTransformer()
     tfidf_transformer.fit(count_matrix)
-    unscaled_vectors = np.concatenate(
-        [
-            tfidf_transformer.transform(count_matrix).todense().astype("float32"),
-            state_encodings_by_split["train"],
-        ],
-        axis=-1,
+    unscaled_vectors = (
+        np.concatenate(
+            [
+                tfidf_transformer.transform(count_matrix).todense().astype("float32"),
+                state_encodings_by_split["train"],
+            ],
+            axis=-1,
+        )
+        if state_encodings_by_split is not None
+        else tfidf_transformer.transform(count_matrix).todense().astype("float32")
     )
+
     scaler = StandardScaler()
     scaler.fit(unscaled_vectors)
     scaled_vectors = scaler.transform(unscaled_vectors)
