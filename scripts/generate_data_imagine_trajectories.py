@@ -1289,7 +1289,9 @@ def main():
 
     args = parser.parse_args()
 
-    dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](args)
+    dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](
+        args
+    )
 
     print(args.offset, args.offset + (args.limit or 0))
 
@@ -1316,7 +1318,13 @@ def main():
         ranking_closure,
         generate_targets_closure,
         format_output_closure,
-    ) = DATASET_CONFIGS[args.dataset]["make_closures"](args, dictionaries, datasets, extra_data)
+    ) = DATASET_CONFIGS[args.dataset]["make_closures"](
+        args, dictionaries, datasets, extra_data
+    )
+
+    os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
+    with open(os.path.join(args.data_output_directory, "dictionary.pb"), "wb") as f:
+        pickle.dump(dictionaries, f)
 
     for split, dataloader in tqdm(dataloader_splits.items()):
         os.makedirs(os.path.join(args.data_output_directory, split), exist_ok=True)
