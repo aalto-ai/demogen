@@ -130,57 +130,6 @@ def format_log_path(logs_dir, experiment_config, params, model_include_hparams=T
     return os.path.join(base_path, "version_100", "metrics.csv")
 
 
-BASE_EXPERIMENT_CONFIGS = {
-    "transformer": {
-        "headline": "gscan",
-        "model": "transformer_encoder_only_decode_actions",
-        "layers": 28,
-        "heads": 4,
-        "hidden": 128,
-        "iterations": 50000,
-        "batch_size": 4096,
-        "dataset": "gscan",
-        "tag": "none",
-        "dropout": 0.0,
-    },
-    "meta_gscan_oracle": {
-        "headline": "meta_gscan",
-        "model": "meta_imagination_transformer",
-        "layers": 8,
-        "heads": 4,
-        "hidden": 128,
-        "iterations": 50000,
-        "batch_size": 4096,
-        "dataset": "gscan_metalearn_fixed",
-        "tag": "none",
-        "dropout": 0.0,
-    },
-}
-ABLATION_EXPERIMENT_CONFIGS = {
-    "meta_gscan_oracle_noshuffle": {
-        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        "tag": "noshuffle",
-    },
-    "meta_gscan_imagine_actions": {
-        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        "dataset": "gscan_imagine_actions_fixed",
-    },
-    "meta_gscan_distractors": {
-        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        "dataset": "gscan_metalearn_distractors_fixed",
-    },
-    "meta_gscan_sample_environments": {
-        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        "dataset": "gscan_metalearn_sample_environments_fixed",
-    },
-    "meta_gscan_only_random": {
-        **BASE_EXPERIMENT_CONFIGS["meta_gscan_oracle"],
-        "dataset": "gscan_metalearn_only_random",
-    },
-}
-EXPERIMENT_CONFIGS = {**BASE_EXPERIMENT_CONFIGS, **ABLATION_EXPERIMENT_CONFIGS}
-
-
 def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
     return [
         truncate_at_key(
