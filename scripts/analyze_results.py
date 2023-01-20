@@ -92,7 +92,7 @@ def format_experiment_name(experiment_config, params):
     )
 
 
-def format_model_name(experiment_config, include_hparams=False):
+def format_model_name(experiment_config, include_hparams=True):
     return "_".join(
         map(
             str,
