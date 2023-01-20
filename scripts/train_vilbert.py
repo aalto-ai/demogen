@@ -530,6 +530,9 @@ def main():
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--swa", action="store_true")
+    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-actions-to", type=int, default=128)
+    parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--limit-load", type=int, default=None)
     args = parser.parse_args()
 
@@ -578,7 +581,7 @@ def main():
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
-            (8, 72, (36, 7)),
+            (args.pad_instructions_to, args.pad_actions_to, (args.pad_state_to, 7)),
             (pad_word, pad_action, 0),
         )
     )
@@ -669,7 +672,11 @@ def main():
             DataLoader(
                 PaddingDataset(
                     demonstrations,
-                    (8, 128, (36, 7)),
+                    (
+                        args.pad_instructions_to,
+                        args.pad_actions_to,
+                        (args.pad_state_to, 7),
+                    ),
                     (pad_word, pad_action, 0),
                 ),
                 batch_size=max([args.train_batch_size, args.valid_batch_size]),
