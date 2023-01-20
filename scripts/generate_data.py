@@ -480,8 +480,10 @@ def generate_relevant_instructions_gscan_oracle(
     )
     adverb_verb_combos = list(
         itertools.product(ALL_ACTION_OPTIONS, real_adverb_options)
-        if not limit_verb_adverb else
-        generate_limited_adverb_verb_combos(ALL_ACTION_OPTIONS, real_adverb_options, action_words, adverb_words)
+        if not limit_verb_adverb
+        else generate_limited_adverb_verb_combos(
+            ALL_ACTION_OPTIONS, real_adverb_options, action_words, adverb_words
+        )
     )
 
     # Split into the actual target and other possible targets
