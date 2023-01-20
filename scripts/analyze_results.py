@@ -136,7 +136,7 @@ def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
             pd.read_csv(
                 os.path.join(
                     logs_dir,
-                    format_log_path(experiment_config, {"seed": seed}),
+                    format_log_path(logs_dir, experiment_config, {"seed": seed}),
                 )
             ),
             "step",
