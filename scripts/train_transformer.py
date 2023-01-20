@@ -124,7 +124,7 @@ def main():
         train_dataset,
         batch_size=args.train_batch_size,
         pin_memory=True,
-        num_workers=args.dataloader_ncpus
+        num_workers=args.dataloader_ncpus,
     )
 
     check_val_opts = {}
