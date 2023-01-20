@@ -337,7 +337,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
             if k != "train"
         },
         args.seed,
-        0 if args.load_mlm_model else args.mlm_iterations,
+        0 if args.load_mlm_model else args.mlm_train_iterations,
         pad_word,
         WORD2IDX["[sos]"],
         len(WORD2IDX),
