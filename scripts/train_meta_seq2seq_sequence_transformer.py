@@ -14,7 +14,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
-from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
+from gscan_metaseq2seq.util.dataset import (
+    PaddingDataset,
+    ReshuffleOnIndexZeroDataset,
+    MapDataset
+)
 from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
@@ -1292,19 +1296,6 @@ class ReorderSupportsByDistanceDataset(Dataset):
             [x_supports[i] for i in order],
             [y_supports[i] for i in order],
         )
-
-
-class MapDataset(Dataset):
-    def __init__(self, dataset, map_func):
-        super().__init__()
-        self.dataset = dataset
-        self.map_func = map_func
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, i):
-        return self.map_func(self.dataset[i])
 
 
 def main():
