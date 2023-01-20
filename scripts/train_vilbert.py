@@ -311,7 +311,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         n_state_components = len(state_component_sizes) + 2
         self.state_embedding = nn.Sequential(
             BOWEmbedding(64, n_state_components, embed_dim),
-            nn.Linear(7 * embed_dim, embed_dim)
+            nn.Linear(7 * embed_dim, embed_dim),
         )
         self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
         self.cross_encoder = TransformerCrossEncoder(
