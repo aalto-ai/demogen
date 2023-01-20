@@ -439,7 +439,7 @@ def generate_relevant_instructions_gscan_oracle(
     allow_any_example=False,
     num_demos=16,
     pick_random=False,
-    limit_verb_adverb=False
+    limit_verb_adverb=False,
 ):
     action_words = []
     article_words = []
