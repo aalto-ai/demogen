@@ -1158,20 +1158,27 @@ def main():
                     ReorderSupportsByDistanceDataset(
                         MapDataset(
                             MapDataset(
-                                Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_val_size]),
-                                lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                                Subset(
+                                    demonstrations,
+                                    np.random.permutation(len(demonstrations))[
+                                        : args.limit_val_size
+                                    ],
+                                ),
+                                lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
                             ),
                             lambda x: (
                                 x[0],
-                                [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                                [x[1]] * len(x[-1])
+                                if not isinstance(x[1][0], list)
+                                else x[1],
                                 x[2],
                                 x[3],
                                 x[4],
                                 x[5],
-                                x[6]
-                            )
+                                x[6],
+                            ),
                         ),
-                        args.metalearn_demonstrations_limit
+                        args.metalearn_demonstrations_limit,
                     ),
                     (
                         (args.pad_state_to, 7),
