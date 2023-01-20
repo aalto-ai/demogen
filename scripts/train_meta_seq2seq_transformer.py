@@ -944,7 +944,9 @@ class ShuffleDemonstrationsDataset(Dataset):
 
         return (
             query_state,
-            [support_state[i] for i in support_permutation] if isinstance(support_state, list) else support_state,
+            [support_state[i] for i in support_permutation]
+            if isinstance(support_state, list)
+            else support_state,
             queries,
             targets,
             x_supports[support_permutation],
@@ -1039,19 +1041,21 @@ def main():
                     MapDataset(
                         MapDataset(
                             meta_train_demonstrations,
-                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6])
+                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
                         ),
                         lambda x: (
                             x[0],
-                            [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                            [x[1]] * len(x[-1])
+                            if not isinstance(x[1][0], list)
+                            else x[1],
                             x[2],
                             x[3],
                             x[4],
                             x[5],
-                            x[6]
-                        )
+                            x[6],
+                        ),
                     ),
-                    args.metalearn_demonstrations_limit
+                    args.metalearn_demonstrations_limit,
                 ),
                 (
                     (args.pad_state_to, 7),
