@@ -39,6 +39,19 @@ class ReorderSupportsByDistanceDataset(Dataset):
         )
 
 
+class MapDataset(Dataset):
+    def __init__(self, dataset, map_func):
+        super().__init__()
+        self.dataset = dataset
+        self.map_func = map_func
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        return self.map_func(self.dataset[i])
+
+
 class PaddingDataset(Dataset):
     def __init__(self, dataset, paddings, pad_values):
         super().__init__()
