@@ -358,7 +358,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
             if k != "train"
         },
         args.seed,
-        0 if args.load_clip_model else args.clip_iterations,
+        0 if args.load_clip_model else args.clip_train_iterations,
         pad_word,
         len(WORD2IDX),
         device=args.device,
