@@ -1522,7 +1522,11 @@ GENERATION_CONFIGS = {
     "metalearn": {
         "yield_func": "metalearning",
         "generate_mode": "generate_oracle",
-        "kwargs": {"n_description_options": 1, "can_parallel": True, "limit_verb_adverb": True},
+        "kwargs": {
+            "n_description_options": 1,
+            "can_parallel": True,
+            "limit_verb_adverb": True,
+        },
     },
     "metalearn_allow_any": {
         "yield_func": "metalearning",
@@ -1531,7 +1535,7 @@ GENERATION_CONFIGS = {
             "n_description_options": 1,
             "can_parallel": True,
             "allow_any_example": True,
-            "limit_verb_adverb": True
+            "limit_verb_adverb": True,
         },
     },
     "metalearn_distractors": {
@@ -1589,7 +1593,11 @@ GENERATION_CONFIGS = {
     "metalearn_find_matching_instruction_demos_allow_any": {
         "yield_func": "metalearning",
         "generate_mode": "generate_find_matching",
-        "kwargs": {"can_parallel": False, "allow_any_example": True, "limit_verb_adverb": True},
+        "kwargs": {
+            "can_parallel": False,
+            "allow_any_example": True,
+            "limit_verb_adverb": True,
+        },
     },
     "metalearn_find_matching_environment_layout": {
         "yield_func": "metalearning",
