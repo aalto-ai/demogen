@@ -1,17 +1,19 @@
 import argparse
 import itertools
+import operator
 import os
 import math
 import sys
 import pickle
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, IterableDataset, Subset
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import (
@@ -23,6 +25,7 @@ from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
+    SequenceTransformerLearner,
     TransformerLearner,
     autoregressive_model_unroll_predictions,
 )
@@ -444,6 +447,789 @@ def gscan_load_data(args):
     return ((WORD2IDX, ACTION2IDX), dataset_splits, (color_dictionary, noun_dictionary))
 
 
+class SampleSentencesByWordWeights(IterableDataset):
+    def __init__(self, train_data_indices_by_word_idx, word_weights, dataset):
+        super().__init__()
+        self.train_data_indices_by_word_idx = train_data_indices_by_word_idx
+        self.word_weights = word_weights
+        self.words_array = np.arange(word_weights.shape[0])
+        self.dataset = dataset
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            idx = np.random.choice(self.words_array, replace=True, p=self.word_weights)
+            if not self.train_data_indices_by_word_idx[idx]:
+                continue
+
+            break
+
+        return self.dataset[
+            np.random.choice(self.train_data_indices_by_word_idx[idx], replace=True)
+        ]
+
+
+class MonotonicRandomPositionEmbedding(nn.Module):
+    def __init__(self, num_positions, emb_dim):
+        super().__init__()
+        self.embedding = nn.Embedding(num_positions, emb_dim)
+        self.num_positions = num_positions
+
+    def forward(self, x):
+        permutation = (
+            torch.from_numpy(
+                np.sort(np.random.permutation(self.num_positions)[: x.shape[1]])
+            )[None]
+            .expand(x.shape[0], -1)
+            .to(x.device)
+        )
+
+        return self.embedding(permutation)
+
+
+class MonotonicPositionEncodingByMask(nn.Module):
+    def __init__(self, num_positions, emb_dim):
+        super().__init__()
+        self.embedding = nn.Embedding(num_positions, emb_dim)
+        self.num_positions = num_positions
+
+    def forward(self, key_padding_mask):
+        inv_key_padding_mask = ~key_padding_mask
+        inv_key_padding_mask_cumsum = inv_key_padding_mask.to(torch.long).cumsum(dim=-1)
+
+        return self.embedding(inv_key_padding_mask_cumsum)
+
+
+class EncoderDecoderLanguageModel(pl.LightningModule):
+    def __init__(
+        self,
+        num_words,
+        num_positions,
+        pad_word_idx,
+        sos_word_idx,
+        eos_word_idx,
+        lr=0.0001,
+        wd=1e-2,
+        emb_dim=128,
+        nlayers=8,
+        nhead=4,
+        dropout=0.1,
+        norm_first=False,
+        decay_power=-1,
+        warmup_proportion=0.14,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        self.embedding_instructions = nn.Embedding(num_words, emb_dim)
+        self.positional_encoding = MonotonicPositionEncodingByMask(
+            num_positions, emb_dim
+        )
+        self.decoder_positional_encoding = MonotonicRandomPositionEmbedding(
+            128, emb_dim
+        )
+        self.transformer = nn.Transformer(
+            d_model=emb_dim,
+            dim_feedforward=emb_dim * 4,
+            dropout=dropout,
+            nhead=nhead,
+            norm_first=norm_first,
+            num_encoder_layers=nlayers,
+            num_decoder_layers=nlayers,
+        )
+        self.project = nn.Linear(emb_dim, num_words)
+        self.sos_word_idx = sos_word_idx
+        self.pad_word_idx = pad_word_idx
+        self.eos_word_idx = eos_word_idx
+
+    def configure_optimizers(self):
+        return transformer_optimizer_config(
+            self,
+            self.hparams.lr,
+            weight_decay=self.hparams.wd,
+            decay_power=self.hparams.decay_power,
+            warmup_proportion=self.hparams.warmup_proportion,
+        )
+
+    def forward(self, base_instruction, instruction_mask, right_shifted_instruction):
+        masked_instruction = base_instruction.clone()
+
+        encoded_instruction = self.embedding_instructions(
+            masked_instruction
+        ) + self.positional_encoding(instruction_mask)
+        encoded_right_shifted_instruction = self.embedding_instructions(
+            right_shifted_instruction
+        )
+        encoded_right_shifted_instruction = (
+            encoded_right_shifted_instruction
+            + self.decoder_positional_encoding(encoded_right_shifted_instruction)
+        )
+
+        decoded_instruction = self.transformer(
+            src=encoded_instruction.transpose(0, 1),
+            tgt=encoded_right_shifted_instruction.transpose(0, 1),
+            src_key_padding_mask=instruction_mask,
+            memory_key_padding_mask=instruction_mask,
+            tgt_key_padding_mask=(right_shifted_instruction == self.pad_word_idx),
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
+                right_shifted_instruction.shape[1]
+            ).to(self.device),
+        ).transpose(0, 1)
+
+        return self.project(decoded_instruction)
+
+    def training_step(self, x, idx):
+        (instruction,) = x
+
+        right_shifted_instruction = torch.cat(
+            [
+                torch.ones_like(instruction[:, :1]) * self.sos_word_idx,
+                instruction,
+            ],
+            dim=1,
+        )[:, :-1]
+
+        instruction_mask = torch.logical_or(
+            torch.rand(instruction.shape, device=self.device)
+            < np.random.uniform(0.1, 0.9),
+            instruction == self.pad_word_idx,
+        )
+
+        # We always keep the very last pad bit unset, so that the entire
+        # input is not padded
+        instruction_mask[:, -1] = False
+
+        logits = self(instruction, instruction_mask, right_shifted_instruction)
+
+        loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
+        self.log("loss", loss)
+
+        return loss
+
+    def validation_step(self, x, idx, dl_idx=0):
+        (instruction,) = x
+
+        right_shifted_instruction = torch.cat(
+            [
+                torch.ones_like(instruction[:, :1]) * self.sos_word_idx,
+                instruction,
+            ],
+            dim=1,
+        )[:, :-1]
+
+        instruction_mask = torch.logical_or(
+            torch.rand(instruction.shape, device=self.device) < 0.5,
+            instruction == self.pad_word_idx,
+        )
+
+        # We always keep the very last pad bit unset, so that the entire
+        # input is not padded
+        instruction_mask[:, -1] = False
+
+        logits = self(instruction, instruction_mask, right_shifted_instruction)
+
+        loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
+        self.log("vloss", loss)
+
+        return loss
+
+
+def train_encoder_decoder(
+    dataset,
+    seed,
+    mlm_train_iterations,
+    pad_word,
+    sos_word,
+    eos_word,
+    vocab_size,
+    batch_size,
+    device="cpu",
+):
+    nlayers = 4
+    nhead = 8
+    hidden_size = 128
+    dropout_p = 0.1
+    train_batch_size = batch_size
+    batch_size_mult = 1
+    dataset_name = "cogs"
+    check_val_every = 8000
+
+    exp_name = "enc_dec"
+    model_name = f"transformer_l_{nlayers}_h_{nhead}_d_{hidden_size}"
+    dataset_name = dataset_name
+    effective_batch_size = train_batch_size * batch_size_mult
+    exp_name = f"{exp_name}_s_{seed}_m_{model_name}_it_{mlm_train_iterations}_b_{effective_batch_size}_d_{dataset_name}_drop_{dropout_p}"
+    model_dir = f"models/{exp_name}/{model_name}"
+    model_path = f"{model_dir}/{exp_name}.pt"
+    print(model_path)
+    print(
+        f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
+    )
+
+    train_dataloader = DataLoader(dataset, batch_size=train_batch_size, pin_memory=True)
+
+    logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
+
+    num_positions = 72
+
+    model = EncoderDecoderLanguageModel(
+        vocab_size,
+        num_positions,
+        pad_word,
+        sos_word,
+        eos_word,
+        nlayers=nlayers,
+        nhead=nhead,
+        emb_dim=hidden_size,
+        dropout=dropout_p,
+        norm_first=True,
+        lr=1e-4,
+        decay_power=-1,
+        warmup_proportion=0.1,
+    )
+
+    trainer = pl.Trainer(
+        logger=[
+            TensorBoardLogger(logs_root_dir),
+            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
+        ],
+        callbacks=[pl.callbacks.LearningRateMonitor()],
+        max_steps=mlm_train_iterations,
+        num_sanity_val_steps=10,
+        gpus=1 if device == "cuda" else 0,
+        precision=16 if device == "cuda" else 32,
+        default_root_dir=logs_root_dir,
+        accumulate_grad_batches=batch_size_mult,
+        gradient_clip_val=0.2,
+    )
+
+    trainer.fit(model, train_dataloader)
+
+    return model
+
+
+def sample_from_encoder_decoder_model_with_mask(
+    model,
+    expanded_instruction,
+    instruction_mask,
+    eos_target_idx,
+    pad_target_idx,
+    noise_level=0.2,
+    device="cpu",
+    deterministic=False,
+):
+    model.eval()
+    model.to(device)
+
+    unroll_length = expanded_instruction.shape[1]
+
+    with torch.inference_mode():
+        decoded_instruction = (
+            torch.ones_like(expanded_instruction[:, :1]) * model.sos_word_idx
+        )
+
+        # We always keep the very last pad bit unset, so that the entire
+        # input is not padded
+        instruction_mask[:, -1] = False
+
+        for i in range(unroll_length):
+            logits = model(expanded_instruction, instruction_mask, decoded_instruction)
+            if deterministic:
+                samples = logits[:, -1].argmax(dim=-1)
+            else:
+                samples = torch.distributions.Categorical(
+                    logits=logits[:, -1] + 10
+                ).sample()
+            decoded_instruction = torch.cat(
+                [decoded_instruction, samples[:, None]], dim=1
+            )
+
+        # Set anything past EOS to be a PAD token
+        decoded_eq_mask = (
+            (decoded_instruction == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
+        )
+        decoded_eq_mask = torch.cat(
+            [torch.zeros_like(decoded_eq_mask[:, :1]), decoded_eq_mask], dim=-1
+        )
+        decoded_instruction
+        decoded_instruction[decoded_eq_mask] = pad_target_idx
+
+        return (
+            expanded_instruction.cpu(),
+            decoded_instruction[:, 1:].view(expanded_instruction.shape[0], -1).cpu(),
+            instruction_mask.view(expanded_instruction.shape[0], -1).cpu(),
+        )
+
+
+def sample_from_encoder_decoder_model_deterministic(
+    model,
+    instruction,
+    eos_target_idx,
+    pad_target_idx,
+    noise_level=0.2,
+    device="cpu",
+    deterministic=False,
+):
+    unroll_length = instruction.shape[1]
+
+    expanded_instruction = (
+        instruction[:, None].expand(-1, instruction.shape[-1], -1).flatten(0, 1)
+    )
+    expanded_instruction = expanded_instruction.to(device)
+
+    # We'll make a mask of 1-grams, 2-grams
+    mask_lowerbound = (
+        torch.arange(expanded_instruction.shape[0], device=device)
+        % (expanded_instruction.shape[-1] + 1)
+    ) - 1
+    mask_upperbound = mask_lowerbound + 1
+    instruction_mask_indices = torch.arange(
+        expanded_instruction.shape[1], device=device
+    )[None].expand(expanded_instruction.shape[0], -1)
+    instruction_mask = ~torch.bitwise_and(
+        instruction_mask_indices >= mask_lowerbound[:, None],
+        instruction_mask_indices < mask_upperbound[:, None],
+    )
+
+    (
+        expanded_instruction,
+        decoded_instruction,
+        instruction_mask,
+    ) = sample_from_encoder_decoder_model_with_mask(
+        model,
+        expanded_instruction,
+        instruction_mask,
+        eos_target_idx,
+        pad_target_idx,
+        noise_level=noise_level,
+        device=device,
+        deterministic=deterministic,
+    )
+
+    return (
+        instruction,
+        decoded_instruction.view(instruction.shape[0], instruction.shape[-1], -1),
+        instruction_mask.view(instruction.shape[0], instruction.shape[-1], -1),
+        [
+            [i[m] for i, m in zip(i_batch, m_batch)]
+            for i_batch, m_batch in zip(
+                expanded_instruction.view(
+                    instruction.shape[0], instruction.shape[-1], -1
+                ),
+                (~instruction_mask).view(
+                    instruction.shape[0], instruction.shape[-1], -1
+                ),
+            )
+        ],
+    )
+
+
+def make_cogs_instruction_gen_closure(
+    encoder_decoder_model, eos_target_idx, pad_target_idx, device="cpu", noise_level=0.2
+):
+    encoder_decoder_model.to(device)
+    encoder_decoder_model.eval()
+
+    def generate_instruction(inputs, sample_n):
+        (query_instructions,) = inputs
+        (
+            result_instrs,
+            result_samples,
+            result_samples_mask,
+            result_masked_instruction,
+        ) = sample_from_encoder_decoder_model_deterministic(
+            encoder_decoder_model,
+            query_instructions,
+            eos_target_idx,
+            pad_target_idx,
+            noise_level=noise_level,
+            device="cuda",
+            deterministic=True,
+        )
+
+        is_same_mask = (result_samples == query_instructions[:, None]).all(dim=-1)
+
+        return [
+            s[~m].reshape(-1, s.shape[-1]) for s, m in zip(result_samples, is_same_mask)
+        ]
+
+    return generate_instruction
+
+
+def compute_ll_from_encoder_decoder_model(model, query, samples, device="cuda"):
+    samples = samples.to(device)
+    query = query.to(device)
+
+    flat_query = query
+    flat_samples = samples
+    encoder_mask = flat_query == model.pad_word_idx
+    decoded_instruction = torch.cat(
+        [torch.ones_like(flat_samples[:, :1]) * model.sos_word_idx, flat_samples],
+        dim=-1,
+    )[:, :-1]
+
+    with torch.inference_mode():
+        logits = model(flat_query, encoder_mask, decoded_instruction)
+        logprobs = torch.gather(logits, -1, flat_samples[..., None]).squeeze(-1)
+        total_logprobs = logprobs.sum(dim=-1)
+
+    return total_logprobs.detach().cpu()
+
+
+def make_cogs_instruction_ranking_closure(encoder_decoder_model, device="cpu"):
+    encoder_decoder_model.to(device)
+    encoder_decoder_model.eval()
+
+    def score_instructions(sampled, inputs):
+        generated_instructions = sampled
+        (query_instructions,) = inputs
+        return compute_ll_from_encoder_decoder_model(
+            encoder_decoder_model,
+            query_instructions,
+            generated_instructions,
+            device=device,
+        )
+
+    return score_instructions
+
+
+def make_cogs_target_generation_closure(
+    transformer_encoder_decoder_model, device="cpu"
+):
+    transformer_encoder_decoder_model.to(device)
+    transformer_encoder_decoder_model.eval()
+
+    transformer_encoder_decoder_model.encoder.pos_encoding.cached_penc = None
+    transformer_encoder_decoder_model.decoder.pos_encoding.cached_penc = None
+
+    def compute_targets(instructions, inputs, decode_len):
+        (query_instructions,) = inputs
+
+        dummy_targets = torch.zeros(
+            query_instructions.shape[0], decode_len, dtype=torch.long, device=device
+        )
+        instructions = instructions.to(device)
+
+        decoded, logits, exacts, _ = autoregressive_model_unroll_predictions(
+            transformer_encoder_decoder_model,
+            (instructions,),
+            dummy_targets,
+            transformer_encoder_decoder_model.sos_action_idx,
+            transformer_encoder_decoder_model.eos_action_idx,
+            transformer_encoder_decoder_model.pad_action_idx,
+        )
+
+        return decoded
+
+    return compute_targets
+
+
+def make_cogs_format_output_closure():
+    def format_output(inputs, targets, sample_scores):
+        (generated_instructions, generated_targets, scores) = list(zip(*sample_scores))
+        (query_instruction,) = inputs
+
+        return (
+            query_instruction.numpy(),
+            targets.numpy(),
+            generated_instructions,
+            generated_targets,
+            scores,
+        )
+
+    return format_output
+
+
+def train_encoder_decoder_transformer(
+    dataset,
+    valid_dataset_dict,
+    seed,
+    iterations,
+    pad_word,
+    pad_action,
+    sos_action,
+    eos_action,
+    query_vocab_size,
+    output_vocab_size,
+    batch_size,
+    device="cpu",
+):
+    nlayers = 4
+    nhead = 8
+    hidden_size = 128
+    dropout_p = 0.1
+    train_batch_size = batch_size
+    batch_size_mult = 1
+    dataset_name = "cogs"
+    check_val_every = 8000
+
+    exp_name = "cogs_enc_dec_transformer"
+    model_name = f"transformer_l_{nlayers}_h_{nhead}_d_{hidden_size}"
+    dataset_name = dataset_name
+    effective_batch_size = train_batch_size * batch_size_mult
+    exp_name = f"{exp_name}_s_{seed}_m_{model_name}_it_{iterations}_b_{effective_batch_size}_d_{dataset_name}_drop_{dropout_p}"
+    model_dir = f"models/{exp_name}/{model_name}"
+    model_path = f"{model_dir}/{exp_name}.pt"
+    print(model_path)
+    print(
+        f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
+    )
+
+    train_dataloader = DataLoader(
+        dataset, batch_size=train_batch_size, pin_memory=True, shuffle=True
+    )
+    valid_dataloaders = [
+        DataLoader(
+            Subset(ds, np.random.permutation(len(ds))[:128]),
+            batch_size=train_batch_size,
+            pin_memory=True,
+        )
+        for ds in valid_dataset_dict.values()
+    ]
+
+    logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
+
+    model = SequenceTransformerLearner(
+        query_vocab_size,
+        output_vocab_size,
+        hidden_size,
+        dropout_p,
+        nlayers,
+        nhead,
+        pad_word,
+        pad_action,
+        sos_action,
+        eos_action,
+        norm_first=True,
+        lr=1e-4,
+        decay_power=-1,
+        warmup_proportion=0.1,
+    )
+
+    trainer = pl.Trainer(
+        logger=[
+            TensorBoardLogger(logs_root_dir),
+            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
+        ],
+        callbacks=[pl.callbacks.LearningRateMonitor()],
+        max_steps=iterations,
+        num_sanity_val_steps=10,
+        gpus=1 if device == "cuda" else 0,
+        precision=16 if device == "cuda" else 32,
+        default_root_dir=logs_root_dir,
+        accumulate_grad_batches=batch_size_mult,
+        gradient_clip_val=0.2,
+        check_val_every_n_epoch=int(len(train_dataloader) / 5000) + 1,
+    )
+
+    trainer.fit(model, train_dataloader, valid_dataloaders)
+
+    return model
+
+
+def cogs_make_closures(args, dictionaries, datasets, extra_data):
+    in_word2idx, out_word2idx = dictionaries
+
+    train_inputs = MapDataset(datasets["train"], lambda x: x[0])
+    word_counts_counter = Counter(
+        itertools.chain.from_iterable(map(lambda x: x[0][0], datasets["train"]))
+    )
+    word_counts = np.zeros(len(in_word2idx))
+    for word, count in word_counts_counter.items():
+        word_counts[word] = count
+
+    word_counts[in_word2idx["pad"]] = 0
+
+    inv_word_counts = 1 / word_counts
+    inv_word_counts[word_counts == 0] = 0
+    inv_word_counts_dist = inv_word_counts / inv_word_counts.sum()
+
+    train_data_indices_by_word_idx = defaultdict(list)
+
+    for i, train_sentence in enumerate(train_inputs):
+        for word in train_sentence[0][train_sentence[0] != in_word2idx["[pad]"]]:
+            train_data_indices_by_word_idx[word].append(i)
+
+    sample_dataset = SampleSentencesByWordWeights(
+        train_data_indices_by_word_idx, inv_word_counts_dist, train_inputs
+    )
+
+    encoder_decoder_lm = train_encoder_decoder(
+        sample_dataset,
+        args.seed,
+        args.mlm_train_iterations if not args.load_mlm_model else 0,
+        in_word2idx["[pad]"],
+        in_word2idx["[sos]"],
+        in_word2idx["[eos]"],
+        len(in_word2idx),
+        args.batch_size,
+        device=args.device,
+    )
+
+    if args.load_mlm_model:
+        encoder_decoder_lm.load_state_dict(torch.load(args.load_mlm_model))
+
+    if args.save_mlm_model:
+        torch.save(encoder_decoder_lm.state_dict(), args.save_mlm_model)
+
+    encoder_decoder_transformer = train_encoder_decoder_transformer(
+        MapDataset(datasets["train"], lambda x: (x[0][0], x[1])),
+        {
+            k: MapDataset(v, lambda x: (x[0][0], x[1]))
+            for k, v in datasets.items()
+            if k != "train"
+        },
+        args.seed,
+        args.transformer_train_iterations if not args.load_transformer_model else 0,
+        in_word2idx["[pad]"],
+        out_word2idx["[pad]"],
+        out_word2idx["[sos]"],
+        out_word2idx["[eos]"],
+        len(in_word2idx),
+        len(out_word2idx),
+        args.batch_size,
+        device=args.device,
+    )
+
+    if args.load_transformer_model:
+        encoder_decoder_transformer.load_state_dict(
+            torch.load(args.load_transformer_model)
+        )
+
+    if args.save_transformer_model:
+        torch.save(
+            encoder_decoder_transformer.state_dict(), args.save_transformer_model
+        )
+
+    return (
+        make_cogs_instruction_gen_closure(
+            encoder_decoder_lm,
+            in_word2idx["[eos]"],
+            in_word2idx["[pad]"],
+            device=args.device,
+            noise_level=0.2,
+        ),
+        make_cogs_instruction_ranking_closure(encoder_decoder_lm, device=args.device),
+        make_cogs_target_generation_closure(
+            encoder_decoder_transformer, device=args.device
+        ),
+        make_cogs_format_output_closure(),
+    )
+
+
+def cogs_parse_task(task):
+    input_statement, output_statement, category = task
+
+    return (input_statement.split(), output_statement.split(), category)
+
+
+def cogs_make_vocab(examples):
+    idx2word = sorted(list(set(itertools.chain.from_iterable(examples))))
+    idx2word.append("[sos]")
+    idx2word.append("[eos]")
+    idx2word.append("[pad]")
+    word2idx = {w: i for i, w in enumerate(idx2word)}
+
+    return idx2word, word2idx
+
+
+def cogs_load_data(args, filter_input_length=32, filter_output_length=128):
+    train_df = pd.read_csv(
+        os.path.join(args.data_directory, "train_100.tsv"), sep="\t", header=None
+    )
+    test_df = pd.concat(
+        [
+            pd.read_csv(
+                os.path.join(args.data_directory, "test.tsv"), sep="\t", header=None
+            ),
+            pd.read_csv(
+                os.path.join(args.data_directory, "gen.tsv"), sep="\t", header=None
+            ),
+        ],
+        axis=0,
+    )
+
+    train_df = train_df.sort_values(2, axis=0)
+    test_df = train_df.sort_values(2, axis=0)
+
+    cogs_train = list(map(cogs_parse_task, train_df.values))
+    cogs_test = list(map(cogs_parse_task, test_df.values))
+
+    in_idx2word, in_word2idx = cogs_make_vocab(
+        map(
+            operator.itemgetter(0),
+            itertools.chain.from_iterable([cogs_train, cogs_test]),
+        )
+    )
+    out_idx2word, out_word2idx = cogs_make_vocab(
+        map(
+            operator.itemgetter(1),
+            itertools.chain.from_iterable([cogs_train, cogs_test]),
+        )
+    )
+
+    cogs_train_idx_inputs, cogs_train_idx_outputs = list(
+        zip(
+            *[
+                (
+                    [in_word2idx[w] for w in in_sentence] + [in_word2idx["[eos]"]],
+                    [out_word2idx[w] for w in out_sentence] + [out_word2idx["[eos]"]],
+                )
+                for in_sentence, out_sentence, category in cogs_train
+            ]
+        )
+    )
+
+    cogs_test_idx_inputs, cogs_test_idx_outputs = list(
+        zip(
+            *[
+                (
+                    [in_word2idx[w] for w in in_sentence] + [in_word2idx["[eos]"]],
+                    [out_word2idx[w] for w in out_sentence] + [out_word2idx["[eos]"]],
+                )
+                for in_sentence, out_sentence, category in cogs_test
+            ]
+        )
+    )
+
+    cogs_grouped_train_data = {
+        "train": list(zip(cogs_train_idx_inputs, cogs_train_idx_outputs))
+    }
+    cogs_grouped_test_data = {
+        k: list(map(lambda x: (x[1], x[2]), v))
+        for k, v in itertools.groupby(
+            zip(cogs_test, cogs_test_idx_inputs, cogs_test_idx_outputs),
+            key=lambda x: x[0][-1],
+        )
+    }
+
+    cogs_grouped_train_datasets = {
+        k: MapDataset(
+            PaddingDataset(
+                MapDataset(
+                    list(
+                        filter(
+                            lambda x: len(x[1]) <= filter_output_length
+                            or len(x[0]) <= filter_input_length,
+                            v,
+                        )
+                    ),
+                    lambda x: (np.array(x[0]), np.array(x[1])),
+                ),
+                (filter_input_length, filter_output_length),
+                (in_word2idx["[pad]"], out_word2idx["[pad]"]),
+            ),
+            lambda x: ((x[0],), x[1]),
+        )
+        for k, v in itertools.chain.from_iterable(
+            [cogs_grouped_train_data.items(), cogs_grouped_test_data.items()]
+        )
+    }
+
+    return ((in_word2idx, out_word2idx), cogs_grouped_train_datasets, None)
+
+
 def gscan_add_subparser(subparsers):
     gscan_parser = subparsers.add_parser("gscan", help="gscan generation help")
     gscan_parser.add_argument("--dictionary", type=str, required=True)
@@ -457,12 +1243,30 @@ def gscan_add_subparser(subparsers):
     gscan_parser.add_argument("--limit-load", type=int, default=None)
 
 
+def cogs_add_subparser(subparsers):
+    gscan_parser = subparsers.add_parser("cogs", help="cogs generation help")
+    gscan_parser.add_argument("--mlm-train-iterations", type=int, default=100000)
+    gscan_parser.add_argument(
+        "--transformer-train-iterations", type=int, default=100000
+    )
+    gscan_parser.add_argument("--load-mlm-model", type=str)
+    gscan_parser.add_argument("--save-mlm-model", type=str)
+    gscan_parser.add_argument("--load-transformer-model", type=str)
+    gscan_parser.add_argument("--save-transformer-model", type=str)
+    gscan_parser.add_argument("--limit-load", type=int, default=None)
+
+
 DATASET_CONFIGS = {
     "gscan": {
         "add_subparser": gscan_add_subparser,
         "load_data": gscan_load_data,
-        "make_closures": gscan_make_closures
-    }
+        "make_closures": gscan_make_closures,
+    },
+    "cogs": {
+        "add_subparser": cogs_add_subparser,
+        "load_data": cogs_load_data,
+        "make_closures": cogs_make_closures,
+    },
 }
 
 
