@@ -529,8 +529,8 @@ class EncoderDecoderTransformer(nn.Module):
             tgt_key_padding_mask=decoder_key_padding_mask,
             memory_key_padding_mask=encoder_key_padding_mask,
             tgt_mask=nn.Transformer.generate_square_subsequent_mask(
-                decoder_inputs.shape[-2], device=decoder_inputs.device
-            ),
+                decoder_inputs.shape[-2]
+            ).to(decoder_inputs.device),
         ).transpose(0, 1)
 
         return self.out(decoded)
