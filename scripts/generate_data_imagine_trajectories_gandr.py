@@ -20,7 +20,6 @@ from collections import defaultdict
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import (
     PaddingDataset,
-    ReshuffleOnIndexZeroDataset,
     MapDataset,
 )
 from gscan_metaseq2seq.util.load_data import load_data_directories
