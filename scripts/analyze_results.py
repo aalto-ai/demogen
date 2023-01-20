@@ -29,16 +29,21 @@ def exclude_worst_performing_by_metric(
     return [dfs[k[0]] for k in sort_keys[n_exclude:]]
 
 
-def get_top_values_for_corresponding_value(dfs, corresponding, values, rolling=1):
-    cols = values
+def get_top_values_for_corresponding_value(
+    dfs, corresponding, values, rolling=1, descending=False
+):
+    select_cols = values + ([corresponding] if corresponding not in values else [])
 
-    nonrolling_dfs = [df[cols].dropna() for df in dfs]
+    nonrolling_dfs = [df[select_cols].dropna() for df in dfs]
 
-    rolling_dfs = [df[cols].rolling(rolling).mean().fillna(0) for df in nonrolling_dfs]
+    rolling_dfs = [
+        df[select_cols].rolling(rolling).mean().fillna(0) for df in nonrolling_dfs
+    ]
 
     argwheres = [
         np.argwhere(
-            rolling_df[corresponding].values == rolling_df[corresponding].max()
+            rolling_df[corresponding].values
+            == getattr(rolling_df[corresponding], "max" if not descending else "min")()
         )[-1][0]
         for rolling_df in rolling_dfs
     ]
