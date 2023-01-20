@@ -323,7 +323,13 @@ class ViLBERTStateEncoderTransformer(nn.Module):
             dropout_p=dropout_p,
         )
 
-    def forward(self, state, instruction, state_key_padding_mask=None, instruction_key_padding_mask=None):
+    def forward(
+        self,
+        state,
+        instruction,
+        state_key_padding_mask=None,
+        instruction_key_padding_mask=None,
+    ):
         projected_state = self.state_embedding(state)
         projected_instruction = self.embedding(instruction)
 
