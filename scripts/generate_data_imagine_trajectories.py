@@ -333,7 +333,8 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         MapDataset(balanced_training_data_subset, lambda x: (x[0][1],)),
         {
             k: MapDataset(v, lambda x: (x[0][1],))
-            for k, v in datasets.items() if k != "train"
+            for k, v in datasets.items()
+            if k != "train"
         },
         args.seed,
         0 if args.load_mlm_model else args.mlm_iterations,
