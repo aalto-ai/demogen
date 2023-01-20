@@ -1,7 +1,9 @@
 import argparse
 import os
+import itertools
 import pandas as pd
 import numpy as np
+import re
 
 
 def truncate_at_key(df, key, limit):
@@ -146,6 +148,13 @@ def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
     ]
 
 
+def read_csv_and_truncate(path, truncate_key, truncate_value):
+    df = pd.read_csv(path)
+    truncated = truncate_at_key(df, truncate_key, truncate_value)
+
+    return truncated
+
+
 GSCAN_TEST_SPLIT_DATALOADER_NAMES = [
     "vexact/dataloader_idx_0",
     "vexact/dataloader_idx_1",
@@ -155,6 +164,93 @@ GSCAN_TEST_SPLIT_DATALOADER_NAMES = [
     "vexact/dataloader_idx_5",
     "vexact/dataloader_idx_6",
 ]
+
+_RE_DIRECTORY_NAME = r"(?P<headline>[a-z_]+)_s_(?P<seed>[0-9])_m_(?P<model>[0-9a-z_]+)_l_(?P<layers>[0-9]+)_h_(?P<heads>[0-9]+)_d_(?P<hidden>[0-9]+)_it_(?P<iterations>[0-9]+)_b_(?P<batch_size>[0-9]+)_d_(?P<dataset>[0-9a-z_]+)_t_(?P<tag>[a-z_]+)_drop_(?P<dropout>[0-9\.]+)"
+
+
+def collate_func_key(x, keys):
+    return tuple([x[k] for k in keys if k != "seed"])
+
+
+def read_and_collate_from_directory(logs_dir, limit, exclude_seeds=[]):
+    listing = os.listdir(logs_dir)
+    parsed_listing = list(
+        map(lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(), listing)
+    )
+    keys = sorted(parsed_listing[0].keys())
+    keys_not_seed = [k for k in keys if k != "seed"]
+    grouped_listing_indices = [
+        (
+            {k: v for k, v in zip(keys_not_seed, key_tuple)},
+            map(
+                lambda index: (index, parsed_listing[index]["seed"]),
+                list(zip(*group))[0],
+            ),
+        )
+        for key_tuple, group in itertools.groupby(
+            sorted(
+                list(enumerate(parsed_listing)),
+                key=lambda x: collate_func_key(x[1], keys_not_seed),
+            ),
+            lambda x: collate_func_key(x[1], keys_not_seed),
+        )
+    ]
+
+    return [
+        (
+            config,
+            [
+                (
+                    seed,
+                    read_csv_and_truncate(
+                        os.path.join(
+                            logs_dir, format_log_path(logs_dir, config, {"seed": seed})
+                        ),
+                        "step",
+                        limit,
+                    ),
+                )
+                for index, seed in values
+                if seed not in exclude_seeds
+                and os.path.exists(
+                    os.path.join(
+                        logs_dir, format_log_path(logs_dir, config, {"seed": seed})
+                    )
+                )
+            ],
+        )
+        for config, values in grouped_listing_indices
+    ]
+
+
+MATCH_CONFIGS = {
+    "transformer_full": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "headline": "gscan",
+    },
+    "i2g": {"dataset": "i2g", "headline": "meta_gscan"},
+    "gandr": {"dataset": "gandr", "headline": "meta_gscan"},
+    "gscan_oracle_full": {"dataset": "metalearn_allow_any", "headline": "meta_gscan"},
+    "gscan_metalearn_only_random": {
+        "dataset": "metalearn_random_instructions_same_layout_allow_any",
+        "headline": "meta_gscan",
+    },
+    "gscan_metalearn_sample_environments": {
+        "dataset": "metalearn_find_matching_instruction_demos_allow_any",
+        "headline": "meta_gscan",
+    },
+}
+
+
+def match_to_configs(configs, configs_and_results_tuples):
+    return {
+        name: [
+            results
+            for config, results in configs_and_results_tuples
+            if all([config[k] == requested_config[k] for k in requested_config.keys()])
+        ][0]
+        for name, requested_config in configs.items()
+    }
 
 
 def main():
@@ -166,73 +262,44 @@ def main():
     parser.add_argument("--ablations-drop-bad-seeds", type=int, default=3)
     parser.add_argument("--exclude-by-a-smoothing", type=int, default=50)
     parser.add_argument("--result-smoothing", type=int, default=1)
+    parser.add_argument("--exclude-seeds", nargs="*")
     args = parser.parse_args()
 
-    table_configs = {
-        "transformer_full": {"config_name": "transformer", "limit": args.limit},
-        "gscan_oracle_full": {"config_name": "meta_gscan_oracle", "limit": args.limit},
-        "gscan_oracle_ablations": {
-            "config_name": "meta_gscan_oracle",
-            "limit": args.ablations_limit,
-        },
-        "gscan_oracle_noshuffle": {
-            "config_name": "meta_gscan_oracle_noshuffle",
-            "limit": args.ablations_limit,
-        },
-        "gscan_imagine_actions": {
-            "config_name": "meta_gscan_imagine_actions",
-            "limit": args.ablations_limit,
-        },
-        "gscan_metalearn_distractors": {
-            "config_name": "meta_gscan_distractors",
-            "limit": args.ablations_limit,
-        },
-        "gscan_metalearn_sample_environments": {
-            "config_name": "meta_gscan_sample_environments",
-            "limit": args.ablations_limit,
-        },
-        "gscan_metalearn_only_random": {
-            "config_name": "meta_gscan_only_random",
-            "limit": args.ablations_limit,
-        },
-    }
+    read_metrics_dfs_at_limit_by_config = read_and_collate_from_directory(
+        args.logs_dir, args.limit, exclude_seeds=args.exclude_seeds or []
+    )
 
-    read_metrics_dfs_at_limit = {
-        name: read_all_csv_files_for_seeds_and_limit(
-            args.logs_dir,
-            EXPERIMENT_CONFIGS[table_config["config_name"]],
-            table_config["limit"],
+    read_metrics_dfs_excluded = [
+        (
+            config,
+            exclude_worst_performing_by_metric(
+                # Take the df from the seed/df pair
+                list(zip(*read_metrics_df_at_limit_and_seeds))[1],
+                "vloss/dataloader_idx_0",
+                args.drop_bad_seeds,
+                args.exclude_by_a_smoothing,
+                descending=True,
+            ),
         )
-        for name, table_config in table_configs.items()
-    }
-    read_metrics_dfs_excluded = {
-        name: exclude_worst_performing_by_metric(
-            read_metrics_df_at_limit,
-            "vexact/dataloader_idx_0",
-            args.drop_bad_seeds,
-            args.exclude_by_a_smoothing,
-        )
-        for name, read_metrics_df_at_limit in read_metrics_dfs_at_limit.items()
-    }
+        for config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config
+    ]
 
-    read_metrics_dfs_best_at_0 = {
-        name: get_top_values_for_corresponding_value(
-            read_metrics_df_excluded,
-            "vexact/dataloader_idx_0",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-        for name, read_metrics_df_excluded in read_metrics_dfs_excluded.items()
-    }
-    read_metrics_dfs_best_at_6 = {
-        name: get_top_values_for_corresponding_value(
-            read_metrics_df_excluded,
-            "vexact/dataloader_idx_6",
-            GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-            args.result_smoothing,
-        ).describe()
-        for name, read_metrics_df_excluded in read_metrics_dfs_excluded.items()
-    }
+    read_metrics_dfs_best_at_0 = match_to_configs(
+        MATCH_CONFIGS,
+        [
+            (
+                config,
+                get_top_values_for_corresponding_value(
+                    read_metrics_df_excluded,
+                    "vloss/dataloader_idx_0",
+                    GSCAN_TEST_SPLIT_DATALOADER_NAMES,
+                    args.result_smoothing,
+                    descending=True,
+                ).describe(),
+            )
+            for config, read_metrics_df_excluded in read_metrics_dfs_excluded
+        ],
+    )
 
     results_table = (
         pd.concat(
