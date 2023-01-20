@@ -13,16 +13,19 @@ import pytorch_lightning as pl
 
 import faiss
 from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.preprocessing import StandardScaler
 from pytorch_lightning.loggers import TensorBoardLogger
 from positional_encodings.torch_encodings import PositionalEncoding1D
-from collections import defaultdict
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import (
     PaddingDataset,
     MapDataset,
 )
-from gscan_metaseq2seq.util.load_data import load_data_directories
+from gscan_metaseq2seq.util.load_data import (
+    load_data_directories,
+    load_concat_pickle_files_from_directory,
+)
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
@@ -185,6 +188,8 @@ def gandr_like_search(
     index,
     train_dataset,
     tfidf_transformer,
+    scaler,
+    state_autoencoder_transformer,
     dataloader,
     sample_n,
     decode_len,
@@ -196,9 +201,19 @@ def gandr_like_search(
 ):
     transformer_prediction_model.to(device)
     transformer_prediction_model.eval()
+    state_autoencoder_transformer.to(device)
+    state_autoencoder_transformer.eval()
 
     for batch in dataloader:
         instruction, targets, state = batch
+
+        with torch.inference_mode():
+            state_encodings = (
+                state_autoencoder_transformer.encode_to_vector(state.to(device))
+                .detach()
+                .cpu()
+                .numpy()
+            )
 
         predicted_targets, logits = transformer_predict(
             transformer_prediction_model,
@@ -207,18 +222,22 @@ def gandr_like_search(
             decode_len,
         )
 
-        near_neighbour_distances_batch, near_neighbour_indices_batch = index.search(
-            to_tfidf(
-                tfidf_transformer,
-                to_count_matrix(
-                    [
-                        (i[i != pad_word_idx], t[t != pad_action_idx])
-                        for i, t in zip(instruction, predicted_targets)
-                    ],
-                    word_vocab_size,
-                    action_vocab_size,
-                ),
+        tfidf_vectors = to_tfidf(
+            tfidf_transformer,
+            to_count_matrix(
+                [
+                    (i[i != pad_word_idx], t[t != pad_action_idx])
+                    for i, t in zip(instruction, predicted_targets)
+                ],
+                word_vocab_size,
+                action_vocab_size,
             ),
+        )
+        unscaled_vectors = np.concatenate([tfidf_vectors, state_encodings], axis=-1)
+        scaled_vectors = scaler.transform(unscaled_vectors)
+
+        near_neighbour_distances_batch, near_neighbour_indices_batch = index.search(
+            scaled_vectors,
             sample_n,
         )
 
@@ -244,13 +263,259 @@ def gandr_like_search(
             )
 
 
+class StateCLIPTransformer(pl.LightningModule):
+    def __init__(
+        self,
+        lr=0.0001,
+        wd=1e-2,
+        emb_dim=128,
+        nlayers=8,
+        nhead=4,
+        dropout=0.1,
+        norm_first=False,
+        decay_power=-1,
+        warmup_proportion=0.14,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        self.pos_encoding = PositionalEncoding1D(emb_dim)
+        self.embedding = BOWEmbedding(16, 7, emb_dim)
+        self.projection = nn.Linear(emb_dim * 7, emb_dim)
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                d_model=emb_dim,
+                dim_feedforward=emb_dim * 4,
+                dropout=dropout,
+                nhead=nhead,
+                norm_first=norm_first,
+            ),
+            num_layers=nlayers,
+        )
+        self.latent = nn.Parameter(torch.randn(emb_dim))
+        self.project = nn.Linear(emb_dim, 16 * 7)
+
+    def configure_optimizers(self):
+        return transformer_optimizer_config(
+            self,
+            self.hparams.lr,
+            weight_decay=self.hparams.wd,
+            decay_power=self.hparams.decay_power,
+            warmup_proportion=self.hparams.warmup_proportion,
+        )
+
+    def encode_to_vector(self, state):
+        mask = (state == 0).all(dim=-1)
+        embedded_state = self.projection(self.embedding(state))
+        latent_seq = self.latent[None, None].expand(embedded_state.shape[0], 1, -1)
+
+        encoded_state_with_latent = self.transformer_encoder(
+            torch.cat([embedded_state, latent_seq], dim=1).transpose(1, 0),
+            src_key_padding_mask=torch.cat(
+                [mask, torch.zeros_like(mask[:, :1])], dim=1
+            ),
+        ).transpose(0, 1)
+
+        return encoded_state_with_latent[:, -1]
+
+    def forward(self, state):
+        mask = (state == 0).all(dim=-1)
+        embedded_state = self.projection(self.embedding(state))
+        latent_seq = self.latent[None, None].expand(embedded_state.shape[0], 1, -1)
+
+        orig_key_padding_mask = torch.cat([mask, torch.zeros_like(mask[:, :1])], dim=1)
+        dropout_key_padding_mask = (
+            torch.rand_like(orig_key_padding_mask.float()) < 0.3
+        ) * orig_key_padding_mask
+
+        orig_encoded_state_with_latent = self.transformer_encoder(
+            torch.cat([embedded_state, latent_seq], dim=1).transpose(1, 0),
+            src_key_padding_mask=torch.cat(
+                [mask, torch.zeros_like(mask[:, :1])], dim=1
+            ),
+        ).transpose(0, 1)
+
+        dropout_encoded_state_with_latent = self.transformer_encoder(
+            torch.cat([embedded_state, latent_seq], dim=1).transpose(1, 0),
+            src_key_padding_mask=dropout_key_padding_mask,
+        ).transpose(0, 1)
+
+        return orig_encoded_state_with_latent[
+            :, -1
+        ] @ dropout_encoded_state_with_latent[:, -1].transpose(0, 1)
+
+    def training_step(self, x, idx):
+        (state,) = x
+
+        # Split into the seven components, then flatten
+        # into one big sequence
+        outer_product = self.forward(state)
+
+        label = torch.arange(state.shape[0], device=state.device, dtype=torch.long)
+        loss = (
+            F.cross_entropy(outer_product, label)
+            + F.cross_entropy(outer_product.transpose(1, 0), label)
+        ) / 2
+
+        self.log("tloss", loss)
+
+        return loss
+
+
+def train_state_autoencoder(
+    weights_path,
+    dataset,
+    seed,
+    mlm_train_iterations,
+    batch_size,
+    hidden_size=128,
+    nlayers=4,
+    nhead=8,
+    device="cpu",
+):
+    dropout_p = 0.1
+    train_batch_size = batch_size
+    batch_size_mult = 1
+    dataset_name = "gscan"
+    check_val_every = 8000
+
+    exp_name = "state_autoencoder"
+    model_name = f"transformer_l_{nlayers}_h_{nhead}_d_{hidden_size}"
+    dataset_name = dataset_name
+    effective_batch_size = train_batch_size * batch_size_mult
+    exp_name = f"{exp_name}_s_{seed}_m_{model_name}_it_{mlm_train_iterations}_b_{effective_batch_size}_d_{dataset_name}_drop_{dropout_p}"
+    model_dir = f"models/{exp_name}/{model_name}"
+    model_path = f"{model_dir}/{exp_name}.pt"
+    print(model_path)
+    print(
+        f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
+    )
+
+    train_dataloader = DataLoader(
+        dataset, batch_size=train_batch_size, pin_memory=True, shuffle=True
+    )
+
+    logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
+
+    model = StateCLIPTransformer(
+        nlayers=nlayers,
+        nhead=nhead,
+        emb_dim=hidden_size,
+        dropout=dropout_p,
+        norm_first=True,
+        lr=1e-4,
+        decay_power=-1,
+        warmup_proportion=0.1,
+    )
+    print(model)
+
+    if weights_path:
+        model.load_state_dict(torch.load(weights_path))
+
+    trainer = pl.Trainer(
+        logger=[
+            TensorBoardLogger(logs_root_dir),
+            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
+        ],
+        callbacks=[pl.callbacks.LearningRateMonitor()],
+        max_steps=mlm_train_iterations,
+        num_sanity_val_steps=10,
+        gpus=1 if device == "cuda" else 0,
+        precision=16 if device == "cuda" else 32,
+        default_root_dir=logs_root_dir,
+        accumulate_grad_batches=batch_size_mult,
+        gradient_clip_val=0.2,
+    )
+
+    trainer.fit(model, train_dataloader)
+
+    return model
+
+
+def load_state_encodings(directory):
+    return {
+        k: load_concat_pickle_files_from_directory(os.path.join(directory, k))
+        for k in filter(
+            lambda x: os.path.isdir(os.path.join(directory, x)), os.listdir(directory)
+        )
+    }
+
+
+def save_state_encodings(state_encodings_dict, directory):
+    for key, encodings in state_encodings_dict.items():
+        path = os.path.join(directory, key)
+        os.makedirs(path, exist_ok=True)
+
+        for i, batch in enumerate(batched(encodings, 10000)):
+            with open(os.path.join(path, f"{i}.pb"), "wb") as f:
+                pickle.dump(np.stack(batch), f)
+
+
+def generate_state_encodings(
+    state_autoencoder_transformer,
+    train_demonstrations,
+    valid_demonstrations_dict,
+    batch_size,
+    device="cpu",
+):
+    dataloaders = {
+        split: DataLoader(
+            PaddingDataset(
+                MapDataset(demos, lambda x: (x[-1],)),
+                ((36, 7),),
+                (0,),
+            ),
+            batch_size=batch_size,
+            pin_memory=True,
+        )
+        for split, demos in zip(
+            itertools.chain.from_iterable(
+                [valid_demonstrations_dict.keys(), ["train"]]
+            ),
+            itertools.chain.from_iterable(
+                [valid_demonstrations_dict.values(), [train_demonstrations]]
+            ),
+        )
+    }
+
+    state_autoencoder_transformer.to(device)
+    state_autoencoder_transformer.eval()
+
+    with torch.inference_mode():
+        encoded_states = {
+            split: np.concatenate(
+                list(
+                    map(
+                        lambda x: state_autoencoder_transformer.encode_to_vector(
+                            x[0].long().to(device)
+                        )
+                        .detach()
+                        .cpu()
+                        .numpy(),
+                        tqdm(dl),
+                    )
+                )
+            )
+            for split, dl in tqdm(dataloaders.items())
+        }
+
+    return encoded_states
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--training-data", type=str, required=True)
-    parser.add_argument("--validation-data-directory", type=str, required=True)
     parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--load-transformer-model", type=str, required=True)
+    parser.add_argument("--save-transformer-model", type=str)
+    parser.add_argument("--load-transformer-model", type=str)
+    parser.add_argument("--transformer-iterations", type=int, default=150000)
+    parser.add_argument(
+        "--state-autoencoder-transformer-iterations", type=int, default=50000
+    )
+    parser.add_argument("--load-state-autoencoder-transformer", type=str)
+    parser.add_argument("--save-state-autoencoder-transformer", type=str)
+    parser.add_argument("--load-state-encodings", type=str)
+    parser.add_argument("--save-state-encodings", type=str)
     parser.add_argument("--data-output-directory", type=str, required=True)
     parser.add_argument(
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
@@ -259,6 +524,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--hidden-size", type=int, default=128)
     args = parser.parse_args()
 
     (
@@ -278,36 +544,100 @@ def main():
 
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
-    transformer_model_weights = torch.load(args.load_transformer_model)
-    transformer_model = TransformerLearner(
-        **transformer_model_weights["hyper_parameters"]
+    state_autoencoder_transformer = train_state_autoencoder(
+        args.load_state_autoencoder_transformer,
+        PaddingDataset(
+            MapDataset(train_demonstrations, lambda x: (x[-1],)), ((36, 7),), (0,)
+        ),
+        args.seed,
+        args.state_autoencoder_transformer_iterations
+        if args.save_state_autoencoder_transformer
+        else 0,
+        args.batch_size,
+        hidden_size=args.hidden_size,
+        device=args.device,
     )
-    transformer_model.load_state_dict(transformer_model_weights["state_dict"])
+
+    if args.save_state_autoencoder_transformer:
+        torch.save(
+            state_autoencoder_transformer.state_dict(),
+            args.save_state_autoencoder_transformer,
+        )
+
+    transformer_validation_datasets = [
+        Subset(
+            PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
+            np.random.permutation(512),
+        )
+        for data in valid_demonstrations_dict.values()
+    ]
+
+    transformer_model = train_transformer(
+        args.load_transformer_model,
+        PaddingDataset(
+            train_demonstrations,
+            (8, 128, (36, 7)),
+            (
+                pad_word,
+                pad_action,
+                0,
+            ),
+        ),
+        transformer_validation_datasets,
+        args.seed,
+        args.transformer_iterations if args.save_transformer_model else 0,
+        args.batch_size,
+        len(WORD2IDX),
+        len(ACTION2IDX),
+        pad_word,
+        pad_action,
+        ACTION2IDX["[sos]"],
+        ACTION2IDX["[eos]"],
+        hidden_size=128,
+        nlayers=8,
+        nhead=8,
+        device=args.device,
+    )
+
+    if args.save_transformer_model:
+        torch.save(transformer_model.state_dict(), args.save_transformer_model)
 
     transformer_model_trainer = pl.Trainer(
         gpus=1 if torch.cuda.is_available() else 0,
         precision=16 if torch.cuda.is_available() else None,
     )
+
     transformer_model_trainer.validate(
         transformer_model,
         [
             DataLoader(
-                Subset(
-                    PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
-                    np.random.permutation(512),
-                ),
+                ds,
                 batch_size=16,
                 pin_memory=True,
             )
-            for data in valid_demonstrations_dict.values()
+            for ds in transformer_validation_datasets
         ],
     )
 
-    print(args.offset, args.offset + args.limit)
+    print(args.offset, args.offset + (0 if args.limit is None else args.limit))
+
+    if args.load_state_encodings:
+        state_encodings_by_split = load_state_encodings(args.load_state_encodings)
+    else:
+        state_encodings_by_split = generate_state_encodings(
+            state_autoencoder_transformer,
+            train_demonstrations,
+            valid_demonstrations_dict,
+            args.batch_size,
+            device=args.device,
+        )
+
+    if args.save_state_encodings:
+        save_state_encodings(state_encodings_by_split, args.save_state_encodings)
 
     # Make an index from the training data
     np.random.seed(args.seed)
-    index = faiss.IndexFlatL2(len(WORD2IDX) + len(ACTION2IDX))
+    index = faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX) + args.hidden_size)
     count_matrix = to_count_matrix(
         [
             (instruction, actions)
@@ -318,7 +648,18 @@ def main():
     )
     tfidf_transformer = TfidfTransformer()
     tfidf_transformer.fit(count_matrix)
-    index.add(tfidf_transformer.transform(count_matrix).todense().astype("float32"))
+    unscaled_vectors = np.concatenate(
+        [
+            tfidf_transformer.transform(count_matrix).todense().astype("float32"),
+            state_encodings_by_split["train"],
+        ],
+        axis=-1,
+    )
+    scaler = StandardScaler()
+    scaler.fit(unscaled_vectors)
+    scaled_vectors = scaler.transform(unscaled_vectors)
+
+    index.add(scaled_vectors)
 
     dataloader_splits = {
         split: DataLoader(
@@ -361,6 +702,8 @@ def main():
                     index,
                     train_demonstrations,
                     tfidf_transformer,
+                    scaler,
+                    state_autoencoder_transformer,
                     tqdm(dataloader),
                     16,
                     decode_len=128,
