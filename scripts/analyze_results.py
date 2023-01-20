@@ -113,16 +113,21 @@ def format_model_name(experiment_config, include_hparams=True):
     )
 
 
-def format_log_path(experiment_config, params, model_include_hparams=False):
-    return os.path.join(
+def format_log_path(logs_dir, experiment_config, params, model_include_hparams=True):
+    # We have to do some testing of paths here, which doesn't scale all
+    # that well, but its fine for a small number of paths
+    base_path = os.path.join(
         format_experiment_name(experiment_config, params),
         format_model_name(experiment_config, include_hparams=model_include_hparams),
         experiment_config["dataset"],
         str(params["seed"]),
         "lightning_logs",
-        "100",
-        "metrics.csv",
     )
+
+    if os.path.exists(os.path.join(logs_dir, base_path, "100", "metrics.csv")):
+        return os.path.join(base_path, "100", "metrics.csv")
+
+    return os.path.join(base_path, "version_100", "metrics.csv")
 
 
 BASE_EXPERIMENT_CONFIGS = {
