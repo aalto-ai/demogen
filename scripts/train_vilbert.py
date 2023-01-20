@@ -425,7 +425,10 @@ class ViLBERTLeaner(pl.LightningModule):
         instruction_mask = queries == self.pad_word_idx
         state_mask = (states == 0).all(dim=-1)
         encoded, encoding_mask = self.encoder(
-            states, queries, state_key_padding_mask=state_mask, instruction_key_padding_mask=instruction_mask
+            states,
+            queries,
+            state_key_padding_mask=state_mask,
+            instruction_key_padding_mask=instruction_mask,
         )
         padding = torch.cat(
             [state_mask, instruction_mask],
