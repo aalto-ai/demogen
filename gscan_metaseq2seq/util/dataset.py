@@ -5,17 +5,38 @@ from torch.utils.data import Dataset, IterableDataset
 from .padding import pad_to, recursive_pad_array
 
 
-class MapDataset(Dataset):
-    def __init__(self, dataset, func):
+class ReorderSupportsByDistanceDataset(Dataset):
+    def __init__(self, dataset, limit):
         super().__init__()
         self.dataset = dataset
-        self.func = func
+        self.limit = limit
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        return self.func(self.dataset[idx])
+        (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+            similarity_logit,
+        ) = self.dataset[idx]
+
+        order = (-np.array(similarity_logit)).argsort()[: self.limit]
+
+        return (
+            query_state,
+            [support_state[i] for i in order]
+            if isinstance(support_state, list)
+            else support_state,
+            queries,
+            targets,
+            [x_supports[i] for i in order],
+            [y_supports[i] for i in order],
+        )
 
 
 class PaddingDataset(Dataset):
