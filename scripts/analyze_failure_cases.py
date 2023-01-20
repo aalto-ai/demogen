@@ -14,9 +14,16 @@ import Levenshtein
 
 from tqdm.auto import tqdm
 
-from gscan_metaseq2seq.util.dataset import PaddingDataset
+from gscan_metaseq2seq.util.load_data import load_data_directories
+from gscan_metaseq2seq.util.dataset import (
+    PaddingDataset,
+    ReorderSupportsByDistanceDataset,
+    MapDataset,
+)
 from train_meta_seq2seq_transformer import ImaginationMetaLearner
-from train_transformer import TransformerLearner
+from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
+    TransformerLearner,
+)
 
 
 def softmax(logits):
@@ -485,10 +492,33 @@ def main():
     parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
     parser.add_argument("--transformer-checkpoint", type=str, required=True)
     parser.add_argument("--disable-cuda", action="store_false")
+    parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-actions-to", type=int, default=128)
+    parser.add_argument("--pad-state-to", type=int, default=36)
     args = parser.parse_args()
 
-    with open(f"{args.baseline_data_directory}/dictionary.pb", "rb") as f:
-        WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary = pickle.load(f)
+    with open(f"{args.compositional_splits}", "r") as f:
+        gscan_dataset = json.load(f)
+
+    (
+        (
+            WORD2IDX,
+            ACTION2IDX,
+            color_dictionary,
+            noun_dictionary,
+        ),
+        (train_demonstrations, valid_demonstrations_dict),
+    ) = load_data_directories(
+        args.baseline_data_directory, args.dictionary, limit_load=args.limit_load
+    )
+
+    (
+        _,
+        (meta_train_demonstrations, meta_valid_demonstrations_dict),
+    ) = load_data_directories(
+        args.metalearn_data_directory, args.dictionary, limit_load=args.limit_load
+    )
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
     IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
@@ -498,24 +528,41 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
-    with open(f"{args.compositional_splits}", "r") as f:
-        gscan_dataset = json.load(f)
-
-    with open(f"{args.metalearn_data_directory}/valid/h.pb", "rb") as f:
-        gscan_metalearn_split_h_demonstrations = pickle.load(f)
-
-    with open(f"{args.baseline_data_directory}/valid/h.pb", "rb") as f:
-        gscan_split_h_demonstrations = pickle.load(f)
-
     dataset = PaddingDataset(
-        gscan_metalearn_split_h_demonstrations,
-        (None, None, 8, 72, (8, 8), (8, 72)),
-        (None, None, pad_word, pad_action, pad_word, pad_action),
+        ReorderSupportsByDistanceDataset(
+            MapDataset(
+                MapDataset(
+                    Subset(
+                        meta_valid_demonstrations_dict["h"],
+                    ),
+                    lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
+                ),
+                lambda x: (
+                    x[0],
+                    [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                    x[2],
+                    x[3],
+                    x[4],
+                    x[5],
+                    x[6],
+                ),
+            ),
+            args.metalearn_demonstrations_limit,
+        ),
+        (
+            (args.pad_state_to, 7),
+            (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
+            args.pad_instructions_to,
+            args.pad_actions_to,
+            (args.metalearn_demonstrations_limit, args.pad_instructions_to),
+            (args.metalearn_demonstrations_limit, args.pad_actions_to),
+        ),
+        (0, 0, pad_word, pad_action, pad_word, pad_action),
     )
     transformer_dataset = PaddingDataset(
-        gscan_split_h_demonstrations,
-        (8, 72, None),
-        (pad_word, pad_action, None),
+        valid_demonstrations_dict["h"],
+        (8, 128, (36, 7)),
+        (pad_word, pad_action, 0),
     )
 
     (
@@ -560,7 +607,7 @@ def main():
     # Measure edit distance between predicted targets and inputs
     generate_edit_distance_plots(
         dataset,
-        gscan_split_h_demonstrations,
+        valid_demonstrations_dict["h"],
         predicted_targets_stacked,
         exacts_stacked,
         transformer_predicted_targets_stacked,
