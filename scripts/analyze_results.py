@@ -52,11 +52,11 @@ def get_top_values_for_corresponding_value(
     return pd.DataFrame(
         np.stack(
             [
-                nonrolling_df[cols].iloc[argwhere].values
+                nonrolling_df[values].iloc[argwhere].values
                 for argwhere, nonrolling_df in zip(argwheres, nonrolling_dfs)
             ]
         ),
-        columns=cols,
+        columns=values,
     )
 
 
