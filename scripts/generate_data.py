@@ -813,7 +813,7 @@ def generate_relevant_supports_oracle(
         allow_any_example=allow_any_example,
         num_demos=num_demos,
         pick_random=pick_random,
-        limit_verb_adverb=limit_verb_adverb
+        limit_verb_adverb=limit_verb_adverb,
     )
 
     if not relevant_instructions:
@@ -865,7 +865,7 @@ def generate_instructions_find_support_in_any_layout(
         n_description_options=n_description_options,
         demonstrate_target=demonstrate_target,
         allow_demonstration_splits=allow_demonstration_splits,
-        limit_verb_adverb=limit_verb_adverb
+        limit_verb_adverb=limit_verb_adverb,
     )
 
     for support_instruction_command, target_object in relevant_instructions:
