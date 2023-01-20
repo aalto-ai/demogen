@@ -13,7 +13,9 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
 from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
-from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import TransformerLearner
+from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
+    TransformerLearner,
+)
 
 
 def main():
