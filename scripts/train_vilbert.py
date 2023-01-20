@@ -526,6 +526,7 @@ def main():
     parser.add_argument("--iterations", type=int, default=2500000)
     parser.add_argument("--disable-shuffle", action="store_true")
     parser.add_argument("--check-val-every", type=int, default=1000)
+    parser.add_argument("--limit-val-size", type=int, default=None)
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
@@ -672,7 +673,12 @@ def main():
         [
             DataLoader(
                 PaddingDataset(
-                    demonstrations,
+                    Subset(
+                        demonstrations,
+                        np.random.permutation(len(demonstrations))[
+                            : args.limit_val_size
+                        ],
+                    ),
                     (
                         args.pad_instructions_to,
                         args.pad_actions_to,
