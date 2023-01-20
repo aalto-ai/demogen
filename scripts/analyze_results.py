@@ -8,12 +8,22 @@ def truncate_at_key(df, key, limit):
     return df[df[key] <= limit]
 
 
-def exclude_worst_performing_by_metric(dfs, metric, n_exclude, rolling=50):
+def exclude_worst_performing_by_metric(
+    dfs, metric, n_exclude, rolling=50, descending=False
+):
     best_rolling_max = [
-        (k, dfs[k][metric].dropna().rolling(rolling).mean().fillna(0).max())
+        (
+            k,
+            getattr(
+                dfs[k][metric].dropna().rolling(rolling).mean().fillna(0),
+                "max" if not descending else "min",
+            )(),
+        )
         for k in range(len(dfs))
     ]
-    sort_keys = sorted(best_rolling_max, key=lambda k: k[1])
+    sort_keys = sorted(
+        best_rolling_max, key=lambda k: k[1] if not descending else -1 * k[1]
+    )
     print(sort_keys)
 
     return [dfs[k[0]] for k in sort_keys[n_exclude:]]
