@@ -400,16 +400,22 @@ def generate_words_options(words, possible_options, limit_to_words):
     return [o for o in possible_options if all([w in words for w in o])]
 
 
-def generate_limited_adverb_verb_combos(possible_verbs, possible_adverbs, verb_words_in_instruction, adverb_words_in_instruction):
-    for possible_verb, possible_adverb in itertools.product(possible_verbs, possible_adverbs):
-        verb_is_in_instruction = all([w in verb_words_in_instruction for w in possible_verb])
-        adverb_is_in_instruction = (
-            (
-                possible_adverb and all([w in adverb_words_in_instruction for w in possible_adverb])
-            ) or (
-                not adverb_words_in_instruction and not possible_adverb
-            )
+def generate_limited_adverb_verb_combos(
+    possible_verbs,
+    possible_adverbs,
+    verb_words_in_instruction,
+    adverb_words_in_instruction,
+):
+    for possible_verb, possible_adverb in itertools.product(
+        possible_verbs, possible_adverbs
+    ):
+        verb_is_in_instruction = all(
+            [w in verb_words_in_instruction for w in possible_verb]
         )
+        adverb_is_in_instruction = (
+            possible_adverb
+            and all([w in adverb_words_in_instruction for w in possible_adverb])
+        ) or (not adverb_words_in_instruction and not possible_adverb)
 
         # If the adverb is in the instruction, we can generate all possible verbs
         if adverb_is_in_instruction:
