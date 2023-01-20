@@ -258,9 +258,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
     parser.add_argument("--limit", type=int, default=30000)
-    parser.add_argument("--ablations-limit", type=int, default=30000)
     parser.add_argument("--drop-bad-seeds", type=int, default=3)
-    parser.add_argument("--ablations-drop-bad-seeds", type=int, default=3)
     parser.add_argument("--exclude-by-a-smoothing", type=int, default=50)
     parser.add_argument("--result-smoothing", type=int, default=1)
     parser.add_argument("--exclude-seeds", nargs="*")
@@ -306,8 +304,8 @@ def main():
         pd.concat(
             [
                 read_metrics_dfs_best_at_0["transformer_full"].T["mean"],
-                read_metrics_dfs_best_at_0["gscan_oracle_full"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_oracle_full"].T["mean"],
+                read_metrics_dfs_best_at_0["i2g"].T["mean"],
+                read_metrics_dfs_best_at_0["gandr"].T["mean"],
             ],
             axis=1,
         )
@@ -319,8 +317,8 @@ def main():
             pd.concat(
                 [
                     read_metrics_dfs_best_at_0["transformer_full"].T["std"],
-                    read_metrics_dfs_best_at_0["gscan_oracle_full"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_oracle_full"].T["std"],
+                    read_metrics_dfs_best_at_0["i2g"].T["std"],
+                    read_metrics_dfs_best_at_0["gandr"].T["std"],
                 ],
                 axis=1,
             )
@@ -329,20 +327,17 @@ def main():
             .reset_index()
         )
     ).T
-    results_table.index = ["index", "A", "B", "C", "D", "E", "F", "H"]
-    results_table.columns = ["Transformer", "Ours(o, A)", "Ours(o)"]
+    results_table.index = ["index", "A", "B", "C", "D", "E", "F", "G", "H"]
+    results_table.columns = ["ViLBERT", "DemoGen", "GandR"]
     print("Table 1")
     print(results_table.to_latex(float_format="%.2f", escape=False))
 
     ablation_study_table = (
         pd.concat(
             [
-                read_metrics_dfs_best_at_6["gscan_oracle_ablations"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_oracle_noshuffle"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_imagine_actions"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_metalearn_distractors"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_metalearn_only_random"].T["mean"],
-                read_metrics_dfs_best_at_6["gscan_metalearn_sample_environments"].T[
+                read_metrics_dfs_best_at_0["gscan_oracle_full"].T["mean"],
+                read_metrics_dfs_best_at_0["gscan_metalearn_only_random"].T["mean"],
+                read_metrics_dfs_best_at_0["gscan_metalearn_sample_environments"].T[
                     "mean"
                 ],
             ],
@@ -355,12 +350,9 @@ def main():
         + (
             pd.concat(
                 [
-                    read_metrics_dfs_best_at_6["gscan_oracle_ablations"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_oracle_noshuffle"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_imagine_actions"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_metalearn_distractors"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_metalearn_only_random"].T["std"],
-                    read_metrics_dfs_best_at_6["gscan_metalearn_sample_environments"].T[
+                    read_metrics_dfs_best_at_0["gscan_oracle_full"].T["std"],
+                    read_metrics_dfs_best_at_0["gscan_metalearn_only_random"].T["std"],
+                    read_metrics_dfs_best_at_0["gscan_metalearn_sample_environments"].T[
                         "std"
                     ],
                 ],
@@ -371,14 +363,11 @@ def main():
             .reset_index()
         )
     )
-    ablation_study_table.columns = ["index", "A", "B", "C", "D", "E", "F", "H"]
+    ablation_study_table.columns = ["index", "A", "B", "C", "D", "E", "F", "G", "H"]
     ablation_study_table.index = [
-        "Ours(o, A)",
-        "No permutations",
-        "Transformer Actions",
-        "Distractors",
-        "Random Instructions",
-        "Different States",
+        "Apriori Oracle",
+        "Random",
+        "Retrieval",
     ]
     ablation_study_table = ablation_study_table.drop("index", axis=1)
 
