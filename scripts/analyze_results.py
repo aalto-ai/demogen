@@ -258,10 +258,10 @@ def main():
             exclude_worst_performing_by_metric(
                 # Take the df from the seed/df pair
                 list(zip(*read_metrics_df_at_limit_and_seeds))[1],
-                "vloss/dataloader_idx_0",
+                "vexact/dataloader_idx_0",
                 args.drop_bad_seeds,
                 args.exclude_by_a_smoothing,
-                descending=True,
+                descending=False,
             ),
         )
         for config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config
@@ -274,10 +274,10 @@ def main():
                 config,
                 get_top_values_for_corresponding_value(
                     read_metrics_df_excluded,
-                    "vloss/dataloader_idx_0",
+                    "vexact/dataloader_idx_0",
                     GSCAN_TEST_SPLIT_DATALOADER_NAMES,
                     args.result_smoothing,
-                    descending=True,
+                    descending=False,
                 ).describe(),
             )
             for config, read_metrics_df_excluded in read_metrics_dfs_excluded
