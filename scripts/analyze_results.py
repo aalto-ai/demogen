@@ -132,22 +132,6 @@ def format_log_path(logs_dir, experiment_config, params, model_include_hparams=T
     return os.path.join(base_path, "version_100", "metrics.csv")
 
 
-def read_all_csv_files_for_seeds_and_limit(logs_dir, experiment_config, limit):
-    return [
-        truncate_at_key(
-            pd.read_csv(
-                os.path.join(
-                    logs_dir,
-                    format_log_path(logs_dir, experiment_config, {"seed": seed}),
-                )
-            ),
-            "step",
-            limit,
-        )
-        for seed in range(10)
-    ]
-
-
 def read_csv_and_truncate(path, truncate_key, truncate_value):
     df = pd.read_csv(path)
     truncated = truncate_at_key(df, truncate_key, truncate_value)
