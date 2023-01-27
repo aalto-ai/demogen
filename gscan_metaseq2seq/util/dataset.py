@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
-
+import random
 from .padding import pad_to, recursive_pad_array
 
 
@@ -69,3 +69,26 @@ class ReshuffleOnIndexZeroDataset(Dataset):
             self.indices = torch.randperm(len(self.dataset))
 
         return self.dataset[self.indices[i]]
+
+
+class AddRandomNoiseDataset(Dataset):
+    def __init__(self, dataset, ACTION2IDX, prob=0.05):
+        super().__init__()
+        self.dataset = dataset
+        self.ACTION2IDX = ACTION2IDX
+        self.prob = prob
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        item = self.dataset[i]
+
+        rand = random.randrange(0, 1)
+
+        if rand <= self.prob:
+            return (item[0], np.insert(item[1], np.random.choice(len(item[1]), size=1),
+                             np.random.choice(len(self.ACTION2IDX) - 3, size=1)), item[2])
+
+        return item
+
