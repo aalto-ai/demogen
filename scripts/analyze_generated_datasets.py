@@ -331,6 +331,7 @@ def main():
         dataset_summaries = {
             dataset: load_data_and_make_hit_results(
                 os.path.join(args.data_directory, dataset),
+                limit_load=args.limit_load,
                 limit_demos=args.limit_demos,
             )
             for dataset in args.datasets
