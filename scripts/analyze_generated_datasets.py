@@ -79,7 +79,7 @@ def find_target_object(state, size, color, noun, idx2word, idx2color, idx2noun):
     return sorted_by_size[0]
 
 
-def compute_statistics_for_example(example, word2idx, colors, nouns):
+def compute_statistics_for_example(example, word2idx, colors, nouns, limit_demos=None):
     idx2word = [w for w in word2idx]
     idx2color = [c for c in colors]
     idx2noun = [n for n in nouns]
@@ -98,13 +98,13 @@ def compute_statistics_for_example(example, word2idx, colors, nouns):
     )
     segmented_support_queries = [
         segment_instruction(support_instruction, word2idx, colors, nouns)
-        for support_instruction in support_query
+        for support_instruction in support_query[:limit_demos]
     ]
     support_state = (
         [support_state] * len(support_query)
         if isinstance(support_state[0], np.ndarray)
         else support_state
-    )
+    )[:limit_demos]
 
     query_agent_position = find_agent_position(state)
     query_target_object = find_target_object(
@@ -253,7 +253,11 @@ def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=
                 [
                     summarize_hits(
                         compute_statistics_for_example(
-                            example, WORD2IDX, color_dictionary, noun_dictionary
+                            example,
+                            WORD2IDX,
+                            color_dictionary,
+                            noun_dictionary,
+                            limit_demos=limit_demos,
                         )
                     )
                     for example in tqdm(examples, desc=f"Split {split}")
@@ -312,6 +316,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-directory", required=True)
     parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--limit-demos", type=int, default=None)
     parser.add_argument("--load-analyzed", type=str)
     parser.add_argument("--datasets", nargs="+")
     parser.add_argument(
@@ -325,7 +330,8 @@ def main():
     else:
         dataset_summaries = {
             dataset: load_data_and_make_hit_results(
-                os.path.join(args.data_directory, dataset), limit_load=None
+                os.path.join(args.data_directory, dataset),
+                limit_demos=args.limit_demos,
             )
             for dataset in args.datasets
         }
