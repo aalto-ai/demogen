@@ -1145,6 +1145,42 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
         return decoded, logits, exacts
 
 
+def compress_permute(arrays, generator, pad_idx):
+    concat_array = arrays.reshape(-1)
+    max_index = concat_array.max()
+    putback_values = np.arange(max_index + 1, dtype=int)
+    putback_mask = putback_values >= pad_idx
+
+    # First create an array of 1s where the indices are
+    zeros = np.zeros(max_index + 1, dtype=int)
+    zeros[concat_array] = 1
+    zeros[putback_mask] = 0
+
+    zeros_bool = zeros.astype(bool)
+
+    # Then determine how many non-zero elements we have in that array
+    num_nonzero = zeros[zeros_bool].shape[0]
+
+    # Then assign the nonzero elements to something
+    # in a permutation in the range of num_nonzero
+    zeros[zeros_bool] = generator.permutation(num_nonzero)
+
+    # Pad index gets mapped back to pad_idx
+    zeros[putback_mask] = putback_values[putback_mask]
+
+    # Now look up the original indices for each array
+    # in the permutation
+    return zeros[arrays]
+
+
+def regular_permute(arrays, generator, pad_idx, categories):
+    # Do the permutation
+    permutation = np.arange(x_categories)
+    permutation[0:pad_idx] = permutation[0:pad_idx][self.generator.permutation(pad_idx)]
+
+    return permutation[arrays]
+
+
 class PermuteActionsDataset(Dataset):
     def __init__(
         self,
@@ -1154,6 +1190,7 @@ class PermuteActionsDataset(Dataset):
         pad_word_idx,
         pad_action_idx,
         shuffle=True,
+        compress=True,
         seed=0,
     ):
         super().__init__()
@@ -1163,6 +1200,7 @@ class PermuteActionsDataset(Dataset):
         self.pad_word_idx = pad_word_idx
         self.pad_action_idx = pad_action_idx
         self.shuffle = shuffle
+        self.compress = compress
         self.generator = np.random.default_rng(seed)
 
     def state_dict(self):
@@ -1182,18 +1220,32 @@ class PermuteActionsDataset(Dataset):
 
         # Compute permutations of outputs
         if self.shuffle:
-            # Do the permutation
-            x_permutation[0 : self.pad_word_idx] = x_permutation[0 : self.pad_word_idx][
-                self.generator.permutation(self.pad_word_idx)
-            ]
-            y_permutation[0 : self.pad_action_idx] = y_permutation[
-                0 : self.pad_action_idx
-            ][self.generator.permutation(self.pad_action_idx)]
-
-            x_supports = x_permutation[x_supports]
-            queries = x_permutation[queries]
-            y_supports = y_permutation[y_supports]
-            targets = y_permutation[targets]
+            if self.compress:
+                query_and_x_supports = compress_permute(
+                    np.concatenate([queries[None], x_supports], axis=0),
+                    self.generator,
+                    self.pad_word_idx,
+                )
+                query_and_y_supports = compress_permute(
+                    np.concatenate([targets[None], y_supports], axis=0),
+                    self.generator,
+                    self.pad_action_idx,
+                )
+            else:
+                query_and_x_supports = regular_permute(
+                    np.concatenate([queries[None], x_supports], axis=0),
+                    self.generator,
+                    self.pad_word_idx,
+                    self.x_categories,
+                )
+                query_and_y_supports = regular_permute(
+                    np.concatenate([targets[None], y_supports], axis=0),
+                    self.generator,
+                    self.pad_action_idx,
+                    self.y_categories,
+                )
+            queries, x_supports = query_and_x_supports[0], query_and_x_supports[1:]
+            targets, y_supports = query_and_y_supports[0], query_and_y_supports[1:]
 
         return (
             queries,
@@ -1470,7 +1522,8 @@ def main():
                 len(ACTION2IDX),
                 pad_word,
                 pad_action,
-                shuffle=False,
+                shuffle=True,
+                compress=True,
             ),
             batch_size=max([args.train_batch_size, args.valid_batch_size]),
             pin_memory=True,
