@@ -959,25 +959,12 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
     def forward(
         self,
-        x_permutation,
-        y_permutation,
         x_supports,
         y_supports,
         user_support_mask,
         queries,
         decoder_in,
     ):
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), user_support_mask],
-                dim=1,
-            )
-
         x_support_mask = x_supports == self.pad_word_idx
         y_support_mask = y_supports == self.pad_action_idx
         query_mask = queries == self.pad_word_idx
@@ -1019,8 +1006,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
     def training_step(self, x, idx):
         (
-            x_permutation,
-            y_permutation,
             queries,
             targets,
             x_supports,
@@ -1039,8 +1024,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             x_supports,
             y_supports,
             support_mask,
@@ -1073,8 +1056,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
     def validation_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             queries,
             targets,
             x_supports,
@@ -1122,8 +1103,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
     def predict_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             queries,
             targets,
             x_supports,
@@ -1131,17 +1110,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
         ) = x
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
         support_mask = torch.zeros_like(x_supports[..., 0]).bool()
-
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
-            )
-
         padding = queries == self.pad_word_idx
 
         # We do autoregressive prediction, predict for as many steps
@@ -1212,9 +1180,6 @@ class PermuteActionsDataset(Dataset):
             np.copy(x) for x in self.dataset[idx]
         ]
 
-        x_permutation = np.arange(self.x_categories)
-        y_permutation = np.arange(self.y_categories)
-
         # Compute permutations of outputs
         if self.shuffle:
             # Do the permutation
@@ -1231,8 +1196,6 @@ class PermuteActionsDataset(Dataset):
             targets = y_permutation[targets]
 
         return (
-            pad_to(x_permutation, x_supports.shape[1], pad=self.pad_word_idx),
-            pad_to(y_permutation, y_supports.shape[1], pad=self.pad_action_idx),
             queries,
             targets,
             x_supports,
