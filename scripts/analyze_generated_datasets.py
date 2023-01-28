@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import re
 import pickle
+from tqdm.auto import tqdm
 
 from gscan_metaseq2seq.util.load_data import load_data_directories
 
@@ -171,7 +172,64 @@ def summarize_by_dividing_out_count(sum_summaries):
     )
 
 
-def load_data_and_make_hit_results(data_directory, limit_load=None):
+def summarize_hits(hits):
+    if not len(hits.shape) or any([s == 0 for s in hits.shape]):
+        return np.zeros(13, dtype=float)
+
+    right_verb = hits[..., 0]
+    right_adverb = hits[..., 1]
+    right_object = hits[..., 2]
+    right_agent_position = hits[..., 3]
+    right_target_position = hits[..., 4]
+    right_distance = hits[..., 5]
+    right_target = hits[..., 6]
+    support_target_object_exists = hits[..., 7]
+
+    right_verb_and_object = right_target & right_verb
+    right_adverb_and_object = right_target & right_adverb
+
+    right_verb_and_object_at_least_once = right_verb_and_object.any()
+    right_adverb_and_object_at_least_once = right_adverb_and_object.any()
+    right_verb_and_object_and_right_adverb_and_object = (
+        right_verb_and_object_at_least_once and right_adverb_and_object_at_least_once
+    )
+
+    right_verb_and_object_and_distance = right_verb_and_object & right_distance
+    right_adverb_and_object_and_distance = right_adverb_and_object & right_distance
+
+    right_verb_and_object_and_distance_at_least_once = (
+        right_verb_and_object_and_distance.any()
+    )
+    right_adverb_and_object_and_distance_at_least_once = (
+        right_adverb_and_object_and_distance.any()
+    )
+    right_verb_and_object_and_distance_and_right_adverb_and_object_and_distance = (
+        right_verb_and_object_and_distance_at_least_once
+        and right_adverb_and_object_and_distance_at_least_once
+    )
+
+    sums = hits[..., [2, 3, 4, 5, 6, 7]].sum(axis=0)
+
+    return np.concatenate(
+        [
+            sums,
+            np.array(
+                [
+                    right_verb_and_object_at_least_once * hits.shape[0],
+                    right_adverb_and_object_at_least_once * hits.shape[0],
+                    right_verb_and_object_and_right_adverb_and_object * hits.shape[0],
+                    right_verb_and_object_and_distance_at_least_once * hits.shape[0],
+                    right_adverb_and_object_and_distance_at_least_once * hits.shape[0],
+                    right_verb_and_object_and_distance_and_right_adverb_and_object_and_distance
+                    * hits.shape[0],
+                    hits.shape[0],
+                ]
+            ),
+        ]
+    )
+
+
+def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=None):
     (
         (
             WORD2IDX,
