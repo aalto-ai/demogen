@@ -437,7 +437,6 @@ class TransformerLearner(pl.LightningModule):
             pad_word_idx,
         )
         self.decoder = DecoderTransformer(
-            n_state_components,
             embed_dim,
             y_categories,
             nlayers,
