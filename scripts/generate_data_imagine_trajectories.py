@@ -1088,6 +1088,57 @@ def sample_from_encoder_decoder_model_with_mask(
         )
 
 
+def sample_from_encoder_decoder_model(
+    model,
+    instruction,
+    eos_target_idx,
+    pad_target_idx,
+    sample_n,
+    noise_level=0.2,
+    device="cpu",
+    deterministic=False,
+):
+    unroll_length = instruction.shape[1]
+
+    expanded_instruction = instruction[:, None].expand(-1, sample_n, -1).flatten(0, 1)
+    expanded_instruction = expanded_instruction.to(device)
+
+    instruction_padding = expanded_instruction == pad_target_idx
+
+    instruction_mask = torch.logical_or(
+        torch.rand(instruction_padding.shape, device=device) < noise_level,
+        instruction_padding,
+    )
+
+    (
+        expanded_instruction,
+        decoded_instruction,
+        instruction_mask,
+    ) = sample_from_encoder_decoder_model_with_mask(
+        model,
+        expanded_instruction,
+        instruction_mask,
+        eos_target_idx,
+        pad_target_idx,
+        noise_level=noise_level,
+        device=device,
+        deterministic=deterministic,
+    )
+
+    return (
+        instruction,
+        decoded_instruction.view(instruction.shape[0], sample_n, -1),
+        instruction_mask.view(instruction.shape[0], sample_n, -1),
+        [
+            [i[m] for i, m in zip(i_batch, m_batch)]
+            for i_batch, m_batch in zip(
+                expanded_instruction.view(instruction.shape[0], sample_n, -1),
+                (~instruction_mask).view(instruction.shape[0], sample_n, -1),
+            )
+        ],
+    )
+
+
 def sample_from_encoder_decoder_model_deterministic(
     model,
     instruction,
@@ -1164,14 +1215,15 @@ def make_cogs_instruction_gen_closure(
             result_samples,
             result_samples_mask,
             result_masked_instruction,
-        ) = sample_from_encoder_decoder_model_deterministic(
+        ) = sample_from_encoder_decoder_model(
             encoder_decoder_model,
             query_instructions,
             eos_target_idx,
             pad_target_idx,
+            sample_n,
             noise_level=noise_level,
             device="cuda",
-            deterministic=True,
+            deterministic=False,
         )
 
         is_same_mask = (result_samples == query_instructions[:, None]).all(dim=-1)
