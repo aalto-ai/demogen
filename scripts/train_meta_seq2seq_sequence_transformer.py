@@ -630,8 +630,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
     def forward(
         self,
-        x_permutation,
-        y_permutation,
         query_state,
         support_state,
         x_supports,
@@ -640,17 +638,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
         queries,
         decoder_in,
     ):
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), user_support_mask],
-                dim=1,
-            )
-
         # We expand the support_state if it was not already expanded.
         support_state = (
             support_state
@@ -713,8 +700,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
     def training_step(self, x, idx):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -735,8 +720,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -771,8 +754,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
     def validation_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -790,8 +771,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -824,8 +803,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
 
     def predict_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -835,16 +812,6 @@ class StateImaginationMetaLearner(pl.LightningModule):
         ) = x
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
         support_mask = torch.zeros_like(x_supports[..., 0]).bool()
-
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
-            )
 
         padding = queries == self.pad_word_idx
 
@@ -1071,8 +1038,6 @@ class SequenceImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             x_supports,
             y_supports,
             support_mask,
