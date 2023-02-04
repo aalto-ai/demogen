@@ -621,6 +621,42 @@ def train_state_encoder_decoder(
     return model
 
 
+def make_inv_counts_dist(counts_dictionary):
+    counts_array = np.zeros(max(counts_dictionary.keys()) + 1)
+    for word, count in counts_dictionary.items():
+        counts_array[word] = count
+
+    inv_counts = 1 / counts_array
+    inv_counts[counts_array == 0] = 0
+    inv_counts_dist = inv_counts / inv_counts.sum()
+
+    return inv_counts_dist
+
+
+class SampleSentencesByWordWeights(IterableDataset):
+    def __init__(self, train_data_indices_by_word_idx, word_weights, dataset):
+        super().__init__()
+        self.train_data_indices_by_word_idx = train_data_indices_by_word_idx
+        self.word_weights = word_weights
+        self.words_array = np.arange(len(word_weights))
+        self.dataset = dataset
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            idx = np.random.choice(self.words_array, replace=True, p=self.word_weights)
+            if not self.train_data_indices_by_word_idx[idx]:
+                continue
+
+            break
+
+        return self.dataset[
+            np.random.choice(self.train_data_indices_by_word_idx[idx], replace=True)
+        ]
+
+
 def gscan_make_closures(args, dictionaries, datasets, extra_data):
     WORD2IDX, ACTION2IDX = dictionaries
 
@@ -771,30 +807,6 @@ def gscan_load_data(args):
     }
 
     return ((WORD2IDX, ACTION2IDX), dataset_splits, (color_dictionary, noun_dictionary))
-
-
-class SampleSentencesByWordWeights(IterableDataset):
-    def __init__(self, train_data_indices_by_word_idx, word_weights, dataset):
-        super().__init__()
-        self.train_data_indices_by_word_idx = train_data_indices_by_word_idx
-        self.word_weights = word_weights
-        self.words_array = np.arange(word_weights.shape[0])
-        self.dataset = dataset
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        while True:
-            idx = np.random.choice(self.words_array, replace=True, p=self.word_weights)
-            if not self.train_data_indices_by_word_idx[idx]:
-                continue
-
-            break
-
-        return self.dataset[
-            np.random.choice(self.train_data_indices_by_word_idx[idx], replace=True)
-        ]
 
 
 class MonotonicRandomPositionEmbedding(nn.Module):
@@ -1410,27 +1422,16 @@ def cogs_make_closures(args, dictionaries, datasets, extra_data):
     in_word2idx, out_word2idx = dictionaries
 
     train_inputs = MapDataset(datasets["train"], lambda x: x[0])
-    word_counts_counter = Counter(
-        itertools.chain.from_iterable(map(lambda x: x[0][0], datasets["train"]))
-    )
-    word_counts = np.zeros(len(in_word2idx))
-    for word, count in word_counts_counter.items():
-        word_counts[word] = count
-
-    word_counts[in_word2idx["pad"]] = 0
-
-    inv_word_counts = 1 / word_counts
-    inv_word_counts[word_counts == 0] = 0
-    inv_word_counts_dist = inv_word_counts / inv_word_counts.sum()
-
     train_data_indices_by_word_idx = defaultdict(list)
 
     for i, train_sentence in enumerate(train_inputs):
         for word in train_sentence[0][train_sentence[0] != in_word2idx["[pad]"]]:
             train_data_indices_by_word_idx[word].append(i)
 
+    inv_counts = make_inv_counts_dist({k: len(v) for k, v in train_data_indices_by_word_idx.items()})
+
     sample_dataset = SampleSentencesByWordWeights(
-        train_data_indices_by_word_idx, inv_word_counts_dist, train_inputs
+        train_data_indices_by_word_idx, inv_counts, train_inputs
     )
 
     encoder_decoder_lm = train_encoder_decoder(
