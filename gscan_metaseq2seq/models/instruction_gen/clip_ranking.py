@@ -150,7 +150,6 @@ class InstructionCLIPBCELearner(pl.LightningModule):
 
 def train_clip(
     balanced_training_data,
-    valid_demonstrations_dict,
     seed,
     clip_iterations,
     pad_word,
@@ -167,20 +166,10 @@ def train_clip(
     check_val_every = 500
 
     clip_train_dataloader = DataLoader(
-        ReshuffleOnIndexZeroDataset(balanced_training_data),
+        balanced_training_data,
         batch_size=train_batch_size,
-        pin_memory=True,
-        shuffle=True,
+        pin_memory=True
     )
-
-    clip_valid_dataloaders = [
-        DataLoader(
-            data,
-            batch_size=train_batch_size,
-            pin_memory=True,
-        )
-        for data in valid_demonstrations_dict.values()
-    ]
 
     pl.seed_everything(seed)
     instruction_clip = InstructionCLIPBCELearner(
@@ -203,13 +192,6 @@ def train_clip(
     logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
 
     check_val_opts = {}
-    interval = check_val_every / len(clip_train_dataloader)
-
-    # Every check_val_interval steps, regardless of how large the training dataloader is
-    if interval > 1.0:
-        check_val_opts["check_val_every_n_epoch"] = math.floor(interval)
-    else:
-        check_val_opts["val_check_interval"] = interval
 
     instruction_clip_trainer = pl.Trainer(
         logger=[
@@ -228,7 +210,7 @@ def train_clip(
     )
 
     instruction_clip_trainer.fit(
-        instruction_clip, clip_train_dataloader, clip_valid_dataloaders
+        instruction_clip, clip_train_dataloader
     )
 
     return instruction_clip
