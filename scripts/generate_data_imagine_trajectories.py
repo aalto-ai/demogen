@@ -578,7 +578,7 @@ def train_state_encoder_decoder(
     )
 
     train_dataloader = DataLoader(
-        dataset, batch_size=train_batch_size, pin_memory=True, shuffle=True
+        dataset, batch_size=train_batch_size, pin_memory=True
     )
 
     logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
@@ -684,20 +684,20 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         [(cmd, len(x)) for cmd, x in training_data_indices_by_command.items()],
         key=lambda x: x[-1],
     )[-1]
-    balanced_training_data_indices = np.array(
-        list(
-            itertools.chain.from_iterable(
-                [x[:min_len] for x in training_data_indices_by_command.values()]
-            )
-        )
-    )
 
-    balanced_training_data_subset = Subset(
-        datasets["train"], balanced_training_data_indices
+    sentence2idx = {
+        s: i for i, s in enumerate(training_data_indices_by_command)
+    }
+    idx2sentence = [s for s in sentence2idx]
+
+    balanced_training_data_subset = SampleSentencesByWordWeights(
+        {sentence2idx[s]: v for s, v in training_data_indices_by_command.items()},
+        make_inv_counts_dist({sentence2idx[s]: len(v) for s, v in training_data_indices_by_command.items()}),
+        MapDataset(datasets["train"], lambda x: (x[0][1], x[0][0]))
     )
 
     model = train_state_encoder_decoder(
-        MapDataset(balanced_training_data_subset, lambda x: (x[0][1], x[0][0])),
+        balanced_training_data_subset,
         args.seed,
         0 if args.load_mlm_model else args.mlm_train_iterations,
         pad_word,
@@ -714,12 +714,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         torch.save(model.state_dict(), args.save_mlm_model)
 
     instruction_clip = train_clip(
-        MapDataset(balanced_training_data_subset, lambda x: (x[0][1], x[0][0])),
-        {
-            k: MapDataset(v, lambda x: (x[0][1], x[0][0]))
-            for k, v in datasets.items()
-            if k != "train"
-        },
+        balanced_training_data_subset,
         args.seed,
         0 if args.load_clip_model else args.clip_train_iterations,
         pad_word,
