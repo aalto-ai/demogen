@@ -417,7 +417,7 @@ def main():
         args.train_demonstrations, args.valid_demonstrations_directory, args.dictionary
     )
 
-    train_demonstrations = AddRandomNoiseDataset(train_demonstrations, ACTION2IDX)
+    # train_demonstrations = AddRandomNoiseDataset(train_demonstrations, ACTION2IDX)
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
     IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
