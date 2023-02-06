@@ -86,9 +86,17 @@ class AddRandomNoiseDataset(Dataset):
 
         rand = random.randrange(0, 1)
 
+        def add_random_noise(instruction):
+            if len(np.where(instruction == self.ACTION2IDX["walk"])[0]) > 0:
+                walk_index = np.where(instruction == self.ACTION2IDX["walk"])[0][0]
+                instruction[walk_index] = self.ACTION2IDX["turn left"]
+
+                return instruction
+
+            return instruction
+
         if rand <= self.prob:
-            return (item[0], np.insert(item[1], np.random.choice(len(item[1]), size=1),
-                             np.random.choice(len(self.ACTION2IDX) - 3, size=1)), item[2])
+            return item[0], add_random_noise(item[1]), item[2]
 
         return item
 
