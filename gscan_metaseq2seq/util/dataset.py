@@ -84,7 +84,7 @@ class AddRandomNoiseDataset(Dataset):
     def __getitem__(self, i):
         item = self.dataset[i]
 
-        rand = random.randrange(0, 1)
+        rand = random.uniform(0, 1)
 
         def add_random_noise(instruction):
             if len(np.where(instruction == self.ACTION2IDX["walk"])[0]) > 0:
