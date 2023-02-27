@@ -323,7 +323,7 @@ def instruction_is_correct(
 
 
 def compute_num_correct_and_valid(
-    example, word2idx, action2idx, color_dictionary, noun_dictionary
+    example, word2idx, action2idx, color_dictionary, noun_dictionary, limit_demos
 ):
     vocab = Vocabulary.initialize(
         intransitive_verbs=(INTRANSITIVE_VERBS).split(","),
@@ -354,6 +354,10 @@ def compute_num_correct_and_valid(
         else support_state
     )
 
+    support_state = support_state[:limit_demos]
+    support_query = support_query[:limit_demos]
+    support_target = support_target[:limit_demos]
+
     num_correct_and_valid = np.array(
         [
             instruction_is_correct(
@@ -379,13 +383,13 @@ def compute_num_correct_and_valid_star(args):
 
 
 def validate_all_instructions(
-    demonstrations, word2idx, action2idx, color_dictionary, noun_dictionary, num_procs=8
+    demonstrations, word2idx, action2idx, color_dictionary, noun_dictionary, limit_demos=None, num_procs=8
 ):
     with multiprocessing.Pool(num_procs) as pool:
         yield from pool.imap_unordered(
             compute_num_correct_and_valid_star,
             map(
-                lambda x: (x, word2idx, action2idx, color_dictionary, noun_dictionary),
+                lambda x: (x, word2idx, action2idx, color_dictionary, noun_dictionary, limit_demos),
                 tqdm(demonstrations),
             ),
             chunksize=100,
@@ -423,6 +427,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-directory", required=True)
     parser.add_argument("--dictionary", required=True)
+    parser.add_argument("--only-splits", default=None, nargs="*")
+    parser.add_argument("--limit-demos", default=None, type=int)
     parser.add_argument("--limit-load", default=None, type=int)
     args = parser.parse_args()
 
@@ -444,7 +450,7 @@ def main():
     corrects_by_split = {
         split: list(
             validate_all_instructions(
-                examples, WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary
+                examples, WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary, limit_demos=args.limit_demos
             )
         )
         for split, examples in tqdm(
@@ -456,6 +462,7 @@ def main():
             ),
             total=len(meta_valid_demonstrations_dict) + 1,
         )
+        if not args.only_splits or split in args.only_splits
     }
 
     split_stats = {
