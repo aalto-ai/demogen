@@ -899,8 +899,8 @@ class PermuteActionsDataset(Dataset):
             targets = y_permutation[targets]
 
         return (
-            pad_to(x_permutation, x_supports.shape[1], pad=self.pad_word_idx),
-            pad_to(y_permutation, y_supports.shape[1], pad=self.pad_action_idx),
+            0,
+            0,
             query_state,
             support_state,
             queries,
