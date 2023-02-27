@@ -282,6 +282,41 @@ class StateEncoderDecoderTransformer(nn.Module):
         return encoded_seq[-1], encoded_seq[:-1]
 
 
+class StackedMHAModule(nn.Module):
+    def __init__(self, embed_dim, dim_feedforward, nhead, dropout_p):
+        super().__init__()
+        self.mha = nn.MultiheadAttention(embed_dim, nhead, dropout=dropout_p)
+        self.ff = nn.Sequential(
+            nn.Linear(embed_dim, dim_feedforward),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=dropout_p),
+            nn.Linear(dim_feedforward, embed_dim)
+        )
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.dropout_p = dropout_p
+
+    def forward(self, x):
+        query, key, value, key_padding_mask = x
+
+        mha_query = F.dropout(self.mha(query, key, value, key_padding_mask=key_padding_mask)[0], p=self.dropout_p)
+        ff_query = F.dropout(self.ff(self.norm1(mha_query + mha_query)), p=self.dropout_p)
+
+        return self.norm2(query + ff_query), key, value, key_padding_mask
+
+
+class StackedMHA(nn.Module):
+    def __init__(self, embed_dim, dim_feedforward, nhead, nlayers, dropout_p):
+        super().__init__()
+        self.net = nn.Sequential(*[
+            StackedMHAModule(embed_dim, dim_feedforward, nhead, dropout_p)
+            for _ in range(nlayers)
+        ])
+
+    def forward(self, query, key, value, key_padding_mask=None):
+        return self.net((query, key, value, key_padding_mask))[0]
+
+
 class MetaNetRNN(nn.Module):
     # Meta Seq2Seq encoder
     #
