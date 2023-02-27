@@ -44,10 +44,7 @@ class Attn(nn.Module):
         #  attn_weights : soft-retrieval of values; ... x batch_size x n_queries x n_memory
         orig_q_shape = Q.shape
 
-        query_dim = torch.tensor(float(Q.size(-1)))
-        if Q.is_cuda:
-            query_dim = query_dim.cuda()
-
+        query_dim = torch.tensor(float(Q.size(-1)), device=Q.device)
         Q = Q.flatten(0, -3)
         K_T = K.flatten(0, -3).transpose(-2, -1)
         V = V.flatten(0, -3)
