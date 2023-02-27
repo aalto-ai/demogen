@@ -345,7 +345,7 @@ def main():
     parser.add_argument("--load-analyzed", type=str)
     parser.add_argument("--datasets", nargs="+")
     parser.add_argument(
-        "--splits", nargs="+", default=["a", "b", "c", "d", "e", "f", "g", "h"]
+        "--splits", nargs="+", default=["train", "a", "b", "c", "d", "e", "f", "g", "h"]
     )
     args = parser.parse_args()
 
