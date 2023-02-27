@@ -692,7 +692,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     balanced_training_data_subset = SampleSentencesByWordWeights(
         {sentence2idx[s]: v for s, v in training_data_indices_by_command.items()},
-        make_inv_counts_dist({sentence2idx[s]: len(v) for s, v in training_data_indices_by_command.items()}),
+        np.ones(len(sentence2idx)) / len(sentence2idx),
         MapDataset(datasets["train"], lambda x: (x[0][1], x[0][0]))
     )
 
