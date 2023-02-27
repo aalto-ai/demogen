@@ -1525,7 +1525,7 @@ def cogs_load_data(args, filter_input_length=32, filter_output_length=128):
     )
 
     train_df = train_df.sort_values(2, axis=0)
-    test_df = train_df.sort_values(2, axis=0)
+    test_df = test_df.sort_values(2, axis=0)
 
     cogs_train = list(map(cogs_parse_task, train_df.values))
     cogs_test = list(map(cogs_parse_task, test_df.values))
