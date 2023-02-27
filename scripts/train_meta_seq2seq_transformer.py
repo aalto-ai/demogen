@@ -878,9 +878,7 @@ class PermuteActionsDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        query_state, support_state, queries, targets, x_supports, y_supports = [
-            np.copy(x) for x in self.dataset[idx]
-        ]
+        query_state, support_state, queries, targets, x_supports, y_supports = self.dataset[idx]
 
         x_permutation = np.arange(self.x_categories)
         y_permutation = np.arange(self.y_categories)
