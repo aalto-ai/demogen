@@ -344,8 +344,9 @@ def compute_num_correct_and_valid(
         support_target,
         ranking,
     ) = example
+
     assert instruction_is_correct(
-        query, state, target, word2idx, action2idx, color_dictionary, noun_dictionary
+        query, state, target, word2idx, action2idx, color_dictionary, noun_dictionary, world, vocab
     )[0]
 
     support_state = (
