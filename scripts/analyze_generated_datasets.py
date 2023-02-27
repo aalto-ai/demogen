@@ -297,6 +297,7 @@ def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=
             ),
             total=len(meta_valid_demonstrations_dict) + 1,
         )
+        if not splits or split in splits
     }
 
 
