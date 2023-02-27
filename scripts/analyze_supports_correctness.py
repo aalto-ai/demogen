@@ -431,6 +431,7 @@ def main():
     parser.add_argument("--only-splits", default=None, nargs="*")
     parser.add_argument("--limit-demos", default=None, type=int)
     parser.add_argument("--limit-load", default=None, type=int)
+    parser.add_argument("--show-columns", nargs="+", default=("valid", "correct_and_valid"), choices=("valid", "correct", "correct_if_valid", "correct_and_valid"))
     args = parser.parse_args()
 
     (
@@ -472,8 +473,8 @@ def main():
     }
 
     print(
-        pd.DataFrame.from_dict(split_stats)[["a", "b", "c", "d", "e", "f", "g", "h"]]
-        .T[["valid", "correct_and_valid"]]
+        pd.DataFrame.from_dict(split_stats)[["train", "a", "b", "c", "d", "e", "f", "g", "h"] if not args.only_splits else args.only_splits]
+        .T[args.show_columns]
         .to_latex(float_format="%.2f", escape=False)
     )
 
