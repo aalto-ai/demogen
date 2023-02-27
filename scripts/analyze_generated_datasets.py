@@ -358,6 +358,7 @@ def main():
                 os.path.join(args.data_directory, dataset),
                 limit_load=args.limit_load,
                 limit_demos=args.limit_demos,
+                splits=args.splits
             )
             for dataset in args.datasets
         }
