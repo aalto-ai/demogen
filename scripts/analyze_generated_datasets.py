@@ -2,6 +2,7 @@ import argparse
 import os
 import itertools
 import pandas as pd
+import multiprocessing
 import numpy as np
 import re
 import pickle
@@ -229,7 +230,35 @@ def summarize_hits(hits):
     )
 
 
-def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=None):
+def compute_statistics_and_summarize(example, word2idx, color_dictionary, noun_dictionary, limit_demos):
+    return summarize_hits(
+        compute_statistics_for_example(
+            example,
+            word2idx,
+            color_dictionary,
+            noun_dictionary,
+            limit_demos=limit_demos,
+        )
+    )
+
+
+def compute_statistics_and_summarize_star(args):
+    return compute_statistics_and_summarize(*args)
+
+
+def analyze_all_examples(examples, word2idx, color_dictionary, noun_dictionary, limit_demos=None, num_procs=8):
+    with multiprocessing.Pool(num_procs) as pool:
+        yield from pool.imap_unordered(
+            compute_statistics_and_summarize_star,
+            map(
+                lambda x: (x, word2idx, color_dictionary, noun_dictionary, limit_demos),
+                tqdm(examples),
+            ),
+            chunksize=100,
+        )
+
+
+def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=None, splits=None):
     (
         (
             WORD2IDX,
@@ -250,18 +279,13 @@ def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=
     return {
         split: summarize_by_dividing_out_count(
             np.stack(
-                [
-                    summarize_hits(
-                        compute_statistics_for_example(
-                            example,
-                            WORD2IDX,
-                            color_dictionary,
-                            noun_dictionary,
-                            limit_demos=limit_demos,
-                        )
-                    )
-                    for example in tqdm(examples, desc=f"Split {split}")
-                ]
+                list(analyze_all_examples(
+                    tqdm(examples, desc=f"Split {split}"),
+                    WORD2IDX,
+                    color_dictionary,
+                    noun_dictionary,
+                    limit_demos=limit_demos,
+                ))
             )
         )
         for split, examples in tqdm(
