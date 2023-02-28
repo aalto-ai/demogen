@@ -735,7 +735,7 @@ def state_to_situation(query_instruction, state, word2idx, colors, nouns):
 
 
 class ImageRenderingDemonstrationsDataset(Dataset):
-    def __init__(self, train_demonstrations, word2idx, colors, nouns):
+    def __init__(self, train_demonstrations, word2idx, colors, nouns, image_downsample=5):
         super().__init__()
         self.train_demonstrations = train_demonstrations
         self.word2idx = word2idx
@@ -754,6 +754,7 @@ class ImageRenderingDemonstrationsDataset(Dataset):
 
         self.world = world
         self.vocabulary = vocabulary
+        self.image_downsample = image_downsample
 
     def __getitem__(self, i):
         instruction, actions, state = self.train_demonstrations[i]
@@ -763,7 +764,7 @@ class ImageRenderingDemonstrationsDataset(Dataset):
 
         self.world = reinitialize_world(self.world, situation, self.vocabulary)
 
-        img = self.world.render(mode="rgb_array")[::5, ::5] / 255.0
+        img = self.world.render(mode="rgb_array")[::self.image_downsample, ::self.image_downsample] / 255.0
 
         return instruction, actions, img.astype(np.float32)
 
