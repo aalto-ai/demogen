@@ -805,6 +805,8 @@ def main():
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--image-downsample", type=int, default=5)
+    parser.add_argument("--patch-size", type=int, default=12)
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -861,8 +863,8 @@ def main():
 
     pl.seed_everything(seed)
     meta_module = ViLBERTImageLeaner(
-        3,
-        12,
+        3, # 3 input channels
+        args.patch_size,
         len(IDX2WORD),
         len(IDX2ACTION),
         args.hidden_size,
@@ -955,6 +957,7 @@ def main():
                         WORD2IDX,
                         color_dictionary,
                         noun_dictionary,
+                        args.image_downsample
                     ),
                     (args.pad_instructions_to, args.pad_actions_to, None),
                     (pad_word, pad_action, None),
