@@ -1,6 +1,10 @@
 import argparse
 import os
 import math
+
+# Import pillow and matplotlib first before torch pulls in a different libc
+import matplotlib.pyplot as plt
+from PIL import Image
 import numpy as np
 import torch
 import torch.nn.functional as F
