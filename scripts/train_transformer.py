@@ -12,7 +12,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
-from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
+from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset, AddRandomNoiseDataset
 from gscan_metaseq2seq.util.load_data import load_data
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
@@ -51,7 +51,6 @@ class StateEncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embedding_dim * 4,
                 dropout=dropout_p,
-                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -117,7 +116,6 @@ class DecoderTransformer(nn.Module):
                 dim_feedforward=hidden_size * 4,
                 dropout=dropout_p,
                 nhead=nhead,
-                norm_first=norm_first,
             ),
             num_layers=nlayers,
         )
@@ -418,6 +416,8 @@ def main():
     ) = load_data(
         args.train_demonstrations, args.valid_demonstrations_directory, args.dictionary
     )
+
+    train_demonstrations = AddRandomNoiseDataset(train_demonstrations, ACTION2IDX)
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
     IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}

@@ -2,7 +2,7 @@ import csv
 import os
 
 from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.loggers.logger import rank_zero_experiment
+from pytorch_lightning.loggers.base import rank_zero_experiment
 
 
 def get_most_recent_version(experiment_dir):
