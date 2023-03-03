@@ -72,7 +72,7 @@ class ReshuffleOnIndexZeroDataset(Dataset):
 
 
 class AddRandomNoiseDataset(Dataset):
-    def __init__(self, dataset, ACTION2IDX, prob=0.05):
+    def __init__(self, dataset, ACTION2IDX, prob=0.01):
         super().__init__()
         self.dataset = dataset
         self.ACTION2IDX = ACTION2IDX
