@@ -137,6 +137,27 @@ You might want to use a large `--batch-size-mult` to get large effective batch s
 
 Logs (both tensorboard and csv logs) are automatic and go to `logs/gscan_s_{seed}_m_{model_name}_it_{iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{tag}_drop_{dropout}/{model_name}_l_{layers}_h_{heads}_d_{embed_dim}/{dataset_name}/{seed}/lightning_logs/version_{version}`
 
+## Image-based gSCAN
+
+Also included in this repository is an image-based gSCAN (where the environment is rendered as an image and we
+use a vision-transformer inspired ViLBERT). To train that, use `train_vilbert_img.py`. You can also
+specify different patch sizes and downsample rates (defaults are 12 and 5, respectively - 12 covers
+a 12x12 cell after downsampling from 60x60 by 5x).
+
+    python scripts/train_vilbert_images.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --patch-size 12 \
+    --image-downsample 5 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
 # Analyzing the results and reproducing the Tables in the main paper.
 
 Assuming that you run over seeds 0 through 9
