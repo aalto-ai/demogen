@@ -8,76 +8,12 @@ import re
 import pickle
 from tqdm.auto import tqdm
 
+from gscan_metaseq2seq.util.solver import (
+    segment_instruction,
+    find_agent_position,
+    find_target_object,
+)
 from gscan_metaseq2seq.util.load_data import load_data_directories
-
-
-def segment_instruction(query_instruction, word2idx, colors, nouns):
-    verb_words = [
-        [word2idx[w] for w in v] for v in [["walk", "to"], ["push"], ["pull"]]
-    ]
-    adverb_words = [
-        [word2idx[w] for w in v]
-        for v in [
-            ["while spinning"],
-            ["while zigzagging"],
-            ["hesitantly"],
-            ["cautiously"],
-        ]
-    ]
-    size_words = [word2idx[w] for w in ["small", "big"]]
-    color_words = [word2idx[w] for w in list(colors)]
-    noun_words = [word2idx[w] for w in list(nouns) if w in word2idx]
-
-    query_verb_words = [
-        v for v in verb_words if all([w in query_instruction for w in v])
-    ]
-    query_adverb_words = [
-        v for v in adverb_words if all([w in query_instruction for w in v])
-    ]
-    query_size_words = [v for v in size_words if v in query_instruction]
-    query_color_words = [v for v in color_words if v in query_instruction]
-    query_noun_words = [v for v in noun_words if v in query_instruction]
-
-    return (
-        query_verb_words,
-        query_adverb_words,
-        query_size_words,
-        query_color_words,
-        query_noun_words,
-    )
-
-
-def find_agent_position(state):
-    return [s for s in state if s[3] != 0][0]
-
-
-def find_target_object(state, size, color, noun, idx2word, idx2color, idx2noun):
-    color_word = [idx2word[c] for c in color]
-    noun_word = [idx2word[c] for c in noun]
-    size_word = [idx2word[c] for c in size]
-
-    # Find any state elements with a matching noun, then
-    # filter by matching color
-    states_with_matching_noun = [
-        s for s in state if s[2] and idx2noun[s[2] - 1] in noun_word
-    ]
-    states_with_matching_color = [
-        s
-        for s in states_with_matching_noun
-        if s[1] and idx2color[s[1] - 1] in color_word or not color_word
-    ]
-    sorted_by_size = sorted(states_with_matching_color, key=lambda x: x[0])
-
-    if not sorted_by_size:
-        return None
-
-    if size_word and size_word[0] == "small":
-        return sorted_by_size[0]
-
-    if size_word and size_word[0] == "big":
-        return sorted_by_size[-1]
-
-    return sorted_by_size[0]
 
 
 def compute_statistics_for_example(example, word2idx, colors, nouns, limit_demos=None):
