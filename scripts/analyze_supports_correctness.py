@@ -12,7 +12,6 @@ from gscan_metaseq2seq.util.solver import (
     create_world,
     demonstrate_command_oracle,
     state_to_situation,
-    reinitialize_world,
 )
 
 
