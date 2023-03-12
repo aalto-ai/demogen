@@ -81,7 +81,15 @@ def compute_num_correct_and_valid(
     ) = example
 
     assert instruction_is_correct(
-        query, state, target, word2idx, action2idx, color_dictionary, noun_dictionary, world, vocab
+        query,
+        state,
+        target,
+        word2idx,
+        action2idx,
+        color_dictionary,
+        noun_dictionary,
+        world,
+        vocab,
     )[0]
 
     support_state = (
@@ -119,13 +127,26 @@ def compute_num_correct_and_valid_star(args):
 
 
 def validate_all_instructions(
-    demonstrations, word2idx, action2idx, color_dictionary, noun_dictionary, limit_demos=None, num_procs=8
+    demonstrations,
+    word2idx,
+    action2idx,
+    color_dictionary,
+    noun_dictionary,
+    limit_demos=None,
+    num_procs=8,
 ):
     with multiprocessing.Pool(num_procs) as pool:
         yield from pool.imap_unordered(
             compute_num_correct_and_valid_star,
             map(
-                lambda x: (x, word2idx, action2idx, color_dictionary, noun_dictionary, limit_demos),
+                lambda x: (
+                    x,
+                    word2idx,
+                    action2idx,
+                    color_dictionary,
+                    noun_dictionary,
+                    limit_demos,
+                ),
                 tqdm(demonstrations),
             ),
             chunksize=100,
@@ -166,7 +187,12 @@ def main():
     parser.add_argument("--only-splits", default=None, nargs="*")
     parser.add_argument("--limit-demos", default=None, type=int)
     parser.add_argument("--limit-load", default=None, type=int)
-    parser.add_argument("--show-columns", nargs="+", default=("valid", "correct_and_valid"), choices=("valid", "correct", "correct_if_valid", "correct_and_valid"))
+    parser.add_argument(
+        "--show-columns",
+        nargs="+",
+        default=("valid", "correct_and_valid"),
+        choices=("valid", "correct", "correct_if_valid", "correct_and_valid"),
+    )
     args = parser.parse_args()
 
     (
@@ -187,7 +213,12 @@ def main():
     corrects_by_split = {
         split: list(
             validate_all_instructions(
-                examples, WORD2IDX, ACTION2IDX, color_dictionary, noun_dictionary, limit_demos=args.limit_demos
+                examples,
+                WORD2IDX,
+                ACTION2IDX,
+                color_dictionary,
+                noun_dictionary,
+                limit_demos=args.limit_demos,
             )
         )
         for split, examples in tqdm(
@@ -208,7 +239,11 @@ def main():
     }
 
     print(
-        pd.DataFrame.from_dict(split_stats)[["train", "a", "b", "c", "d", "e", "f", "g", "h"] if not args.only_splits else args.only_splits]
+        pd.DataFrame.from_dict(split_stats)[
+            ["train", "a", "b", "c", "d", "e", "f", "g", "h"]
+            if not args.only_splits
+            else args.only_splits
+        ]
         .T[args.show_columns]
         .to_latex(float_format="%.2f", escape=False)
     )
