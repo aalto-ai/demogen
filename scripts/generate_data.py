@@ -17,7 +17,6 @@ from gscan_metaseq2seq.util.solver import (
     create_vocabulary,
     create_world,
     demonstrate_command_oracle,
-    reinitialize_world,
 )
 
 from gscan_metaseq2seq.util.dataset import PaddingIterableDataset
