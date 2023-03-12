@@ -668,7 +668,7 @@ def main():
 
     pl.seed_everything(seed)
     meta_module = ViLBERTImageLeaner(
-        3, # 3 input channels
+        3,  # 3 input channels
         args.patch_size,
         len(IDX2WORD),
         len(IDX2ACTION),
@@ -762,7 +762,7 @@ def main():
                         WORD2IDX,
                         color_dictionary,
                         noun_dictionary,
-                        args.image_downsample
+                        args.image_downsample,
                     ),
                     (args.pad_instructions_to, args.pad_actions_to, None),
                     (pad_word, pad_action, None),
