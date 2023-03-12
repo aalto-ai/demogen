@@ -8,68 +8,10 @@ from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.solver import (
     create_vocabulary,
     create_world,
+    demonstrate_command_oracle,
     state_to_situation,
     reinitialize_world,
 )
-
-
-def demonstrate_command_oracle(
-    world,
-    vocabulary,
-    vocabulary_colors,
-    vocabulary_nouns,
-    command,
-    target_object,
-    initial_situation,
-):
-    """
-    Demonstrate a command derivation and situation pair. Done by extracting the events from the logical form
-    of the command derivation, extracting the arguments of each event. The argument of the event gets located in the
-    situation of the world and the path to that target gets calculated. Based on whether the verb in the command is
-    transitive or not, the agent interacts with the object.
-    :param derivation:
-    :param initial_situation:
-    :returns
-    """
-    action_words = []
-    article_words = []
-    description_words = []
-    adverb_words = []
-
-    if not target_object:
-        return []
-
-    for w in command:
-        if w in ["walk", "to", "push", "pull"]:
-            action_words.append(w)
-
-        if w in ["a"]:
-            article_words.append(w)
-
-        if w in vocabulary_colors + vocabulary_nouns + ["big", "small"]:
-            description_words.append(w)
-
-        if w in ["while spinning", "while zigzagging", "hesitantly", "cautiously"]:
-            adverb_words.append(w)
-
-    # Initialize the world based on the initial situation and the command.
-    reinitialize_world(world, initial_situation, vocabulary, mission=command)
-
-    # Our commands are quite simple
-    manner = adverb_words[0] if adverb_words else ""
-    world.go_to_position(
-        position=target_object.position,
-        manner=manner,
-        primitive_command="walk",
-    )
-
-    # Then if the primitive command is push or pull, we have to move the object to the wall
-    if action_words == ["pull"] or action_words == ["push"]:
-        world.move_object_to_wall(action=action_words[0], manner=manner)
-
-    # Done
-    target_commands, _ = world.get_current_observations()
-    return target_commands
 
 
 def instruction_is_correct(
