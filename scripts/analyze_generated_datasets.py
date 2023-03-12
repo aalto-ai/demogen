@@ -166,7 +166,9 @@ def summarize_hits(hits):
     )
 
 
-def compute_statistics_and_summarize(example, word2idx, color_dictionary, noun_dictionary, limit_demos):
+def compute_statistics_and_summarize(
+    example, word2idx, color_dictionary, noun_dictionary, limit_demos
+):
     return summarize_hits(
         compute_statistics_for_example(
             example,
@@ -182,7 +184,9 @@ def compute_statistics_and_summarize_star(args):
     return compute_statistics_and_summarize(*args)
 
 
-def analyze_all_examples(examples, word2idx, color_dictionary, noun_dictionary, limit_demos=None, num_procs=8):
+def analyze_all_examples(
+    examples, word2idx, color_dictionary, noun_dictionary, limit_demos=None, num_procs=8
+):
     with multiprocessing.Pool(num_procs) as pool:
         yield from pool.imap_unordered(
             compute_statistics_and_summarize_star,
@@ -194,7 +198,9 @@ def analyze_all_examples(examples, word2idx, color_dictionary, noun_dictionary, 
         )
 
 
-def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=None, splits=None):
+def load_data_and_make_hit_results(
+    data_directory, limit_load=None, limit_demos=None, splits=None
+):
     (
         (
             WORD2IDX,
@@ -215,13 +221,15 @@ def load_data_and_make_hit_results(data_directory, limit_load=None, limit_demos=
     return {
         split: summarize_by_dividing_out_count(
             np.stack(
-                list(analyze_all_examples(
-                    tqdm(examples, desc=f"Split {split}"),
-                    WORD2IDX,
-                    color_dictionary,
-                    noun_dictionary,
-                    limit_demos=limit_demos,
-                ))
+                list(
+                    analyze_all_examples(
+                        tqdm(examples, desc=f"Split {split}"),
+                        WORD2IDX,
+                        color_dictionary,
+                        noun_dictionary,
+                        limit_demos=limit_demos,
+                    )
+                )
             )
         )
         for split, examples in tqdm(
@@ -294,7 +302,7 @@ def main():
                 os.path.join(args.data_directory, dataset),
                 limit_load=args.limit_load,
                 limit_demos=args.limit_demos,
-                splits=args.splits
+                splits=args.splits,
             )
             for dataset in args.datasets
         }
