@@ -133,7 +133,7 @@ def plot_at_index(
     print(index)
     print(" ".join([w for w in instr if w != "[pad]"]))
 
-    support_states = meta_valid_demonstrations_dict["h"][index][3]
+    support_states = examples[index][3]
     support_states = (
         [support_states] * len(examples[index][-3])
         if isinstance(support_states[0], np.ndarray)
