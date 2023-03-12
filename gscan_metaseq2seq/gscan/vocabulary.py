@@ -38,7 +38,7 @@ class Vocabulary(object):
         "cautiously",
         "hesitantly",
     }
-    NOUNS = {"circle", "square", "cylinder"}
+    NOUNS = {"circle", "square", "cylinder", "box"}
     COLOR_ADJECTIVES = {"green", "red", "blue", "yellow"}
     SIZE_ADJECTIVES = {"small", "big"}
 

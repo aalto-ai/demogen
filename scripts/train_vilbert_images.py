@@ -1,20 +1,36 @@
 import argparse
 import os
 import math
+
+# Import pillow and matplotlib first before torch pulls in a different libc
+import matplotlib.pyplot as plt
+from PIL import Image
+
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import sys
-from torch.utils.data import DataLoader, Subset
-from positional_encodings.torch_encodings import PositionalEncoding1D
+from torch.utils.data import DataLoader, Subset, Dataset
+from positional_encodings.torch_encodings import (
+    PositionalEncoding1D,
+    PositionalEncoding2D,
+)
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, StochasticWeightAveraging
 from pytorch_lightning.loggers import TensorBoardLogger
 
+from gscan_metaseq2seq.util.solver import (
+    create_vocabulary,
+    create_world,
+    state_to_situation,
+    reinitialize_world,
+)
+
 from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
-from gscan_metaseq2seq.util.load_data import load_data_directories
+
+from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 
@@ -297,10 +313,29 @@ class OneHotEmbedding(nn.Module):
         )
 
 
-class ViLBERTStateEncoderTransformer(nn.Module):
+class ImagePatchEncoding(nn.Module):
+    def __init__(self, in_channels, out_channels, patch_size):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=patch_size, stride=patch_size
+        )
+        self.pos_encoding = PositionalEncoding2D(out_channels)
+        self.projection = nn.Linear(out_channels * 2, out_channels)
+
+    def forward(self, x):
+        patches = self.conv(x.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
+        pos_encoded_patches = self.projection(
+            torch.cat([patches, self.pos_encoding(patches)], dim=-1)
+        )
+
+        return pos_encoded_patches.flatten(1, 2)
+
+
+class ViLBERTImageEncoderTransformer(nn.Module):
     def __init__(
         self,
-        state_component_sizes,
+        n_input_channels,
+        patch_size,
         embed_dim=128,
         nlayers=6,
         nhead=8,
@@ -308,10 +343,8 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         dropout_p=0.1,
     ):
         super().__init__()
-        n_state_components = len(state_component_sizes) + 2
-        self.state_embedding = nn.Sequential(
-            BOWEmbedding(64, n_state_components, embed_dim),
-            nn.Linear(7 * embed_dim, embed_dim),
+        self.state_embedding = ImagePatchEncoding(
+            n_input_channels, embed_dim, patch_size
         )
         self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
         self.cross_encoder = TransformerCrossEncoder(
@@ -361,10 +394,11 @@ def init_parameters(module, scale=1e-2):
         torch.nn.init.zeros_(module.bias)
 
 
-class ViLBERTLeaner(pl.LightningModule):
+class ViLBERTImageLeaner(pl.LightningModule):
     def __init__(
         self,
-        state_component_sizes,
+        n_input_channels,
+        patch_size,
         x_categories,
         y_categories,
         embed_dim,
@@ -384,8 +418,14 @@ class ViLBERTLeaner(pl.LightningModule):
         no_lr_decay=False,
     ):
         super().__init__()
-        self.encoder = ViLBERTStateEncoderTransformer(
-            state_component_sizes, embed_dim, nlayers, nhead, norm_first, dropout_p
+        self.encoder = ViLBERTImageEncoderTransformer(
+            n_input_channels,
+            patch_size,
+            embed_dim,
+            nlayers,
+            nhead,
+            norm_first,
+            dropout_p,
         )
         self.decoder = DecoderTransformer(
             embed_dim,
@@ -423,17 +463,13 @@ class ViLBERTLeaner(pl.LightningModule):
 
     def forward(self, states, queries, decoder_in):
         instruction_mask = queries == self.pad_word_idx
-        state_mask = (states == 0).all(dim=-1)
         encoded, encoding_mask = self.encoder(
             states,
             queries,
-            state_key_padding_mask=state_mask,
+            state_key_padding_mask=None,
             instruction_key_padding_mask=instruction_mask,
         )
-        padding = torch.cat(
-            [state_mask, instruction_mask],
-            dim=-1,
-        )
+        padding = encoding_mask
         return self.decode_autoregressive(decoder_in, encoded, padding)
 
     def training_step(self, x, idx):
@@ -503,6 +539,44 @@ class ViLBERTLeaner(pl.LightningModule):
         )
 
 
+class ImageRenderingDemonstrationsDataset(Dataset):
+    def __init__(
+        self, train_demonstrations, word2idx, colors, nouns, image_downsample=5
+    ):
+        super().__init__()
+        self.train_demonstrations = train_demonstrations
+        self.word2idx = word2idx
+        self.colors = sorted(colors)
+        self.nouns = sorted(nouns)
+
+        vocabulary = create_vocabulary()
+        world = create_world(vocabulary)
+
+        self.world = world
+        self.vocabulary = vocabulary
+        self.image_downsample = image_downsample
+
+    def __getitem__(self, i):
+        instruction, actions, state = self.train_demonstrations[i]
+        words, situation = state_to_situation(
+            instruction, state, self.word2idx, self.colors, self.nouns
+        )
+
+        self.world = reinitialize_world(self.world, situation, self.vocabulary)
+
+        img = (
+            self.world.render(mode="rgb_array")[
+                :: self.image_downsample, :: self.image_downsample
+            ]
+            / 255.0
+        )
+
+        return instruction, actions, img.astype(np.float32)
+
+    def __len__(self):
+        return len(self.train_demonstrations)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
@@ -536,10 +610,12 @@ def main():
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--image-downsample", type=int, default=5)
+    parser.add_argument("--patch-size", type=int, default=12)
     args = parser.parse_args()
 
     exp_name = "gscan"
-    model_name = f"vilbert_cross_encoder_decode_actions_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
+    model_name = f"vilbert_img_cross_encoder_decode_actions_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = "gscan"
     effective_batch_size = args.train_batch_size * args.batch_size_mult
     exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}"
@@ -582,15 +658,18 @@ def main():
     pl.seed_everything(0)
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
-            train_demonstrations,
-            (args.pad_instructions_to, args.pad_actions_to, (args.pad_state_to, 7)),
-            (pad_word, pad_action, 0),
+            ImageRenderingDemonstrationsDataset(
+                train_demonstrations, WORD2IDX, color_dictionary, noun_dictionary
+            ),
+            (args.pad_instructions_to, args.pad_actions_to, None),
+            (pad_word, pad_action, None),
         )
     )
 
     pl.seed_everything(seed)
-    meta_module = ViLBERTLeaner(
-        [4, len(color_dictionary), len(noun_dictionary), 1, 4],
+    meta_module = ViLBERTImageLeaner(
+        3,  # 3 input channels
+        args.patch_size,
         len(IDX2WORD),
         len(IDX2ACTION),
         args.hidden_size,
@@ -673,18 +752,20 @@ def main():
         [
             DataLoader(
                 PaddingDataset(
-                    Subset(
-                        demonstrations,
-                        np.random.permutation(len(demonstrations))[
-                            : args.limit_val_size
-                        ],
+                    ImageRenderingDemonstrationsDataset(
+                        Subset(
+                            demonstrations,
+                            np.random.permutation(len(demonstrations))[
+                                : args.limit_val_size
+                            ],
+                        ),
+                        WORD2IDX,
+                        color_dictionary,
+                        noun_dictionary,
+                        args.image_downsample,
                     ),
-                    (
-                        args.pad_instructions_to,
-                        args.pad_actions_to,
-                        (args.pad_state_to, 7),
-                    ),
-                    (pad_word, pad_action, 0),
+                    (args.pad_instructions_to, args.pad_actions_to, None),
+                    (pad_word, pad_action, None),
                 ),
                 batch_size=max([args.train_batch_size, args.valid_batch_size]),
                 pin_memory=True,

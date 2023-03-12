@@ -17,8 +17,7 @@ from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import (
     PaddingDataset,
     ReshuffleOnIndexZeroDataset,
-    MapDataset,
-    ReorderSupportsByDistanceDataset,
+    MapDataset
 )
 from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
@@ -44,7 +43,10 @@ class Attn(nn.Module):
         #  attn_weights : soft-retrieval of values; ... x batch_size x n_queries x n_memory
         orig_q_shape = Q.shape
 
-        query_dim = torch.tensor(float(Q.size(-1)), device=Q.device)
+        query_dim = torch.tensor(float(Q.size(-1)))
+        if Q.is_cuda:
+            query_dim = query_dim.cuda()
+
         Q = Q.flatten(0, -3)
         K_T = K.flatten(0, -3).transpose(-2, -1)
         V = V.flatten(0, -3)
@@ -75,24 +77,11 @@ class Attn(nn.Module):
 
 
 class EncoderTransformer(nn.Module):
-    def __init__(
-        self,
-        input_size,
-        embedding_dim,
-        nlayers,
-        nhead,
-        norm_first,
-        dropout_p,
-        pad_word_idx,
-    ):
+    def __init__(self, embedding_dim, nlayers, nhead, norm_first, dropout_p):
         super().__init__()
-        self.embedding = nn.Embedding(input_size, embedding_dim)
-        self.embedding_projection = nn.Linear(embedding_dim * 2, embedding_dim)
         self.dropout = nn.Dropout(dropout_p)
         self.encoding = nn.Parameter(torch.randn(embedding_dim))
-        self.pos_encoding = PositionalEncoding1D(embedding_dim)
         self.bi = False
-        self.pad_word_idx = pad_word_idx
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embedding_dim,
@@ -104,24 +93,25 @@ class EncoderTransformer(nn.Module):
             num_layers=nlayers,
         )
 
-    def forward(self, z_padded):
-        z_padding_bits = z_padded == self.pad_word_idx
+    def forward(self, x, key_padding_mask=None):
+        key_padding_mask = (
+            torch.zeros_like(x[..., 0]).bool()
+            if key_padding_mask is None
+            else key_padding_mask
+        )
 
-        z_embed_seq = self.embedding(z_padded)
-        z_embed_seq = torch.cat([self.pos_encoding(z_embed_seq), z_embed_seq], dim=-1)
-        z_embed_seq = self.embedding_projection(z_embed_seq)
         z_embed_seq = torch.cat(
             [
-                z_embed_seq,
+                x,
                 self.encoding[None, None].expand(
-                    z_embed_seq.shape[0], 1, self.encoding.shape[-1]
+                    x.shape[0], 1, self.encoding.shape[-1]
                 ),
             ],
             dim=-2,
         )
         z_embed_seq = self.dropout(z_embed_seq)
         padding_bits = torch.cat(
-            [z_padding_bits, torch.zeros_like(z_padding_bits[:, :1])], dim=-1
+            [key_padding_mask, torch.zeros_like(key_padding_mask[:, :1])], dim=-1
         )
 
         encoded_seq = self.encoder(
@@ -282,41 +272,6 @@ class StateEncoderDecoderTransformer(nn.Module):
         return encoded_seq[-1], encoded_seq[:-1]
 
 
-class StackedMHAModule(nn.Module):
-    def __init__(self, embed_dim, dim_feedforward, nhead, dropout_p):
-        super().__init__()
-        self.mha = nn.MultiheadAttention(embed_dim, nhead, dropout=dropout_p)
-        self.ff = nn.Sequential(
-            nn.Linear(embed_dim, dim_feedforward),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=dropout_p),
-            nn.Linear(dim_feedforward, embed_dim)
-        )
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
-        self.dropout_p = dropout_p
-
-    def forward(self, x):
-        query, key, value, key_padding_mask = x
-
-        mha_query = F.dropout(self.mha(query, key, value, key_padding_mask=key_padding_mask)[0], p=self.dropout_p)
-        ff_query = F.dropout(self.ff(self.norm1(mha_query + mha_query)), p=self.dropout_p)
-
-        return self.norm2(query + ff_query), key, value, key_padding_mask
-
-
-class StackedMHA(nn.Module):
-    def __init__(self, embed_dim, dim_feedforward, nhead, nlayers, dropout_p):
-        super().__init__()
-        self.net = nn.Sequential(*[
-            StackedMHAModule(embed_dim, dim_feedforward, nhead, dropout_p)
-            for _ in range(nlayers)
-        ])
-
-    def forward(self, query, key, value, key_padding_mask=None):
-        return self.net((query, key, value, key_padding_mask))[0]
-
-
 class MetaNetRNN(nn.Module):
     # Meta Seq2Seq encoder
     #
@@ -330,9 +285,6 @@ class MetaNetRNN(nn.Module):
     def __init__(
         self,
         embedding_dim,
-        n_state_components,
-        input_size,
-        output_size,
         nlayers,
         nhead,
         pad_word_idx,
@@ -352,42 +304,32 @@ class MetaNetRNN(nn.Module):
         #
         super(MetaNetRNN, self).__init__()
         self.nlayers = nlayers
-        self.input_size = input_size
-        self.output_size = output_size
         self.embedding_dim = embedding_dim
         self.dropout_p = dropout_p
         self.attn = Attn()
-        self.suppport_embedding = StateEncoderDecoderTransformer(
-            n_state_components=n_state_components,
-            input_size=input_size,
+        self.support_encoder = EncoderTransformer(
             embedding_dim=embedding_dim,
             nlayers=nlayers,
             nhead=nhead,
             norm_first=norm_first,
             dropout_p=dropout_p,
-            pad_word_idx=pad_word_idx,
         )
         if tie_encoders:
-            self.query_embedding = self.suppport_embedding
+            self.query_encoder = self.support_encoder
         else:
-            self.query_embedding = StateEncoderDecoderTransformer(
-                n_state_components=n_state_components,
-                input_size=input_size,
+            self.query_encoder = EncoderTransformer(
                 embedding_dim=embedding_dim,
                 nlayers=nlayers,
                 nhead=nhead,
                 norm_first=norm_first,
                 dropout_p=dropout_p,
-                pad_word_idx=pad_word_idx,
             )
-        self.output_embedding = EncoderTransformer(
-            input_size=output_size,
+        self.output_encoder = EncoderTransformer(
             embedding_dim=embedding_dim,
             nlayers=nlayers,
             nhead=nhead,
             norm_first=norm_first,
             dropout_p=dropout_p,
-            pad_word_idx=pad_action_idx,
         )
         self.pad_word_idx = pad_word_idx
         self.pad_action_idx = pad_action_idx
@@ -396,13 +338,34 @@ class MetaNetRNN(nn.Module):
 
     def forward(
         self,
-        query_state,
-        support_state,
+        query,
         x_supports,
         y_supports,
-        support_mask,
-        x_queries,
+        query_key_padding_mask=None,
+        x_supports_key_padding_mask=None,
+        y_supports_key_padding_mask=None,
+        supports_key_padding_mask=None,
     ):
+        x_supports_key_padding_mask = (
+            torch.zeros_like(x_supports[..., 0]).bool()
+            if x_supports_key_padding_mask is None
+            else x_supports_key_padding_mask
+        )
+        y_supports_key_padding_mask = (
+            torch.zeros_like(y_supports[..., 0]).bool()
+            if y_supports_key_padding_mask is None
+            else y_supports_key_padding_mask
+        )
+        query_key_padding_mask = (
+            torch.zeros_like(query[..., 0]).bool()
+            if query_key_padding_mask is None
+            else query_key_padding_mask
+        )
+        supports_key_padding_mask = (
+            torch.zeros_like(x_supports[..., 0, 0]).bool()
+            if supports_key_padding_mask is None
+            else supports_key_padding_mask
+        )
         #
         # Forward pass over an episode
         #
@@ -415,33 +378,28 @@ class MetaNetRNN(nn.Module):
         #   attn_by_step : attention over support items at every step for each query [max_xq_length x nq x ns]
         #   seq_len : length of each query [nq list]
         #
-        xs_padded = (
-            x_supports  # support set input sequences; LongTensor (ns x max_xs_length)
-        )
-        ys_padded = (
-            y_supports  # support set output sequences; LongTensor (ns x max_ys_length)
-        )
-        xq_padded = (
-            x_queries  # query set input sequences; LongTensor (nq x max_xq_length)
-        )
+        xs_padded = x_supports  # support set input sequences; LongTensor (ns x max_xs_length x emb_dim)
+        ys_padded = y_supports  # support set output sequences; LongTensor (ns x max_ys_length x emb_dim)
+        xq_padded = query  # query set input sequences; LongTensor (nq x max_xq_length x emb_dim)
 
         # xs_state = state[:, None].expand(-1, xs_padded.shape[1], -1).flatten(0, 1)
-        xs_padded_flat = xs_padded.flatten(0, 1)  # (bs x ns) x xs_seq_len
-        ys_padded_flat = ys_padded.flatten(0, 1)  # (bs x ns) x ys_seq_len
-        support_state_flat = support_state.flatten(
-            0, 1
-        )  # (bs x ns) x state_seq_len x state_bits
+        xs_padded_flat = xs_padded.flatten(0, 1)  # (bs x ns) x xs_seq_len x emb_dim
+        ys_padded_flat = ys_padded.flatten(0, 1)  # (bs x ns) x ys_seq_len x emb_dim
+        xs_key_padding_mask_flat = x_supports_key_padding_mask.flatten(0, 1)
+        ys_key_padding_mask_flat = y_supports_key_padding_mask.flatten(0, 1)
 
         # Embed the input sequences for support and query set
-        embed_xs, _ = self.suppport_embedding(
-            support_state_flat, xs_padded_flat
-        )  # bs x embedding_dim, _
-        embed_xq, embed_xq_by_step = self.query_embedding(
-            query_state, xq_padded
-        )  # bs x embedding_dim, (state_seq_len? + xq_seq_len) x bs x embedding_dim (embedding at each step)
+        embed_xs, _ = self.support_encoder(
+            xs_padded_flat, key_padding_mask=xs_key_padding_mask_flat
+        )  # bs x embedding, _
+        embed_xq, embed_xq_by_step = self.query_encoder(
+            xq_padded, key_padding_mask=query_key_padding_mask
+        )  # bs x embedding, (state_seq_len? + xq_seq_len) x bs x emb_dim (embedding at each step)
 
         # Embed the output sequences for support set
-        embed_ys, _ = self.output_embedding(ys_padded_flat)  # (bs x ns) x embedding_dim
+        embed_ys, _ = self.output_encoder(
+            ys_padded_flat, key_padding_mask=ys_key_padding_mask_flat
+        )  # (bs x ns) x emb_dim
 
         embed_xs = embed_xs.unflatten(0, (xs_padded.shape[0], xs_padded.shape[1]))
         embed_ys = embed_ys.unflatten(0, (ys_padded.shape[0], ys_padded.shape[1]))
@@ -458,6 +416,10 @@ class MetaNetRNN(nn.Module):
         # For embed_xq_by_step we should have seq_len x bs x 1 x e
         embed_xq_by_step_expanded = embed_xq_by_step[:, :, None, :]
 
+        supports_key_padding_mask_expanded = supports_key_padding_mask[None].expand(
+            embed_xq_by_step.shape[0], -1, -1
+        )
+
         # The attention is Q(Sx^T) Sy which means that
         # for row i you have QiSx_0 Sy_0 ... Qi Sx_n Sy_n
         # eg a (seq_len x bs x 1 x e) x (seq_len x bs x e x ns) => seq_len x bs x 1 x ns
@@ -469,18 +431,12 @@ class MetaNetRNN(nn.Module):
         #
         # Then if your values are
 
-        # Mask sequences that are actually padding and also those
-        # specified in support_mask
-        support_mask = (xs_padded[..., 0] == self.pad_word_idx).expand(
-            embed_xq_by_step.shape[0], -1, -1
-        ) | support_mask
-
         # Compute context based on key-value memory at each time step for queries
         value_by_step, attn_by_step = self.attn(
             embed_xq_by_step_expanded,  # (xq_seq_len) x bs x 1 x embedding_dim
             embed_xs_expanded,  # seq_len x bs x ns x e
             embed_ys_expanded,  # seq_len x bs x ns x e
-            support_mask,
+            supports_key_padding_mask_expanded,  # seq_len x bs x ns
         )  # => (seq_len x bs x 1 x e)
 
         value_by_step = value_by_step.squeeze(-2)  # seq_len x bs x e
@@ -505,12 +461,10 @@ class MetaNetRNN(nn.Module):
 class EncoderDecoderTransformer(nn.Module):
     def __init__(
         self,
-        n_state_components,
         hidden_size,
         output_size,
         nlayers,
         nhead,
-        pad_action_idx,
         norm_first,
         dropout_p=0.1,
     ):
@@ -522,32 +476,31 @@ class EncoderDecoderTransformer(nn.Module):
         #  dropout_p : dropout applied to symbol embeddings and Transformers
         #
         super().__init__()
-        self.n_state_components = n_state_components
         self.nlayers = nlayers
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.dropout_p = dropout_p
         self.tanh = nn.Tanh()
-        self.state_embedding = BOWEmbedding(64, self.n_state_components, hidden_size)
-        self.state_projection = nn.Linear(
-            self.n_state_components * hidden_size, hidden_size
-        )
-        self.embedding = nn.Embedding(output_size, hidden_size)
-        self.embedding_projection = nn.Linear(hidden_size * 2, hidden_size)
-        self.pos_encoding = PositionalEncoding1D(hidden_size)
         self.dropout = nn.Dropout(dropout_p)
-        self.pad_action_idx = pad_action_idx
-        self.transformer = nn.Transformer(
-            d_model=hidden_size,
-            dim_feedforward=hidden_size * 4,
-            dropout=dropout_p,
-            nhead=nhead,
-            num_encoder_layers=nlayers,
-            num_decoder_layers=nlayers,
+        self.transformer = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(
+                d_model=hidden_size,
+                dim_feedforward=hidden_size * 4,
+                dropout=dropout_p,
+                nhead=nhead,
+                norm_first=norm_first,
+            ),
+            num_layers=nlayers,
         )
         self.out = nn.Linear(hidden_size, output_size)
 
-    def forward(self, inputs, encoder_outputs, encoder_padding):
+    def forward(
+        self,
+        decoder_inputs,
+        encoder_outputs,
+        encoder_key_padding_mask=None,
+        decoder_key_padding_mask=None,
+    ):
         # Run batch decoder forward for a single time step.
         #
         # Input
@@ -559,23 +512,25 @@ class EncoderDecoderTransformer(nn.Module):
         #
         # Embed each input symbol
         # state, state_padding_bits = extract_padding(state)
-        input_padding_bits = inputs == self.pad_action_idx
-
-        embedding = self.embedding(inputs)  # batch_size x hidden_size
-        embedding = self.embedding_projection(
-            torch.cat([embedding, self.pos_encoding(embedding)], dim=-1)
+        encoder_key_padding_mask = (
+            torch.zeros_like(encoder_outputs[..., 0]).bool()
+            if encoder_key_padding_mask is None
+            else encoder_key_padding_mask
         )
-        embedding = self.dropout(embedding)
+        decoder_key_padding_mask = (
+            torch.zeros_like(decoder_inputs[..., 0]).bool()
+            if decoder_key_padding_mask is None
+            else decoder_key_padding_mask
+        )
 
         decoded = self.transformer(
-            encoder_outputs,
-            embedding.transpose(0, 1),
-            src_key_padding_mask=encoder_padding,
-            tgt_key_padding_mask=input_padding_bits,
-            tgt_mask=torch.triu(
-                torch.full((inputs.shape[-1], inputs.shape[-1]), float("-inf")),
-                diagonal=1,
-            ).to(inputs.device),
+            tgt=decoder_inputs.transpose(0, 1),
+            memory=encoder_outputs,
+            tgt_key_padding_mask=decoder_key_padding_mask,
+            memory_key_padding_mask=encoder_key_padding_mask,
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
+                decoder_inputs.shape[-2]
+            ).to(decoder_inputs.device),
         ).transpose(0, 1)
 
         return self.out(decoded)
@@ -599,7 +554,7 @@ def init_parameters(module, scale=1e-2):
         torch.nn.init.zeros_(module.bias)
 
 
-class ImaginationMetaLearner(pl.LightningModule):
+class StateImaginationMetaLearner(pl.LightningModule):
     def __init__(
         self,
         n_state_components,
@@ -623,11 +578,13 @@ class ImaginationMetaLearner(pl.LightningModule):
         metalearn_include_permutations=False,
     ):
         super().__init__()
+        self.state_embedding = BOWEmbedding(64, n_state_components, embed_dim)
+        self.state_projection = nn.Linear(n_state_components * embed_dim, embed_dim)
+        self.x_embedding = nn.Embedding(x_categories, embed_dim)
+        self.y_embedding = nn.Embedding(y_categories, embed_dim)
+        self.pos_encoding = PositionalEncoding1D(embed_dim)
         self.encoder = MetaNetRNN(
             embed_dim,
-            n_state_components,
-            x_categories,
-            y_categories,
             nlayers,
             nhead,
             pad_word_idx,
@@ -636,13 +593,11 @@ class ImaginationMetaLearner(pl.LightningModule):
             dropout_p,
         )
         self.decoder = EncoderDecoderTransformer(
-            n_state_components=n_state_components,
             hidden_size=embed_dim,
             output_size=y_categories,
             norm_first=norm_first,
             nlayers=nlayers,
             nhead=nhead,
-            pad_action_idx=pad_action_idx,
             dropout_p=dropout_p,
         )
         self.y_categories = y_categories
@@ -666,50 +621,85 @@ class ImaginationMetaLearner(pl.LightningModule):
     def encode(self, support_state, x_supports, y_supports, queries):
         return self.encoder(support_state, x_supports, y_supports, queries)
 
-    def decode_autoregressive(self, decoder_in, encoder_outputs, encoder_padding):
-        return self.decoder(decoder_in, encoder_outputs, encoder_padding)
+    def decode_autoregressive(
+        self, decoder_in, encoder_outputs, encoder_padding, decoder_padding
+    ):
+        return self.decoder(
+            decoder_in, encoder_outputs, encoder_padding, decoder_padding
+        )
 
     def forward(
         self,
-        x_permutation,
-        y_permutation,
         query_state,
         support_state,
         x_supports,
         y_supports,
-        support_mask,
+        user_support_mask,
         queries,
         decoder_in,
     ):
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
-            )
-
-        encoded = self.encoder(
-            query_state,
-            # We expand the support_state if it was not already expanded.
+        # We expand the support_state if it was not already expanded.
+        support_state = (
             support_state
             if support_state.ndim == 4
-            else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
-            x_supports,
-            y_supports,
-            support_mask,
-            queries,
+            else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1)
+        )
+
+        query_state_mask = (query_state == 0).all(dim=-1)
+        support_state_mask = (support_state == 0).all(dim=-1)
+        x_support_mask = x_supports == self.pad_word_idx
+        y_support_mask = y_supports == self.pad_action_idx
+        query_mask = queries == self.pad_word_idx
+        target_mask = decoder_in == self.pad_action_idx
+        support_mask = x_support_mask.all(dim=-1)
+
+        # Mask sequences that are actually padding and also those
+        # specified in support_mask
+        support_mask = support_mask | user_support_mask
+
+        query_mask = torch.cat([query_state_mask, query_mask], dim=-1)
+        x_support_mask = torch.cat([support_state_mask, x_support_mask], dim=-1)
+
+        embed_query_state = self.state_projection(self.state_embedding(query_state))
+        embed_support_states = self.state_projection(
+            self.state_embedding(support_state)
+        )
+
+        embed_query = self.x_embedding(queries)
+        embed_query = embed_query + self.pos_encoding(embed_query)
+        embed_query_and_state = torch.cat([embed_query_state, embed_query], dim=-2)
+        embed_x_supports = self.x_embedding(x_supports)
+        embed_x_supports = embed_x_supports + self.pos_encoding(
+            embed_x_supports.view(
+                -1, embed_x_supports.shape[-2], embed_x_supports.shape[-1]
+            )
+        ).view(*embed_x_supports.shape)
+        embed_x_supports_and_state = torch.cat(
+            [embed_support_states, embed_x_supports], dim=-2
+        )
+        embed_y_supports = self.y_embedding(y_supports)
+        embed_y_supports = embed_y_supports + self.pos_encoding(
+            embed_y_supports.view(
+                -1, embed_y_supports.shape[-2], embed_y_supports.shape[-1]
+            )
+        ).view(*embed_y_supports.shape)
+        embed_target = self.y_embedding(decoder_in)
+
+        encoded = self.encoder(
+            embed_query_and_state,
+            embed_x_supports_and_state,
+            embed_y_supports,
+            query_key_padding_mask=query_mask,
+            x_supports_key_padding_mask=x_support_mask,
+            y_supports_key_padding_mask=y_support_mask,
+            supports_key_padding_mask=support_mask,
         )
         return self.decode_autoregressive(
-            decoder_in, encoded, (queries == self.pad_word_idx)
+            embed_target, encoded, query_mask, target_mask
         )
 
     def training_step(self, x, idx):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -730,8 +720,6 @@ class ImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -766,8 +754,6 @@ class ImaginationMetaLearner(pl.LightningModule):
 
     def validation_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -785,8 +771,6 @@ class ImaginationMetaLearner(pl.LightningModule):
 
         # Now do the training
         preds = self.forward(
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             x_supports,
@@ -819,8 +803,6 @@ class ImaginationMetaLearner(pl.LightningModule):
 
     def predict_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
             query_state,
             support_state,
             queries,
@@ -830,16 +812,6 @@ class ImaginationMetaLearner(pl.LightningModule):
         ) = x
         decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
         support_mask = torch.zeros_like(x_supports[..., 0]).bool()
-
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
-            )
 
         padding = queries == self.pad_word_idx
 
@@ -862,7 +834,9 @@ class ImaginationMetaLearner(pl.LightningModule):
 
             for i in range(targets.shape[1]):
                 logits.append(
-                    self.decode_autoregressive(decoder_in, encoded, padding)[:, -1]
+                    self.decode_autoregressive(decoder_in, encoded, padding, None)[
+                        :, -1
+                    ]
                 )
                 decoder_out = logits[-1].argmax(dim=-1)
                 decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
@@ -879,6 +853,299 @@ class ImaginationMetaLearner(pl.LightningModule):
         return decoded, logits, exacts
 
 
+class SequenceImaginationMetaLearner(pl.LightningModule):
+    def __init__(
+        self,
+        x_categories,
+        y_categories,
+        embed_dim,
+        dropout_p,
+        nlayers,
+        nhead,
+        pad_word_idx,
+        pad_action_idx,
+        sos_action_idx,
+        eos_action_idx,
+        norm_first=False,
+        lr=1e-4,
+        wd=1e-2,
+        warmup_proportion=0.001,
+        decay_power=-1,
+        predict_steps=64,
+        metalearn_dropout_p=0.0,
+        metalearn_include_permutations=False,
+    ):
+        super().__init__()
+        self.x_embedding = nn.Embedding(x_categories, embed_dim)
+        self.y_embedding = nn.Embedding(y_categories, embed_dim)
+        self.pos_encoding = PositionalEncoding1D(embed_dim)
+        self.encoder = MetaNetRNN(
+            embed_dim,
+            nlayers,
+            nhead,
+            pad_word_idx,
+            pad_action_idx,
+            norm_first,
+            dropout_p,
+        )
+        self.decoder = EncoderDecoderTransformer(
+            hidden_size=embed_dim,
+            output_size=y_categories,
+            norm_first=norm_first,
+            nlayers=nlayers,
+            nhead=nhead,
+            dropout_p=dropout_p,
+        )
+        self.y_categories = y_categories
+        self.pad_word_idx = pad_word_idx
+        self.pad_action_idx = pad_action_idx
+        self.sos_action_idx = sos_action_idx
+        self.eos_action_idx = eos_action_idx
+
+        self.apply(init_parameters)
+        self.save_hyperparameters()
+
+    def configure_optimizers(self):
+        return transformer_optimizer_config(
+            self,
+            self.hparams.lr,
+            warmup_proportion=self.hparams.warmup_proportion,
+            weight_decay=self.hparams.wd,
+            decay_power=self.hparams.decay_power,
+        )
+
+    def encode(self, x_supports, y_supports, queries):
+        return self.encoder(x_supports, y_supports, queries)
+
+    def decode_autoregressive(
+        self, decoder_in, encoder_outputs, encoder_padding, decoder_padding
+    ):
+        return self.decoder(
+            decoder_in, encoder_outputs, encoder_padding, decoder_padding
+        )
+
+    def forward(
+        self,
+        x_supports,
+        y_supports,
+        user_support_mask,
+        queries,
+        decoder_in,
+    ):
+        x_support_mask = x_supports == self.pad_word_idx
+        y_support_mask = y_supports == self.pad_action_idx
+        query_mask = queries == self.pad_word_idx
+        target_mask = decoder_in == self.pad_action_idx
+        support_mask = x_support_mask.all(dim=-1)
+
+        # Mask sequences that are actually padding and also those
+        # specified in support_mask
+        support_mask = support_mask | user_support_mask
+
+        embed_query = self.x_embedding(queries)
+        embed_query = embed_query + self.pos_encoding(embed_query)
+        embed_x_supports = self.x_embedding(x_supports)
+        embed_x_supports = embed_x_supports + self.pos_encoding(
+            embed_x_supports.view(
+                -1, embed_x_supports.shape[-2], embed_x_supports.shape[-1]
+            )
+        ).view(*embed_x_supports.shape)
+        embed_y_supports = self.y_embedding(y_supports)
+        embed_y_supports = embed_y_supports + self.pos_encoding(
+            embed_y_supports.view(
+                -1, embed_y_supports.shape[-2], embed_y_supports.shape[-1]
+            )
+        ).view(*embed_y_supports.shape)
+        embed_target = self.y_embedding(decoder_in)
+
+        encoded = self.encoder(
+            embed_query,
+            embed_x_supports,
+            embed_y_supports,
+            query_key_padding_mask=query_mask,
+            x_supports_key_padding_mask=x_support_mask,
+            y_supports_key_padding_mask=y_support_mask,
+            supports_key_padding_mask=support_mask,
+        )
+        return self.decode_autoregressive(
+            embed_target, encoded, query_mask, target_mask
+        )
+
+    def training_step(self, x, idx):
+        (
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
+        actions_mask = targets == self.pad_action_idx
+
+        decoder_in = torch.cat(
+            [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
+        )
+
+        # Mask metalearn_dropout_p % of the supports
+        support_mask = torch.randperm(x_supports.shape[1], device=self.device).expand(
+            x_supports.shape[0], x_supports.shape[1]
+        ) < int(x_supports.shape[1] * self.hparams.metalearn_dropout_p)
+
+        # Now do the training
+        preds = self.forward(
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
+        )[:, :-1]
+
+        # Ultimately we care about the cross entropy loss
+        loss = F.cross_entropy(
+            preds.flatten(0, -2),
+            targets.flatten().long(),
+            ignore_index=self.pad_action_idx,
+        )
+
+        argmax_preds = preds.argmax(dim=-1)
+        argmax_preds[actions_mask] = self.pad_action_idx
+        exacts = (argmax_preds == targets).all(dim=-1).to(torch.float).mean()
+
+        self.log("tloss", loss, prog_bar=True)
+        self.log("texact", exacts, prog_bar=True)
+        self.log(
+            "tacc",
+            (preds.argmax(dim=-1)[~actions_mask] == targets[~actions_mask])
+            .float()
+            .mean(),
+            prog_bar=True,
+        )
+
+        return loss
+
+    def validation_step(self, x, idx, dl_idx=0):
+        (
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
+        actions_mask = targets == self.pad_action_idx
+
+        decoder_in = torch.cat(
+            [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets], dim=-1
+        )
+
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+
+        # Now do the training
+        preds = self.forward(
+            x_supports,
+            y_supports,
+            support_mask,
+            queries,
+            decoder_in,
+        )[:, :-1]
+
+        # Ultimately we care about the cross entropy loss
+        loss = F.cross_entropy(
+            preds.flatten(0, -2),
+            targets.flatten().long(),
+            ignore_index=self.pad_action_idx,
+        )
+
+        argmax_preds = preds.argmax(dim=-1)
+        argmax_preds[actions_mask] = self.pad_action_idx
+        exacts = (argmax_preds == targets).all(dim=-1).to(torch.float).mean()
+
+        self.log("vloss", loss, prog_bar=True)
+        self.log("vexact", exacts, prog_bar=True)
+        self.log(
+            "vacc",
+            (preds.argmax(dim=-1)[~actions_mask] == targets[~actions_mask])
+            .float()
+            .mean(),
+            prog_bar=True,
+        )
+
+    def predict_step(self, x, idx, dl_idx=0):
+        (
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = x
+        decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
+        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+        padding = queries == self.pad_word_idx
+
+        # We do autoregressive prediction, predict for as many steps
+        # as there are targets, but don't use teacher forcing
+        logits = []
+
+        with torch.no_grad():
+            encoded = self.encoder(
+                x_supports,
+                y_supports,
+                support_mask,
+                queries,
+            )
+
+            for i in range(targets.shape[1]):
+                logits.append(
+                    self.decode_autoregressive(decoder_in, encoded, padding, None)[
+                        :, -1
+                    ]
+                )
+                decoder_out = logits[-1].argmax(dim=-1)
+                decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
+
+            decoded_eq_mask = (
+                (decoder_in == self.eos_action_idx).int().cumsum(dim=-1).bool()[:, :-1]
+            )
+            decoded = decoder_in[:, 1:]
+            decoded[decoded_eq_mask] = self.pad_action_idx
+            logits = torch.stack(logits, dim=1)
+
+        exacts = (decoded == targets).all(dim=-1)
+
+        return decoded, logits, exacts
+
+
+def compress_permute(arrays, generator, pad_idx):
+    concat_array = arrays.reshape(-1)
+    max_index = concat_array.max()
+    putback_values = np.arange(max_index + 1, dtype=int)
+    putback_mask = putback_values >= pad_idx
+
+    # First create an array of 1s where the indices are
+    zeros = np.zeros(max_index + 1, dtype=int)
+    zeros[concat_array] = 1
+    zeros[putback_mask] = 0
+
+    zeros_bool = zeros.astype(bool)
+
+    # Then determine how many non-zero elements we have in that array
+    num_nonzero = zeros[zeros_bool].shape[0]
+
+    # Then assign the nonzero elements to something
+    # in a permutation in the range of num_nonzero
+    zeros[zeros_bool] = generator.permutation(num_nonzero)
+
+    # Pad index gets mapped back to pad_idx
+    zeros[putback_mask] = putback_values[putback_mask]
+
+    # Now look up the original indices for each array
+    # in the permutation
+    return zeros[arrays]
+
+
+def regular_permute(arrays, generator, pad_idx, categories):
+    # Do the permutation
+    permutation = np.arange(x_categories)
+    permutation[0:pad_idx] = permutation[0:pad_idx][self.generator.permutation(pad_idx)]
+
+    return permutation[arrays]
+
+
 class PermuteActionsDataset(Dataset):
     def __init__(
         self,
@@ -888,6 +1155,7 @@ class PermuteActionsDataset(Dataset):
         pad_word_idx,
         pad_action_idx,
         shuffle=True,
+        compress=True,
         seed=0,
     ):
         super().__init__()
@@ -897,6 +1165,7 @@ class PermuteActionsDataset(Dataset):
         self.pad_word_idx = pad_word_idx
         self.pad_action_idx = pad_action_idx
         self.shuffle = shuffle
+        self.compress = compress
         self.generator = np.random.default_rng(seed)
 
     def state_dict(self):
@@ -910,31 +1179,40 @@ class PermuteActionsDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        query_state, support_state, queries, targets, x_supports, y_supports = self.dataset[idx]
-
-        x_permutation = np.arange(self.x_categories)
-        y_permutation = np.arange(self.y_categories)
+        queries, targets, x_supports, y_supports = [
+            np.copy(x) for x in self.dataset[idx]
+        ]
 
         # Compute permutations of outputs
         if self.shuffle:
-            # Do the permutation
-            x_permutation[0 : self.pad_word_idx] = x_permutation[0 : self.pad_word_idx][
-                self.generator.permutation(self.pad_word_idx)
-            ]
-            y_permutation[0 : self.pad_action_idx] = y_permutation[
-                0 : self.pad_action_idx
-            ][self.generator.permutation(self.pad_action_idx)]
-
-            x_supports = x_permutation[x_supports]
-            queries = x_permutation[queries]
-            y_supports = y_permutation[y_supports]
-            targets = y_permutation[targets]
+            if self.compress:
+                query_and_x_supports = compress_permute(
+                    np.concatenate([queries[None], x_supports], axis=0),
+                    self.generator,
+                    self.pad_word_idx,
+                )
+                query_and_y_supports = compress_permute(
+                    np.concatenate([targets[None], y_supports], axis=0),
+                    self.generator,
+                    self.pad_action_idx,
+                )
+            else:
+                query_and_x_supports = regular_permute(
+                    np.concatenate([queries[None], x_supports], axis=0),
+                    self.generator,
+                    self.pad_word_idx,
+                    self.x_categories,
+                )
+                query_and_y_supports = regular_permute(
+                    np.concatenate([targets[None], y_supports], axis=0),
+                    self.generator,
+                    self.pad_action_idx,
+                    self.y_categories,
+                )
+            queries, x_supports = query_and_x_supports[0], query_and_x_supports[1:]
+            targets, y_supports = query_and_y_supports[0], query_and_y_supports[1:]
 
         return (
-            0,
-            0,
-            query_state,
-            support_state,
             queries,
             targets,
             x_supports,
@@ -960,8 +1238,6 @@ class ShuffleDemonstrationsDataset(Dataset):
 
     def __getitem__(self, idx):
         (
-            query_state,
-            support_state,
             queries,
             targets,
             x_supports,
@@ -973,14 +1249,32 @@ class ShuffleDemonstrationsDataset(Dataset):
         support_permutation = self.generator.permutation(x_supports.shape[0])
 
         return (
-            query_state,
-            [support_state[i] for i in support_permutation]
-            if isinstance(support_state, list)
-            else support_state,
             queries,
             targets,
             x_supports[support_permutation],
             y_supports[support_permutation],
+        )
+
+
+class ReorderSupportsByDistanceDataset(Dataset):
+    def __init__(self, dataset, limit):
+        super().__init__()
+        self.dataset = dataset
+        self.limit = limit
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        (queries, targets, x_supports, y_supports, similarity_logit) = self.dataset[idx]
+
+        order = (-np.array(similarity_logit)).argsort()[: self.limit]
+
+        return (
+            queries,
+            targets,
+            [x_supports[i] for i in order],
+            [y_supports[i] for i in order],
         )
 
 
@@ -1022,7 +1316,7 @@ def main():
     parser.add_argument("--dataloader-ncpus", type=int, default=1)
     args = parser.parse_args()
 
-    exp_name = "meta_gscan"
+    exp_name = "cogs"
     model_name = f"meta_imagination_transformer_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
     dataset_name = args.dataset_name
     effective_batch_size = args.train_batch_size * args.batch_size_mult
@@ -1044,12 +1338,7 @@ def main():
     iterations = args.iterations
 
     (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        (WORD2IDX, ACTION2IDX),
         (meta_train_demonstrations, meta_valid_demonstrations_dict),
     ) = load_data_directories(
         args.train_demonstrations, args.dictionary, limit_load=args.limit_load
@@ -1069,35 +1358,17 @@ def main():
             PaddingDataset(
                 ReorderSupportsByDistanceDataset(
                     MapDataset(
-                        MapDataset(
-                            meta_train_demonstrations,
-                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
-                        ),
-                        lambda x: (
-                            x[0],
-                            [x[1]] * len(x[-1])
-                            if not isinstance(x[1][0], list)
-                            else x[1],
-                            x[2],
-                            x[3],
-                            x[4],
-                            x[5],
-                            x[6],
-                        ),
+                        MapDataset(meta_train_demonstrations, lambda x: x), lambda x: x
                     ),
                     args.metalearn_demonstrations_limit,
                 ),
                 (
-                    (args.pad_state_to, 7),
-                    (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
                     args.pad_instructions_to,
                     args.pad_actions_to,
                     (args.metalearn_demonstrations_limit, args.pad_instructions_to),
                     (args.metalearn_demonstrations_limit, args.pad_actions_to),
                 ),
                 (
-                    0,
-                    0,
                     pad_word,
                     pad_action,
                     pad_word,
@@ -1116,8 +1387,7 @@ def main():
     )
 
     pl.seed_everything(seed)
-    meta_module = ImaginationMetaLearner(
-        7,
+    meta_module = SequenceImaginationMetaLearner(
         len(IDX2WORD),
         len(IDX2ACTION),
         args.hidden_size,
@@ -1139,7 +1409,8 @@ def main():
 
     train_dataloader = DataLoader(
         meta_train_dataset,
-        batch_size=args.train_batch_size
+        batch_size=args.train_batch_size,
+        num_workers=args.dataloader_ncpus,
     )
 
     check_val_opts = {}
@@ -1193,33 +1464,19 @@ def main():
                                         : args.limit_val_size
                                     ],
                                 ),
-                                lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
+                                lambda x: x,
                             ),
-                            lambda x: (
-                                x[0],
-                                [x[1]] * len(x[-1])
-                                if not isinstance(x[1][0], list)
-                                else x[1],
-                                x[2],
-                                x[3],
-                                x[4],
-                                x[5],
-                                x[6],
-                            ),
+                            lambda x: x,
                         ),
                         args.metalearn_demonstrations_limit,
                     ),
                     (
-                        (args.pad_state_to, 7),
-                        (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
                         args.pad_instructions_to,
                         args.pad_actions_to,
                         (args.metalearn_demonstrations_limit, args.pad_instructions_to),
                         (args.metalearn_demonstrations_limit, args.pad_actions_to),
                     ),
                     (
-                        0,
-                        0,
                         pad_word,
                         pad_action,
                         pad_word,
@@ -1230,7 +1487,8 @@ def main():
                 len(ACTION2IDX),
                 pad_word,
                 pad_action,
-                shuffle=False,
+                shuffle=True,
+                compress=True,
             ),
             batch_size=max([args.train_batch_size, args.valid_batch_size]),
             pin_memory=True,
