@@ -12,25 +12,14 @@ import random
 
 from tqdm.auto import tqdm
 
-from gscan_metaseq2seq.gscan.world import Situation, ObjectVocabulary, World
-from gscan_metaseq2seq.gscan.vocabulary import Vocabulary
+from gscan_metaseq2seq.gscan.world import Situation
+from gscan_metaseq2seq.util.solver import (
+    create_vocabulary,
+    create_world,
+    reinitialize_world,
+)
 
 from gscan_metaseq2seq.util.dataset import PaddingIterableDataset
-
-GRID_SIZE = 6
-MIN_OTHER_OBJECTS = 0
-MAX_OBJECTS = 2
-MIN_OBJECT_SIZE = 1
-MAX_OBJECT_SIZE = 4
-OTHER_OBJECTS_SAMPLE_PERCENTAGE = 0.5
-
-TYPE_GRAMMAR = "adverb"
-INTRANSITIVE_VERBS = "walk"
-TRANSITIVE_VERBS = "pull,push"
-ADVERBS = "cautiously,while spinning,hesitantly,while zigzagging"
-NOUNS = "square,cylinder,circle,box"
-COLOR_ADJECTIVES = "red,green,yellow,blue"
-SIZE_ADJECTIVES = "big,small"
 
 DIR_TO_INT = {"west": 3, "east": 1, "north": 2, "south": 0}
 INT_TO_DIR = {
@@ -40,72 +29,6 @@ INT_TO_DIR = {
 
 def parse_command_repr(command_repr: str) -> List[str]:
     return command_repr.split(",")
-
-
-def create_world(
-    vocabulary,
-    grid_size: Optional[int] = None,
-    min_object_size: Optional[int] = None,
-    max_object_size: Optional[int] = None,
-    type_grammar: Optional[str] = None,
-):
-
-    # Object vocabulary.
-    object_vocabulary = ObjectVocabulary(
-        shapes=vocabulary.get_semantic_shapes(),
-        colors=vocabulary.get_semantic_colors(),
-        min_size=min_object_size or MIN_OBJECT_SIZE,
-        max_size=max_object_size or MAX_OBJECT_SIZE,
-    )
-
-    # Initialize the world.
-    return World(
-        grid_size=grid_size or GRID_SIZE,
-        colors=vocabulary.get_semantic_colors(),
-        object_vocabulary=object_vocabulary,
-        shapes=vocabulary.get_semantic_shapes(),
-        save_directory=None,
-    )
-
-
-def reinitialize_world(
-    world,
-    situation: Situation,
-    vocabulary,
-    mission="",
-    manner=None,
-    verb=None,
-    end_pos=None,
-    required_push=0,
-    required_pull=0,
-    num_instructions=0,
-):
-    objects = []
-    for positioned_object in situation.placed_objects:
-        objects.append((positioned_object.object, positioned_object.position))
-    world.initialize(
-        objects,
-        agent_position=situation.agent_pos,
-        agent_direction=situation.agent_direction,
-        target_object=situation.target_object,
-        carrying=situation.carrying,
-    )
-    if mission:
-        is_transitive = False
-        if verb in vocabulary.get_transitive_verbs():
-            is_transitive = True
-        world.set_mission(
-            mission,
-            manner=manner,
-            verb=verb,
-            is_transitive=is_transitive,
-            end_pos=end_pos,
-            required_push=required_push,
-            required_pull=required_pull,
-            num_instructions=num_instructions,
-        )
-
-    return world
 
 
 def sort_indices_by_command(examples):
@@ -1690,14 +1613,7 @@ def main():
     with open(args.gscan_dataset, "r") as f:
         d = json.load(f)
 
-    vocabulary = Vocabulary.initialize(
-        intransitive_verbs=(INTRANSITIVE_VERBS).split(","),
-        transitive_verbs=(TRANSITIVE_VERBS).split(","),
-        adverbs=(ADVERBS).split(","),
-        nouns=(NOUNS).split(","),
-        color_adjectives=(COLOR_ADJECTIVES).split(","),
-        size_adjectives=(SIZE_ADJECTIVES).split(","),
-    )
+    vocabulary = create_vocabulary()
     world = create_world(vocabulary)
 
     colors = sorted(vocabulary.get_color_adjectives())
