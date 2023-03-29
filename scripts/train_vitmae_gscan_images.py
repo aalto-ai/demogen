@@ -612,7 +612,7 @@ def parse_args(argv):
     parser.add_argument("--wd", type=float, default=1e-2)
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
     parser.add_argument("--decay-power", type=float, default=-1)
-    parser.add_argument("--iterations", type=int, default=2500000)
+    parser.add_argument("--iterations", type=int, default=300000)
     parser.add_argument("--disable-shuffle", action="store_true")
     parser.add_argument("--check-val-every", type=int, default=1000)
     parser.add_argument("--limit-val-size", type=int, default=None)
@@ -715,10 +715,10 @@ def main():
         check_val_opts["val_check_interval"] = interval
 
     checkpoint_cb = ModelCheckpoint(
-        monitor="vexact/dataloader_idx_0",
+        monitor="tloss",
         auto_insert_metric_name=False,
         save_top_k=5,
-        mode="max",
+        mode="min",
     )
 
     model_name = "masked_ae_vit"
@@ -749,7 +749,7 @@ def main():
         ),
         max_steps=iterations,
         num_sanity_val_steps=10,
-        # gpus=1 if torch.cuda.is_available() else 0,
+        gpus=1 if torch.cuda.is_available() else 0,
         # precision=args.precision if torch.cuda.is_available() else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
