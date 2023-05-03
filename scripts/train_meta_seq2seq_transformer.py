@@ -300,7 +300,7 @@ class StackedMHAModule(nn.Module):
         query, key, value, key_padding_mask = x
 
         mha_query = F.dropout(self.mha(query, key, value, key_padding_mask=key_padding_mask)[0], p=self.dropout_p)
-        ff_query = F.dropout(self.ff(self.norm1(mha_query + mha_query)), p=self.dropout_p)
+        ff_query = F.dropout(self.ff(self.norm1(mha_query + query)), p=self.dropout_p)
 
         return self.norm2(query + ff_query), key, value, key_padding_mask
 
