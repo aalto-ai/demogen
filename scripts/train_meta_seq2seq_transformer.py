@@ -302,7 +302,16 @@ class StackedMHAModule(nn.Module):
         mha_query = F.dropout(self.mha(query, key, value, key_padding_mask=key_padding_mask)[0], p=self.dropout_p)
         ff_query = F.dropout(self.ff(self.norm1(mha_query + query)), p=self.dropout_p)
 
-        return self.norm2(query + ff_query), key, value, key_padding_mask
+        norm_residual = self.norm2(mha_query + ff_query)
+
+        # Hack to ensure that where all elements are padded, which
+        # result in attn_weights being nan, we discard those and just use
+        # the existing queries
+        if key_padding_mask is not None:
+            all_padded_mask = key_padding_mask.all(dim=-1)[None, :, None]
+            norm_residual = norm_residual.masked_fill(all_padded_mask, 0) + query.masked_fill(~all_padded_mask, 0)
+
+        return norm_residual, key, value, key_padding_mask
 
 
 class StackedMHA(nn.Module):
