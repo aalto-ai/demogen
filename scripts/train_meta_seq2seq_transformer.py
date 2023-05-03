@@ -322,8 +322,8 @@ class StackedMHA(nn.Module):
             for _ in range(nlayers)
         ])
 
-    def forward(self, query, key, value, key_padding_mask=None):
-        return self.net((query, key, value, key_padding_mask))[0]
+    def forward(self, query, key, value, K_padding_mask=None):
+        return self.net((query, key, value, K_padding_mask))[0]
 
 
 class MetaNetRNN(nn.Module):
