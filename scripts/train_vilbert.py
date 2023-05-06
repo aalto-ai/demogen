@@ -441,7 +441,7 @@ class ViLBERTLeaner(pl.LightningModule):
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
-            state_component_sizes, x_categories, embed_dim, nlayers, nhead, norm_first, dropout_p
+            state_component_sizes, x_categories, embed_dim, nlayers, nhead, norm_first, dropout_p, interleaved_self_attention
         )
         self.decoder = DecoderTransformer(
             embed_dim,
@@ -592,6 +592,7 @@ def main():
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
+    parser.add_argument("--interleaved-self-attention", action="store_true")
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -662,6 +663,7 @@ def main():
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
         no_lr_decay=args.no_lr_decay,
+        interleaved_self_attention=args.interleaved_self_attention
     )
     print(meta_module)
 
