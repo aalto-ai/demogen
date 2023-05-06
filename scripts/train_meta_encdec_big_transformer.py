@@ -767,10 +767,10 @@ class BigTransformerLearner(pl.LightningModule):
         argmax_preds[actions_mask] = self.pad_action_idx
         exacts = (argmax_preds == context_out).all(dim=-1).to(torch.float).mean()
 
-        self.log("tloss", loss, prog_bar=True)
-        self.log("texact", exacts, prog_bar=True)
+        self.log("vloss", loss, prog_bar=True)
+        self.log("vexact", exacts, prog_bar=True)
         self.log(
-            "tacc",
+            "vacc",
             (preds.argmax(dim=-1)[~actions_mask] == context_out[~actions_mask])
             .float()
             .mean(),
