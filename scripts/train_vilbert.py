@@ -275,6 +275,7 @@ class TransformerCrossEncoder(nn.Module):
                     nhead=nhead,
                     norm_first=norm_first,
                     dropout_p=dropout_p,
+                    interleaved_self_attention=interleaved_self_attention
                 )
                 for _ in range(nlayers)
             ]
@@ -358,6 +359,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         nhead=8,
         norm_first=False,
         dropout_p=0.1,
+        interleaved_self_attention=False
     ):
         super().__init__()
         n_state_components = len(state_component_sizes) + 2
@@ -373,6 +375,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
             nhead=nhead,
             norm_first=norm_first,
             dropout_p=dropout_p,
+            interleaved_self_attention=interleaved_self_attention
         )
 
     def forward(
