@@ -352,6 +352,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
     def __init__(
         self,
         state_component_sizes,
+        vocab_size,
         embed_dim=128,
         nlayers=6,
         nhead=8,
@@ -364,7 +365,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
             BOWEmbedding(64, n_state_components, embed_dim),
             nn.Linear(7 * embed_dim, embed_dim),
         )
-        self.embedding = TransformerEmbeddings(64, embed_dim, dropout_p=dropout_p)
+        self.embedding = TransformerEmbeddings(vocab_size, embed_dim, dropout_p=dropout_p)
         self.cross_encoder = TransformerCrossEncoder(
             nlayers,
             embed_dim,
@@ -433,10 +434,11 @@ class ViLBERTLeaner(pl.LightningModule):
         decay_power=-1,
         predict_steps=64,
         no_lr_decay=False,
+        interleaved_self_attention=False
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
-            state_component_sizes, embed_dim, nlayers, nhead, norm_first, dropout_p
+            state_component_sizes, x_categories, embed_dim, nlayers, nhead, norm_first, dropout_p
         )
         self.decoder = DecoderTransformer(
             embed_dim,
