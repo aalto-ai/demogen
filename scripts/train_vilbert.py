@@ -526,7 +526,7 @@ class ViLBERTLeaner(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, x, idx, dl_idx):
+    def validation_step(self, x, idx, dataloader_idx):
         query, targets, state = x
         actions_mask = targets == self.pad_action_idx
 
