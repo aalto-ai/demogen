@@ -606,7 +606,7 @@ def parse_sparse_situation(
                             object_column,
                             int(placed_object.object.size),
                             int(color2idx[placed_object.object.color]),
-                            int(noun2idx[placed_object.object.shape]),
+                            1,
                         ]
                     )
                 )
@@ -640,9 +640,7 @@ def parse_sparse_situation(
                 grid[object_row, object_column, 6] = int(
                     color2idx[placed_object.object.color]
                 )
-                grid[object_row, object_column, 7] = int(
-                    noun2idx[placed_object.object.shape]
-                )
+                grid[object_row, object_column, 7] = 1
 
         grid = add_positional_information_to_grid(grid)
 
