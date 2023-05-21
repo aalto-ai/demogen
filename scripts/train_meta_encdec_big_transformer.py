@@ -67,7 +67,7 @@ class BigTransformerLearner(pl.LightningModule):
         metalearn_include_permutations=False,
     ):
         super().__init__()
-        self.embedding = nn.Embedding(n_embeddings, embed_dim)
+        self.embedding = nn.Embedding(n_embeddings, embed_dim, padding_idx=pad_word_idx)
         self.in_embedding_project = nn.Linear(n_input_components * embed_dim, embed_dim)
         self.pos_encoding = PositionalEncoding1D(embed_dim)
         self.in_pos_project = nn.Linear(embed_dim * 2, embed_dim)
