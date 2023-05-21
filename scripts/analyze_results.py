@@ -351,15 +351,34 @@ MATCH_CONFIGS = {
 }
 
 
+def zeroth_or_none(list_object):
+    if len(list_object):
+        return list_object[0]
+
+    return None
+
+
 def match_to_configs(configs, configs_and_results_tuples):
-    return {
-        name: [
-            results
-            for config, results in configs_and_results_tuples
-            if all([config[k] == requested_config[k] for k in requested_config.keys()])
-        ][0]
-        for name, requested_config in configs.items()
-    }
+    return list(
+        filter(
+            lambda x: x is not None,
+            [
+                zeroth_or_none(
+                    [
+                        (name, config, results)
+                        for config, results in configs_and_results_tuples
+                        if all(
+                            [
+                                config[k] == requested_config[k]
+                                for k in requested_config.keys()
+                            ]
+                        )
+                    ]
+                )
+                for name, requested_config in configs.items()
+            ],
+        )
+    )
 
 
 def main():
