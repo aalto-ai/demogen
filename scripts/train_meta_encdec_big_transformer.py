@@ -539,6 +539,8 @@ def main():
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--dataloader-ncpus", type=int, default=1)
+    parser.add_argument("--shuffle-demonstrations", action="store_true")
+    parser.add_argument("--activation-checkpointing", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
