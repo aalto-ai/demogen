@@ -148,17 +148,10 @@ def read_csv_and_truncate(path, truncate_key, truncate_value):
 
 
 GSCAN_TEST_SPLIT_DATALOADER_NAMES = [
-    "vexact/dataloader_idx_0",
-    "vexact/dataloader_idx_1",
-    "vexact/dataloader_idx_2",
-    "vexact/dataloader_idx_3",
-    "vexact/dataloader_idx_5",
-    "vexact/dataloader_idx_6",
-    "vexact/dataloader_idx_7",
-    "vexact/dataloader_idx_8",
+
 ]
 
-_RE_DIRECTORY_NAME = r"(?P<headline>[a-z_]+)_s_(?P<seed>[0-9])_m_(?P<model>[0-9a-z_]+)_l_(?P<layers>[0-9]+)_h_(?P<heads>[0-9]+)_d_(?P<hidden>[0-9]+)_it_(?P<iterations>[0-9]+)_b_(?P<batch_size>[0-9]+)_d_(?P<dataset>[0-9a-z_]+)_t_(?P<tag>[a-z_]+)_drop_(?P<dropout>[0-9\.]+)"
+_RE_DIRECTORY_NAME = r"(?P<headline>[a-z_]+)_s_(?P<seed>[0-9])_m_(?P<model>[0-9a-z_]+)_l_(?P<layers>[0-9]+)_h_(?P<heads>[0-9]+)_d_(?P<hidden>[0-9]+)_it_(?P<iterations>[0-9]+)_b_(?P<batch_size>[0-9]+)_d_(?P<dataset>[0-9a-z_]+)_t_(?P<tag>[a-z_0-9]+)_drop_(?P<dropout>[0-9\.]+)(?:_ml_d_limit_(?P<ml_d_limit>[0-9]+))?"
 
 
 def collate_func_key(x, keys):
