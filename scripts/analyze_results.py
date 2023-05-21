@@ -186,19 +186,31 @@ def collate_func_key(x, keys):
     return tuple([x[k] for k in keys if k != "seed"])
 
 
-def read_and_collate_from_directory(logs_dir, limit, exclude_seeds=[]):
+def read_and_collate_from_directory(
+    logs_dir, limit, filter_expression=None, exclude_seeds=[]
+):
     listing = os.listdir(logs_dir)
     parsed_listing = list(
-        map(lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(), listing)
+        map(
+            lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(),
+            filter(
+                lambda x: True
+                if filter_expression is None
+                else re.match(filter_expression, x) is not None,
+                listing,
+            ),
+        )
     )
     keys = sorted(parsed_listing[0].keys())
     keys_not_seed = [k for k in keys if k != "seed"]
     grouped_listing_indices = [
         (
             {k: v for k, v in zip(keys_not_seed, key_tuple)},
-            map(
-                lambda index: (index, parsed_listing[index]["seed"]),
-                list(zip(*group))[0],
+            list(
+                map(
+                    lambda index: (index, parsed_listing[index]["seed"]),
+                    list(zip(*group))[0],
+                )
             ),
         )
         for key_tuple, group in itertools.groupby(
