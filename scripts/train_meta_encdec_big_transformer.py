@@ -72,6 +72,8 @@ class BigTransformerLearner(pl.LightningModule):
         self.pos_encoding = PositionalEncoding1D(embed_dim)
         self.in_pos_project = nn.Linear(embed_dim * 2, embed_dim)
         self.out_pos_project = nn.Linear(embed_dim * 2, embed_dim)
+        self.dropout = nn.Dropout(p=dropout_p)
+        self.norm = nn.LayerNorm(embed_dim)
         self.transformer = nn.Transformer(
             d_model=embed_dim,
             nhead=nhead,
@@ -113,16 +115,14 @@ class BigTransformerLearner(pl.LightningModule):
         bow_embeddings = self.in_embedding_project(
             self.embedding(context_in).flatten(-2, -1)
         )
-        bow_embeddings_pos_encoded = self.in_pos_project(torch.cat([
-            bow_embeddings,
-            self.pos_encoding(bow_embeddings)
-        ], dim=-1))
+        bow_embeddings_pos_encoded = self.dropout(
+            self.norm(bow_embeddings + self.pos_encoding(bow_embeddings))
+        )
 
         decoder_in_embeddings = self.embedding(decoder_in)
-        decoder_in_embeddings_pos_encoded = self.out_pos_project(torch.cat([
-            decoder_in_embeddings,
-            self.pos_encoding(decoder_in_embeddings)
-        ], dim=-1))
+        decoder_in_embeddings_pos_encoded = self.dropout(
+            self.norm(decoder_in_embeddings + self.pos_encoding(decoder_in_embeddings))
+        )
 
         # Regular old transformer
         decoded_sequence = self.transformer(
