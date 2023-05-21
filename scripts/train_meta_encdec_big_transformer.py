@@ -99,6 +99,7 @@ class BigTransformerLearner(pl.LightningModule):
             warmup_proportion=self.hparams.warmup_proportion,
             weight_decay=self.hparams.wd,
             decay_power=self.hparams.decay_power,
+            optimizer_kwargs={"fused": True},
         )
 
     def encode(self, support_state, x_supports, y_supports, queries):
