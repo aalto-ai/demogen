@@ -207,7 +207,7 @@ class TransformerCoSelfAttentionLayer(nn.Module):
         mha_x, _ = self.mha_x(
             norm_x, norm_x, norm_x, key_padding_mask=x_key_padding_mask
         )
-        mha_y, _ = self.mha_y_to_x(
+        mha_y, _ = self.mha_y(
             norm_y, norm_y, norm_y, key_padding_mask=y_key_padding_mask
         )
 
