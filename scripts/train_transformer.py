@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--dataset-name", type=str, default="gscan")
-    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-instructions-to", type=int, default=32)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--log-dir", type=str, default="logs")
