@@ -484,7 +484,7 @@ class TransformerLearner(pl.LightningModule):
 
         return stats["loss"]
 
-    def validation_step(self, x, idx, dl_idx=0):
+    def validation_step(self, x, idx, dataloader_idx=0):
         query, targets, state = x
         stats = compute_encoder_decoder_model_loss_and_stats(
             self, (state, query), targets, self.sos_action_idx, self.pad_action_idx
@@ -493,7 +493,7 @@ class TransformerLearner(pl.LightningModule):
         self.log("vexact", stats["exacts"], prog_bar=True)
         self.log("vacc", stats["acc"], prog_bar=True)
 
-    def predict_step(self, x, idx, dl_idx=0):
+    def predict_step(self, x, idx, dataloader_idx=0):
         instruction, target, state = x[:3]
 
         decoded, logits, exacts, _ = autoregressive_model_unroll_predictions(
