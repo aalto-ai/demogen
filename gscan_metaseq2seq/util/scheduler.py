@@ -62,6 +62,8 @@ def transformer_optimizer_config(
     decay_power=-2,
     weight_decay=0,
     no_lr_decay=False,
+    optimizer_func=None,
+    optimizer_kwargs=None
 ):
     decay_parameters = get_parameter_names(harness, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
@@ -79,7 +81,7 @@ def transformer_optimizer_config(
             "weight_decay": 0.0,
         },
     ]
-    optimizer = optim.AdamW(optimizer_grouped_parameters, lr=lr)
+    optimizer = (optimizer_func or optim.AdamW)(optimizer_grouped_parameters, lr=lr, **(optimizer_kwargs or {}))
 
     return {
         "optimizer": optimizer,
