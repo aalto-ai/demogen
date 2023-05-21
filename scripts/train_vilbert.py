@@ -488,7 +488,7 @@ class ViLBERTLeaner(pl.LightningModule):
         decay_power=-1,
         predict_steps=64,
         no_lr_decay=False,
-        interleaved_self_attention=False
+        interleaved_self_attention=False,
     ):
         super().__init__()
         self.encoder = ViLBERTStateEncoderTransformer(
