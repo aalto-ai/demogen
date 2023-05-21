@@ -14,7 +14,6 @@ from gscan_metaseq2seq.util.solver import (
     state_to_situation,
 )
 
-
 def instruction_is_correct(
     encoded_instruction,
     encoded_state,
