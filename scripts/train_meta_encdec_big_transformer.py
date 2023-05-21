@@ -342,9 +342,10 @@ class PermuteActionsDataset(Dataset):
 
 
 class ShuffleDemonstrationsDataset(Dataset):
-    def __init__(self, dataset, seed=0):
+    def __init__(self, dataset, active, seed=0):
         super().__init__()
         self.dataset = dataset
+        self.active = active
         self.generator = np.random.default_rng(seed)
 
     def state_dict(self):
@@ -358,6 +359,9 @@ class ShuffleDemonstrationsDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
+        if not self.active:
+            return self.dataset[idx]
+
         (
             query_state,
             support_state,
