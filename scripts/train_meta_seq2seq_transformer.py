@@ -1048,6 +1048,7 @@ def main():
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--dataloader-ncpus", type=int, default=1)
+    parser.add_argument("--activation-checkpointing", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1202,7 +1203,14 @@ def main():
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
-        gradient_clip_val=0.2,
+        #gradient_clip_val=0.2,
+        strategy=pl.strategies.FSDPStrategy(
+            activation_checkpointing=([
+                nn.TransformerEncoderLayer,
+                nn.TransformerDecoderLayer,
+                Attn
+            ]),
+        ) if args.activation_checkpointing else None,
         **check_val_opts,
     )
 
