@@ -729,7 +729,7 @@ def main():
                 ),
                 [8] * 7 + [len(WORD2IDX), len(ACTION2IDX)],
                 pad_word,
-                pad_action
+                pad_action,
             ),
             batch_size=max([args.train_batch_size, args.valid_batch_size]),
             pin_memory=True,
