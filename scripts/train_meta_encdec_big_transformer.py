@@ -143,19 +143,14 @@ class BigTransformerLearner(pl.LightningModule):
         return self.out(decoded_sequence)
 
     def training_step(self, x, idx):
-        (
-            context_in,
-            context_out
-        ) = x
+        (context_in, context_out) = x
 
         decoder_in = torch.cat(
-            [torch.ones_like(context_out)[:, :1] * self.sos_action_idx, context_out], dim=-1
+            [torch.ones_like(context_out)[:, :1] * self.sos_action_idx, context_out],
+            dim=-1,
         )[:, :-1]
 
-        preds = self.forward(
-            context_in,
-            decoder_in
-        )
+        preds = self.forward(context_in, decoder_in)
 
         actions_mask = context_out == self.pad_action_idx
 
@@ -183,19 +178,14 @@ class BigTransformerLearner(pl.LightningModule):
         return loss
 
     def validation_step(self, x, idx, dataloader_idx=0):
-        (
-            context_in,
-            context_out
-        ) = x
+        (context_in, context_out) = x
 
         decoder_in = torch.cat(
-            [torch.ones_like(context_out)[:, :1] * self.sos_action_idx, context_out], dim=-1
+            [torch.ones_like(context_out)[:, :1] * self.sos_action_idx, context_out],
+            dim=-1,
         )[:, :-1]
 
-        preds = self.forward(
-            context_in,
-            decoder_in
-        )
+        preds = self.forward(context_in, decoder_in)
 
         actions_mask = context_out == self.pad_action_idx
 
