@@ -148,10 +148,7 @@ def main():
     print(meta_module)
 
     train_dataloader = DataLoader(
-        train_dataset,
-        batch_size=args.train_batch_size,
-        pin_memory=True,
-        num_workers=args.dataloader_ncpus,
+        train_dataset, batch_size=args.train_batch_size, pin_memory=True
     )
 
     check_val_opts = {}
