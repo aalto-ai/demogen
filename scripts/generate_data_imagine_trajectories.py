@@ -577,9 +577,7 @@ def train_state_encoder_decoder(
         f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
     )
 
-    train_dataloader = DataLoader(
-        dataset, batch_size=train_batch_size, pin_memory=True
-    )
+    train_dataloader = DataLoader(dataset, batch_size=train_batch_size, pin_memory=True)
 
     logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
 
@@ -685,15 +683,13 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         key=lambda x: x[-1],
     )[-1]
 
-    sentence2idx = {
-        s: i for i, s in enumerate(training_data_indices_by_command)
-    }
+    sentence2idx = {s: i for i, s in enumerate(training_data_indices_by_command)}
     idx2sentence = [s for s in sentence2idx]
 
     balanced_training_data_subset = SampleSentencesByWordWeights(
         {sentence2idx[s]: v for s, v in training_data_indices_by_command.items()},
         np.ones(len(sentence2idx)) / len(sentence2idx),
-        MapDataset(datasets["train"], lambda x: (x[0][1], x[0][0]))
+        MapDataset(datasets["train"], lambda x: (x[0][1], x[0][0])),
     )
 
     model = train_state_encoder_decoder(
@@ -1423,7 +1419,9 @@ def cogs_make_closures(args, dictionaries, datasets, extra_data):
         for word in train_sentence[0][train_sentence[0] != in_word2idx["[pad]"]]:
             train_data_indices_by_word_idx[word].append(i)
 
-    inv_counts = make_inv_counts_dist({k: len(v) for k, v in train_data_indices_by_word_idx.items()})
+    inv_counts = make_inv_counts_dist(
+        {k: len(v) for k, v in train_data_indices_by_word_idx.items()}
+    )
 
     sample_dataset = SampleSentencesByWordWeights(
         train_data_indices_by_word_idx, inv_counts, train_inputs
