@@ -546,6 +546,7 @@ def parse_sparse_situation(
     color2idx,
     noun2idx,
     world_encoding_scheme,
+    reascan_boxes,
 ) -> np.ndarray:
     """
     Each grid cell in a situation is fully specified by a vector:
@@ -566,34 +567,54 @@ def parse_sparse_situation(
 
     if world_encoding_scheme == "sequence":
         # attribute bits + agent + agent direction + location
-        num_grid_channels = 7
+        num_grid_channels = 7 + (3 if reascan_boxes else 0)
         grid = []
         agent_representation = np.zeros([num_grid_channels], dtype=np.int)
-        agent_representation[-4] = 1
-        agent_representation[-3] = agent_direction
-        agent_representation[-2] = agent_row
-        agent_representation[-1] = agent_column
+        agent_representation[3] = 1
+        agent_representation[4] = agent_direction
+        agent_representation[5] = agent_row
+        agent_representation[6] = agent_column
         grid.append(agent_representation)
 
         for placed_object in situation_representation["objects"]:
             object_row = int(placed_object.position.row)
             object_column = int(placed_object.position.column)
-            grid.append(
-                np.array(
-                    [
-                        int(placed_object.object.size),
-                        int(color2idx[placed_object.object.color]),
-                        int(noun2idx[placed_object.object.shape]),
-                        0,
-                        0,
-                        object_row,
-                        object_column,
-                    ]
+            if placed_object.object.shape != "box":
+                grid.append(
+                    np.array(
+                        [
+                            int(placed_object.object.size),
+                            int(color2idx[placed_object.object.color]),
+                            int(noun2idx[placed_object.object.shape]),
+                            0,
+                            0,
+                            object_row,
+                            object_column,
+                        ]
+                        + ([0] * 3 if reascan_boxes else [])
+                    )
                 )
-            )
+            elif reascan_boxes:
+                grid.append(
+                    np.array(
+                        [
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            object_row,
+                            object_column,
+                            int(placed_object.object.size),
+                            int(color2idx[placed_object.object.color]),
+                            int(noun2idx[placed_object.object.shape]),
+                        ]
+                    )
+                )
+
     elif world_encoding_scheme == "all":
         # attribute bits + agent + agent direction
-        num_grid_channels = 5
+        num_grid_channels = 5 + (3 if reascan_boxes else 0)
         grid = np.zeros([grid_size, grid_size, num_grid_channels], dtype=int)
         agent_representation = np.zeros([num_grid_channels], dtype=np.int)
         agent_representation[-2] = 1
@@ -605,13 +626,24 @@ def parse_sparse_situation(
         for placed_object in situation_representation["objects"]:
             object_row = int(placed_object.position.row)
             object_column = int(placed_object.position.column)
-            grid[object_row, object_column, 0] = int(placed_object.object.size)
-            grid[object_row, object_column, 1] = int(
-                color2idx[placed_object.object.color]
-            )
-            grid[object_row, object_column, 2] = int(
-                noun2idx[placed_object.object.shape]
-            )
+
+            if placed_object.object.shape != "box":
+                grid[object_row, object_column, 0] = int(placed_object.object.size)
+                grid[object_row, object_column, 1] = int(
+                    color2idx[placed_object.object.color]
+                )
+                grid[object_row, object_column, 2] = int(
+                    noun2idx[placed_object.object.shape]
+                )
+
+            if reascan_boxes and placed_object.object.shape == "box":
+                grid[object_row, object_column, 5] = int(placed_object.object.size)
+                grid[object_row, object_column, 6] = int(
+                    color2idx[placed_object.object.color]
+                )
+                grid[object_row, object_column, 7] = int(
+                    noun2idx[placed_object.object.shape]
+                )
 
         grid = add_positional_information_to_grid(grid)
 
@@ -1126,6 +1158,7 @@ def yield_metalearning_examples(
 
 def encode_metalearning_example(
     world_encoding_scheme,
+    reascan_boxes,
     instruction_word2idx,
     action_word2idx,
     color2idx,
@@ -1148,6 +1181,7 @@ def encode_metalearning_example(
         color2idx,
         noun2idx,
         world_encoding_scheme,
+        reascan_boxes,
     )
     query_instruction, query_target = labelled_situation_to_demonstration_tuple(
         {"input": command, "target": target_commands},
@@ -1161,6 +1195,7 @@ def encode_metalearning_example(
             color2idx,
             noun2idx,
             world_encoding_scheme,
+            reascan_boxes,
         )
         for support_situation_representation in support_situation_representations
     ]
@@ -1201,6 +1236,7 @@ def encode_metalearning_example(
 def encode_metalearning_examples(
     metalearning_examples,
     world_encoding_scheme,
+    reascan_boxes,
     instruction_word2idx,
     action_word2idx,
     color2idx,
@@ -1209,6 +1245,7 @@ def encode_metalearning_examples(
     for ml_example in metalearning_examples:
         yield encode_metalearning_example(
             world_encoding_scheme,
+            reascan_boxes,
             instruction_word2idx,
             action_word2idx,
             color2idx,
@@ -1255,6 +1292,7 @@ def yield_baseline_examples(
     color2idx,
     noun2idx,
     world_encoding_scheme,
+    reascan_boxes,
 ):
     for situation in situations:
         instruction, target = labelled_situation_to_demonstration_tuple(
@@ -1272,6 +1310,7 @@ def yield_baseline_examples(
             color2idx,
             noun2idx,
             world_encoding_scheme,
+            reascan_boxes,
         )
 
         yield (
@@ -1553,6 +1592,7 @@ def main():
     parser.add_argument(
         "--world-encoding-scheme", choices=("sequence", "all"), default="sequence"
     )
+    parser.add_argument("--reascan-boxes", action="store_true")
     args = parser.parse_args()
 
     with open(args.gscan_dataset, "r") as f:
@@ -1618,6 +1658,7 @@ def main():
             COLOR2IDX,
             NOUN2IDX,
             args.world_encoding_scheme,
+            args.reascan_boxes,
         ),
         "metalearning": lambda examples, payload, kwargs: encode_metalearning_examples(
             yield_metalearning_examples(
@@ -1629,6 +1670,7 @@ def main():
                 kwargs,
             ),
             args.world_encoding_scheme,
+            args.reascan_boxes,
             INPUT_WORD2IDX,
             ACTION_WORD2IDX,
             COLOR2IDX,
