@@ -653,6 +653,9 @@ def main():
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--interleaved-self-attention", action="store_true")
+    parser.add_argument(
+        "--state-profile", choices=("gscan", "reascan"), default="gscan"
+    )
     args = parser.parse_args()
 
     exp_name = "gscan"
