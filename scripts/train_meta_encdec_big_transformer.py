@@ -561,7 +561,7 @@ def main():
         print(f"Skipping {model_path} as it already exists")
         return
 
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision("medium")
     print("Flash attention:", torch.backends.cuda.flash_sdp_enabled())
 
     seed = args.seed
