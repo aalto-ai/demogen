@@ -737,7 +737,7 @@ def main():
         for demonstrations in meta_valid_demonstrations_dict.values()
     ]
 
-    meta_trainer.fit(meta_module, train_dataloader, valid_dataloaders)
+    meta_trainer.fit(meta_module, train_dataloader, valid_dataloaders, ckpt_path="last")
     print(f"Done, saving {model_path}")
     meta_trainer.save_checkpoint(f"{model_path}")
 
