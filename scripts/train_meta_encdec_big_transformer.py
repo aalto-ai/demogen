@@ -649,7 +649,9 @@ def main():
 
     train_dataloader = DataLoader(
         meta_train_dataset,
-        batch_size=args.train_batch_size
+        batch_size=args.train_batch_size,
+        num_workers=1,  # args.dataloader_ncpus,
+        prefetch_factor=4,
     )
 
     check_val_opts = {}
