@@ -259,11 +259,85 @@ def read_and_collate_from_directory(
 
 
 MATCH_CONFIGS = {
+    "baseline_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline",
+        "headline": "gscan",
+    },
+    "baseline_pp_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline_paraphrased",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_pp_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_paraphrased",
+        "headline": "gscan",
+    },
+    "baseline_sr_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline_sr",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_sr_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_sr",
+        "headline": "gscan",
+    },
+    "baseline_sr_pp_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline_sr_paraphrased",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_sr_pp_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_sr_paraphrased",
+        "headline": "gscan",
+    },
+    "baseline_reascan_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline_reascan",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_reascan_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_reascan",
+        "headline": "gscan",
+    },
+    "baseline_reascan_pp_vilbert": {
+        "model": "vilbert_cross_encoder_decode_actions",
+        "dataset": "baseline_reascan_paraphrased",
+        "headline": "gscan",
+        "tag": "only_ca",
+    },
+    "baseline_reascan_pp_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_reascan_paraphrased",
+        "headline": "gscan",
+    },
     "transformer_full": {
         "model": "vilbert_cross_encoder_decode_actions",
         "headline": "gscan",
     },
     "i2g": {"dataset": "i2g", "headline": "meta_gscan"},
+    "i2g_seq2seq_big_transformer": {
+        "dataset": "i2g_seq2seq",
+        "model": "meta_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "permute_actions_and_shuffle_norm_first_no_checkpointing_init_dropout",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
     "gandr": {"dataset": "gandr", "headline": "meta_gscan"},
     "gscan_oracle_full": {"dataset": "metalearn_allow_any", "headline": "meta_gscan"},
     "gscan_metalearn_only_random": {
