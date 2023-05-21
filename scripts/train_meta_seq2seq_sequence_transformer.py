@@ -17,7 +17,7 @@ from gscan_metaseq2seq.models.embedding import BOWEmbedding
 from gscan_metaseq2seq.util.dataset import (
     PaddingDataset,
     ReshuffleOnIndexZeroDataset,
-    MapDataset
+    MapDataset,
 )
 from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger

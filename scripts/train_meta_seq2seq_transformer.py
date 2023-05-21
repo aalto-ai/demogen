@@ -290,7 +290,7 @@ class StackedMHAModule(nn.Module):
             nn.Linear(embed_dim, dim_feedforward),
             nn.ReLU(inplace=True),
             nn.Dropout(p=dropout_p),
-            nn.Linear(dim_feedforward, embed_dim)
+            nn.Linear(dim_feedforward, embed_dim),
         )
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
@@ -299,7 +299,10 @@ class StackedMHAModule(nn.Module):
     def forward(self, x):
         query, key, value, key_padding_mask = x
 
-        mha_query = F.dropout(self.mha(query, key, value, key_padding_mask=key_padding_mask)[0], p=self.dropout_p)
+        mha_query = F.dropout(
+            self.mha(query, key, value, key_padding_mask=key_padding_mask)[0],
+            p=self.dropout_p,
+        )
         ff_query = F.dropout(self.ff(self.norm1(mha_query + query)), p=self.dropout_p)
 
         norm_residual = self.norm2(mha_query + ff_query)
@@ -309,7 +312,9 @@ class StackedMHAModule(nn.Module):
         # the existing queries
         if key_padding_mask is not None:
             all_padded_mask = key_padding_mask.all(dim=-1)[None, :, None]
-            norm_residual = norm_residual.masked_fill(all_padded_mask, 0) + query.masked_fill(~all_padded_mask, 0)
+            norm_residual = norm_residual.masked_fill(
+                all_padded_mask, 0
+            ) + query.masked_fill(~all_padded_mask, 0)
 
         return norm_residual, key, value, key_padding_mask
 
@@ -317,10 +322,12 @@ class StackedMHAModule(nn.Module):
 class StackedMHA(nn.Module):
     def __init__(self, embed_dim, dim_feedforward, nhead, nlayers, dropout_p):
         super().__init__()
-        self.net = nn.Sequential(*[
-            StackedMHAModule(embed_dim, dim_feedforward, nhead, dropout_p)
-            for _ in range(nlayers)
-        ])
+        self.net = nn.Sequential(
+            *[
+                StackedMHAModule(embed_dim, dim_feedforward, nhead, dropout_p)
+                for _ in range(nlayers)
+            ]
+        )
 
     def forward(self, query, key, value, K_padding_mask=None):
         return self.net((query, key, value, K_padding_mask))[0]
@@ -919,7 +926,14 @@ class PermuteActionsDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        query_state, support_state, queries, targets, x_supports, y_supports = self.dataset[idx]
+        (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = self.dataset[idx]
 
         x_permutation = np.arange(self.x_categories)
         y_permutation = np.arange(self.y_categories)
@@ -1146,10 +1160,7 @@ def main():
     )
     print(meta_module)
 
-    train_dataloader = DataLoader(
-        meta_train_dataset,
-        batch_size=args.train_batch_size
-    )
+    train_dataloader = DataLoader(meta_train_dataset, batch_size=args.train_batch_size)
 
     check_val_opts = {}
     interval = args.check_val_every / len(train_dataloader)
