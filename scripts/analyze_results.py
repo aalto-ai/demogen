@@ -381,6 +381,34 @@ def match_to_configs(configs, configs_and_results_tuples):
     )
 
 
+def format_results_table(metrics, configs, index, column_names=None):
+    results_table = (
+        pd.concat(
+            [metrics[k].T["mean"] for k in configs],
+            axis=1,
+        )
+        .T.round(2)
+        .astype(str)
+        .reset_index()
+        + " ± "
+        + (
+            pd.concat(
+                [metrics[k].T["std"] for k in configs],
+                axis=1,
+            )
+            .T.round(2)
+            .astype(str)
+            .reset_index()
+        )
+    ).T
+    results_table.index = ["index"] + index
+
+    if column_names is not None:
+        results_table.columns = column_names
+
+    return results_table.to_latex(float_format="%.2f", escape=False)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
