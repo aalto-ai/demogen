@@ -89,7 +89,10 @@ def format_experiment_name(experiment_config, params):
                 name_dict["tag"],
                 "drop",
                 name_dict["dropout"],
-            ],
+            ] + ([
+                "ml_d_limit",
+                name_dict["ml_d_limit"]
+            ] if "ml_d_limit" in name_dict and name_dict["ml_d_limit"] is not None else []),
         )
     )
 
