@@ -750,7 +750,7 @@ def main():
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
         no_lr_decay=args.no_lr_decay,
-        interleaved_self_attention=args.interleaved_self_attention
+        interleaved_self_attention=args.interleaved_self_attention,
     )
     print(meta_module)
 
