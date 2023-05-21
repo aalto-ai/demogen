@@ -1170,7 +1170,12 @@ def main():
     )
     print(meta_module)
 
-    train_dataloader = DataLoader(meta_train_dataset, batch_size=args.train_batch_size)
+    train_dataloader = DataLoader(
+        meta_train_dataset,
+        batch_size=args.train_batch_size,
+        num_workers=args.dataloader_ncpus,
+        prefetch_factor=4
+    )
 
     check_val_opts = {}
     interval = args.check_val_every / len(train_dataloader)
