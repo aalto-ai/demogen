@@ -663,13 +663,6 @@ def main():
     else:
         check_val_opts["val_check_interval"] = interval
 
-    checkpoint_cb = ModelCheckpoint(
-        monitor="vexact/dataloader_idx_0",
-        auto_insert_metric_name=False,
-        save_top_k=5,
-        mode="max",
-    )
-
     logs_root_dir = f"{args.log_dir}/{exp_name}/{model_name}/{dataset_name}/{seed}"
     most_recent_version = args.version
 
@@ -680,7 +673,10 @@ def main():
                 logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=10
             ),
         ],
-        callbacks=[pl.callbacks.LearningRateMonitor(), checkpoint_cb],
+        callbacks=[
+            pl.callbacks.LearningRateMonitor(),
+            ModelCheckpoint(save_last=True, save_top_k=0),
+        ],
         max_steps=iterations,
         num_sanity_val_steps=1,
         accelerator='gpu',
