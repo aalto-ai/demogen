@@ -639,7 +639,6 @@ def main():
     parser.add_argument("--warmup-proportion", type=float, default=0.1)
     parser.add_argument("--decay-power", type=float, default=-1)
     parser.add_argument("--iterations", type=int, default=2500000)
-    parser.add_argument("--disable-shuffle", action="store_true")
     parser.add_argument("--check-val-every", type=int, default=1000)
     parser.add_argument("--limit-val-size", type=int, default=None)
     parser.add_argument("--enable-progress", action="store_true")
