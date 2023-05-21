@@ -798,7 +798,7 @@ def main():
         ),
         max_steps=iterations,
         num_sanity_val_steps=10,
-        accelerator='gpu' if torch.cuda.is_available() else None,
+        accelerator="gpu" if torch.cuda.is_available() else None,
         devices=1 if torch.cuda.is_available() else 0,
         precision=args.precision if torch.cuda.is_available() else 32,
         default_root_dir=logs_root_dir,
