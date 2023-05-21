@@ -33,7 +33,6 @@ INT_TO_DIR = {
 def parse_command_repr(command_repr: str) -> List[str]:
     return command_repr.split(",")
 
-
 def sort_indices_by_command(examples):
     command_examples = defaultdict(list)
 
