@@ -275,6 +275,7 @@ class StateEncoderDecoderTransformer(nn.Module):
             state_embed_seq.transpose(1, 0),
             z_embed_seq.transpose(1, 0),
             src_key_padding_mask=state_padding_bits,
+            memory_key_padding_mask=state_padding_bits,
             tgt_key_padding_mask=padding_bits,
         )
 
@@ -587,11 +588,11 @@ class EncoderDecoderTransformer(nn.Module):
             encoder_outputs,
             embedding.transpose(0, 1),
             src_key_padding_mask=encoder_padding,
+            memory_key_padding_mask=encoder_padding,
             tgt_key_padding_mask=input_padding_bits,
-            tgt_mask=torch.triu(
-                torch.full((inputs.shape[-1], inputs.shape[-1]), float("-inf")),
-                diagonal=1,
-            ).to(inputs.device),
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(inputs.shape[-1], device=encoder_outputs.device).to(
+                encoder_outputs.dtype
+            ),
         ).transpose(0, 1)
 
         return self.out(decoded)
@@ -780,7 +781,7 @@ class ImaginationMetaLearner(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, x, idx, dl_idx=0):
+    def validation_step(self, x, idx, dataloader_idx=0):
         (
             x_permutation,
             y_permutation,
@@ -833,7 +834,7 @@ class ImaginationMetaLearner(pl.LightningModule):
             prog_bar=True,
         )
 
-    def predict_step(self, x, idx, dl_idx=0):
+    def predict_step(self, x, idx, dataloader_idx=0):
         (
             x_permutation,
             y_permutation,
