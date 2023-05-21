@@ -399,6 +399,7 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         self,
         state_component_sizes,
         vocab_size,
+        num_positions,
         embed_dim=128,
         nlayers=6,
         nhead=8,
@@ -407,12 +408,16 @@ class ViLBERTStateEncoderTransformer(nn.Module):
         interleaved_self_attention=False
     ):
         super().__init__()
-        n_state_components = len(state_component_sizes) + 2
+        n_state_components = len(state_component_sizes)
         self.state_embedding = nn.Sequential(
             BOWEmbedding(64, n_state_components, embed_dim),
-            nn.Linear(7 * embed_dim, embed_dim),
+            nn.Linear(n_state_components * embed_dim, embed_dim),
+            nn.LayerNorm(embed_dim),
+            nn.Dropout(dropout_p),
         )
-        self.embedding = TransformerEmbeddings(vocab_size, embed_dim, dropout_p=dropout_p)
+        self.embedding = TransformerEmbeddings(
+            vocab_size, num_positions, embed_dim, dropout_p=dropout_p
+        )
         self.cross_encoder = TransformerCrossEncoder(
             nlayers,
             embed_dim,
