@@ -645,6 +645,7 @@ def main():
     parser.add_argument("--enable-progress", action="store_true")
     parser.add_argument("--version", type=int, default=None)
     parser.add_argument("--tag", type=str, default="none")
+    parser.add_argument("--dataset-name", type=str, default="baseline")
     parser.add_argument("--swa", action="store_true")
     parser.add_argument("--pad-instructions-to", type=int, default=8)
     parser.add_argument("--pad-actions-to", type=int, default=128)
@@ -656,7 +657,7 @@ def main():
 
     exp_name = "gscan"
     model_name = f"vilbert_cross_encoder_decode_actions_l_{args.nlayers}_h_{args.nhead}_d_{args.hidden_size}"
-    dataset_name = "gscan"
+    dataset_name = args.dataset_name
     effective_batch_size = args.train_batch_size * args.batch_size_mult
     exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}"
     model_dir = f"models/{exp_name}/{model_name}"
