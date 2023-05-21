@@ -13,7 +13,6 @@ from gscan_metaseq2seq.util.solver import (
     reinitialize_world,
 )
 
-
 def instruction_is_correct(
     encoded_instruction,
     encoded_state,
