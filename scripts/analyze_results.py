@@ -149,9 +149,35 @@ def read_csv_and_truncate(path, truncate_key, truncate_value):
     return truncated
 
 
-GSCAN_TEST_SPLIT_DATALOADER_NAMES = [
-
-]
+TEST_SPLIT_DATALOADER_MAPPINGS = {
+    "gscan": {
+        "vexact/dataloader_idx_0": "A",
+        "vexact/dataloader_idx_1": "B",
+        "vexact/dataloader_idx_2": "C",
+        "vexact/dataloader_idx_3": "D",
+        "vexact/dataloader_idx_5": "E",
+        "vexact/dataloader_idx_6": "F",
+        "vexact/dataloader_idx_7": "G",
+        "vexact/dataloader_idx_8": "H",
+    },
+    "sr": {
+        "vexact/dataloader_idx_0": "Test",
+        "vexact/dataloader_idx_2": "II",
+        "vexact/dataloader_idx_9": "III",
+        "vexact/dataloader_idx_10": "IV",
+        "vexact/dataloader_idx_11": "V",
+        "vexact/dataloader_idx_12": "VI",
+    },
+    "reascan": {
+        "vexact/dataloader_idx_0": "Test",
+        "vexact/dataloader_idx_1": "A1",
+        "vexact/dataloader_idx_2": "A2",
+        "vexact/dataloader_idx_3": "B1",
+        "vexact/dataloader_idx_4": "B2",
+        "vexact/dataloader_idx_5": "C1",
+        "vexact/dataloader_idx_6": "C2",
+    },
+}
 
 _RE_DIRECTORY_NAME = r"(?P<headline>[a-z_]+)_s_(?P<seed>[0-9])_m_(?P<model>[0-9a-z_]+)_l_(?P<layers>[0-9]+)_h_(?P<heads>[0-9]+)_d_(?P<hidden>[0-9]+)_it_(?P<iterations>[0-9]+)_b_(?P<batch_size>[0-9]+)_d_(?P<dataset>[0-9a-z_]+)_t_(?P<tag>[a-z_0-9]+)_drop_(?P<dropout>[0-9\.]+)(?:_ml_d_limit_(?P<ml_d_limit>[0-9]+))?"
 
