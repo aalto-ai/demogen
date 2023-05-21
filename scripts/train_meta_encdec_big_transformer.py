@@ -126,12 +126,18 @@ class BigTransformerLearner(pl.LightningModule):
         )
 
         # Regular old transformer
+        input_mask = (context_in == self.pad_word_idx).all(dim=-1)
         decoded_sequence = self.transformer(
             src=bow_embeddings_pos_encoded.transpose(0, 1),
             tgt=decoder_in_embeddings_pos_encoded.transpose(0, 1),
-            src_key_padding_mask=(bow_embeddings_pos_encoded == self.pad_word_idx).all(dim=-1),
-            tgt_key_padding_mask=(decoder_in == self.pad_word_idx),
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(decoder_in.shape[-1]).bool().to(decoder_in.device)
+            src_key_padding_mask=input_mask,
+            memory_key_padding_mask=input_mask,
+            tgt_key_padding_mask=(decoder_in == self.pad_action_idx),
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
+                decoder_in.shape[-1]
+            )
+            .bool()
+            .to(decoder_in.device),
         ).transpose(0, 1)
 
         return self.out(decoded_sequence)
