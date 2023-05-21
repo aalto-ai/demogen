@@ -1044,7 +1044,7 @@ def main():
     parser.add_argument("--metalearn-include-permutations", action="store_true")
     parser.add_argument("--pad-instructions-to", type=int, default=16)
     parser.add_argument("--pad-actions-to", type=int, default=128)
-    parser.add_argument("--pad-state-to", type=int, default=36)
+    parser.add_argument("--pad-state-to", type=int, default=16)
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--dataloader-ncpus", type=int, default=1)
