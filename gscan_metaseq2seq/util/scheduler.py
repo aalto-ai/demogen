@@ -65,18 +65,18 @@ def transformer_optimizer_config(
     optimizer_func=None,
     optimizer_kwargs=None
 ):
-    decay_parameters = get_parameter_names(harness, [nn.LayerNorm])
+    decay_parameters = get_parameter_names(harness.trainer.model, [nn.LayerNorm])
     decay_parameters = [name for name in decay_parameters if "bias" not in name]
     optimizer_grouped_parameters = [
         {
             "params": [
-                p for n, p in harness.named_parameters() if n in decay_parameters
+                p for n, p in harness.trainer.model.named_parameters() if n in decay_parameters
             ],
             "weight_decay": weight_decay,
         },
         {
             "params": [
-                p for n, p in harness.named_parameters() if n not in decay_parameters
+                p for n, p in harness.trainer.model.named_parameters() if n not in decay_parameters
             ],
             "weight_decay": 0.0,
         },
