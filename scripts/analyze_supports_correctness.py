@@ -177,7 +177,7 @@ def main():
     parser.add_argument(
         "--show-columns",
         nargs="+",
-        default=("valid", "correct", "correct_and_valid", "correct_if_valid"),
+        default=("valid", "correct_and_valid"),
         choices=("valid", "correct", "correct_if_valid", "correct_and_valid"),
     )
     args = parser.parse_args()
@@ -231,7 +231,11 @@ def main():
             if not args.only_splits
             else args.only_splits
         ]
+<<<<<<< HEAD
         .T[list(args.show_columns)]
+=======
+        .T[args.show_columns]
+>>>>>>> scripts/analyze_supports_correctness: Formatting fix
         .to_latex(float_format="%.2f", escape=False)
     )
 
