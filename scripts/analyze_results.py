@@ -417,6 +417,14 @@ def main():
     parser.add_argument("--exclude-by-a-smoothing", type=int, default=50)
     parser.add_argument("--result-smoothing", type=int, default=1)
     parser.add_argument("--exclude-seeds", nargs="*")
+    parser.add_argument("--dataset", choices=("gscan", "reascan", "sr"), required=True)
+    parser.add_argument(
+        "--filter-expression",
+        type=str,
+        help="Regular expression used to filter matches",
+    )
+    parser.add_argument("--config-columns", nargs="+", choices=MATCH_CONFIGS.keys())
+    parser.add_argument("--column-labels", nargs="*")
     args = parser.parse_args()
 
     read_metrics_dfs_at_limit_by_config = read_and_collate_from_directory(
