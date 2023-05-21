@@ -428,11 +428,23 @@ def main():
     args = parser.parse_args()
 
     read_metrics_dfs_at_limit_by_config = read_and_collate_from_directory(
-        args.logs_dir, args.limit, exclude_seeds=args.exclude_seeds or []
+        args.logs_dir,
+        args.limit,
+        filter_expression=args.filter_expression,
+        exclude_seeds=args.exclude_seeds or [],
+    )
+
+    # Match already to configs and filter out the ones we don't display
+    read_metrics_dfs_at_limit_by_config_filtered = list(
+        filter(
+            lambda x: x[0] in args.config_columns,
+            match_to_configs(MATCH_CONFIGS, read_metrics_dfs_at_limit_by_config),
+        )
     )
 
     read_metrics_dfs_excluded = [
         (
+            name,
             config,
             exclude_worst_performing_by_metric(
                 # Take the df from the seed/df pair
