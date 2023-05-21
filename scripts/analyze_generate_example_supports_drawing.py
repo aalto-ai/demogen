@@ -185,7 +185,6 @@ def plot_at_index(
         (correct, valid),
         relevant,
     ) in sorted_instrs:
-
         print(
             " ".join([idx2word[w] for w in demo_instr if w != word2idx["[pad]"]])
             + " "
