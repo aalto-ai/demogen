@@ -222,31 +222,40 @@ def read_and_collate_from_directory(
         )
     ]
 
-    return [
+    detected_config_and_csv_tuples = [
         (
             config,
-            [
-                (
-                    seed,
-                    read_csv_and_truncate(
-                        os.path.join(
-                            logs_dir, format_log_path(logs_dir, config, {"seed": seed})
-                        ),
-                        "step",
-                        limit,
-                    ),
+            list(
+                filter(
+                    lambda x: x[1] is not None,
+                    [
+                        (
+                            seed,
+                            read_csv_and_truncate(
+                                os.path.join(
+                                    logs_dir,
+                                    format_log_path(logs_dir, config, {"seed": seed}),
+                                ),
+                                "step",
+                                limit,
+                            ),
+                        )
+                        for index, seed in values
+                        if seed not in exclude_seeds
+                        and os.path.exists(
+                            os.path.join(
+                                logs_dir,
+                                format_log_path(logs_dir, config, {"seed": seed}),
+                            )
+                        )
+                    ],
                 )
-                for index, seed in values
-                if seed not in exclude_seeds
-                and os.path.exists(
-                    os.path.join(
-                        logs_dir, format_log_path(logs_dir, config, {"seed": seed})
-                    )
-                )
-            ],
+            ),
         )
         for config, values in grouped_listing_indices
     ]
+
+    return list(filter(lambda x: x[1], detected_config_and_csv_tuples))
 
 
 MATCH_CONFIGS = {
