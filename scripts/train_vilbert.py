@@ -636,18 +636,40 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
+    STATE_PROFILES = {
+        "gscan": [4, len(color_dictionary), len(noun_dictionary), 1, 4, 8, 8],
+        "reascan": [
+            4,
+            len(color_dictionary),
+            len(noun_dictionary),
+            1,
+            4,
+            8,
+            8,
+            4,
+            len(color_dictionary),
+            1,
+        ],
+    }
+    state_feat_len = len(STATE_PROFILES[args.state_profile])
+
     pl.seed_everything(0)
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
-            (args.pad_instructions_to, args.pad_actions_to, (args.pad_state_to, 7)),
+            (
+                args.pad_instructions_to,
+                args.pad_actions_to,
+                (args.pad_state_to, state_feat_len),
+            ),
             (pad_word, pad_action, 0),
         )
     )
 
     pl.seed_everything(seed)
     meta_module = ViLBERTLeaner(
-        [4, len(color_dictionary), len(noun_dictionary), 1, 4],
+        STATE_PROFILES[args.state_profile],
+        128,
         len(IDX2WORD),
         len(IDX2ACTION),
         args.hidden_size,
@@ -741,7 +763,7 @@ def main():
                     (
                         args.pad_instructions_to,
                         args.pad_actions_to,
-                        (args.pad_state_to, 7),
+                        (args.pad_state_to, state_feat_len),
                     ),
                     (pad_word, pad_action, 0),
                 ),
