@@ -769,12 +769,7 @@ def main():
     else:
         check_val_opts["val_check_interval"] = interval
 
-    checkpoint_cb = ModelCheckpoint(
-        monitor="vexact/dataloader_idx_0",
-        auto_insert_metric_name=False,
-        save_top_k=5,
-        mode="max",
-    )
+    checkpoint_cb = ModelCheckpoint(save_last=True, save_top_k=0)
 
     logs_root_dir = f"{args.log_dir}/{exp_name}/{model_name}/{dataset_name}/{seed}"
     most_recent_version = args.version
@@ -837,6 +832,7 @@ def main():
             )
             for demonstrations in valid_demonstrations_dict.values()
         ],
+        ckpt_path="last",
     )
     print(f"Done, saving {model_path}")
     trainer.save_checkpoint(f"{model_path}")
