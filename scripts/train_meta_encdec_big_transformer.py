@@ -81,7 +81,7 @@ class BigTransformerLearner(pl.LightningModule):
             norm_first=norm_first,
             activation=F.silu,
             num_encoder_layers=nlayers,
-            num_decoder_layers=nlayers
+            num_decoder_layers=nlayers,
         )
         self.out = nn.Linear(embed_dim, n_embeddings)
         self.pad_word_idx = pad_word_idx
