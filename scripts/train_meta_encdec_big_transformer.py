@@ -274,6 +274,73 @@ class BigTransformerLearner(pl.LightningModule):
         return decoded, logits, exacts
 
 
+class PermuteActionsDataset(Dataset):
+    def __init__(
+        self,
+        dataset,
+        x_categories,
+        y_categories,
+        pad_word_idx,
+        pad_action_idx,
+        shuffle=True,
+        seed=0,
+    ):
+        super().__init__()
+        self.dataset = dataset
+        self.x_categories = x_categories
+        self.y_categories = y_categories
+        self.pad_word_idx = pad_word_idx
+        self.pad_action_idx = pad_action_idx
+        self.shuffle = shuffle
+        self.generator = np.random.default_rng(seed)
+
+    def state_dict(self):
+        return {"random_state": self.generator.__getstate__()}
+
+    def load_state_dict(self, sd):
+        if "random_state" in sd:
+            self.generator.__setstate__(sd["random_state"])
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        ) = self.dataset[idx]
+
+        x_permutation = np.arange(self.x_categories)
+        y_permutation = np.arange(self.y_categories)
+
+        # Compute permutations of outputs
+        if self.shuffle:
+            # Do the permutation
+            x_permutation[0 : self.pad_word_idx] = x_permutation[0 : self.pad_word_idx][
+                self.generator.permutation(self.pad_word_idx)
+            ]
+            y_permutation[0 : self.pad_action_idx] = y_permutation[
+                0 : self.pad_action_idx
+            ][self.generator.permutation(self.pad_action_idx)]
+
+            # Only permute the outputs, not the inputs
+            y_supports = [y_permutation[np.array(ys)] for ys in y_supports]
+            targets = y_permutation[np.array(targets)]
+
+        return (
+            query_state,
+            support_state,
+            queries,
+            targets,
+            x_supports,
+            y_supports,
+        )
+
+
 class ShuffleDemonstrationsDataset(Dataset):
     def __init__(self, dataset, seed=0):
         super().__init__()
@@ -495,31 +562,39 @@ def main():
     pl.seed_everything(0)
     meta_train_dataset = ReshuffleOnIndexZeroDataset(
         ApplyOffsetsDataset(
-            ShuffleDemonstrationsDataset(
-                ReorderSupportsByDistanceDataset(
-                    MapDataset(
+            PermuteActionsDataset(
+                ShuffleDemonstrationsDataset(
+                    ReorderSupportsByDistanceDataset(
                         MapDataset(
-                            meta_train_demonstrations,
-                            lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
+                            MapDataset(
+                                meta_train_demonstrations,
+                                lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
+                            ),
+                            lambda x: (
+                                x[0],
+                                [x[1]] * len(x[-1])
+                                if not isinstance(x[1][0], list)
+                                else x[1],
+                                x[2],
+                                x[3],
+                                x[4],
+                                x[5],
+                                x[6],
+                            ),
                         ),
-                        lambda x: (
-                            x[0],
-                            [x[1]] * len(x[-1])
-                            if not isinstance(x[1][0], list)
-                            else x[1],
-                            x[2],
-                            x[3],
-                            x[4],
-                            x[5],
-                            x[6],
-                        ),
+                        args.metalearn_demonstrations_limit,
                     ),
-                    args.metalearn_demonstrations_limit,
+                    args.shuffle_demonstrations,
                 ),
+                len(WORD2IDX),
+                len(ACTION2IDX),
+                pad_word,
+                pad_action,
+                shuffle=not args.disable_shuffle,
             ),
             [8] * 7 + [len(WORD2IDX), len(ACTION2IDX)],
             pad_word,
-            pad_action
+            pad_action,
         )
     )
 
