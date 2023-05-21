@@ -388,15 +388,19 @@ class ShuffleDemonstrationsDataset(Dataset):
 
 
 class ApplyOffsetsDataset(Dataset):
-    def __init__(self, dataset, offsets, pad_word, pad_action, pad_in=2048, pad_out=128):
+    def __init__(
+        self, dataset, offsets, pad_word, pad_action, pad_in=1024, pad_out=128
+    ):
         """Used to apply offsets to each of the tokens.
-        
+
         Enables the use of a single dictionary.
         """
         super().__init__()
         self.dataset = dataset
         # Reserve 8 tokens for use as padding etc
-        self.offsets = np.cumsum([0, 8] + offsets) # [size, color, shape, agent, dictionary, x_pos, y_pos, words, actions]
+        self.offsets = np.cumsum(
+            [0, 8] + offsets
+        )  # [size, color, shape, agent, dictionary, x_pos, y_pos, words, actions]
         self.pad_in = pad_in
         self.pad_out = pad_out
         self.pad_word = pad_word
@@ -419,7 +423,9 @@ class ApplyOffsetsDataset(Dataset):
         query_offsets = self.offsets[8]
         target_offsets = self.offsets[9]
 
-        query_state_offseted = query_state[~(query_state == 0).all(axis=-1)] + state_offsets
+        query_state_offseted = (
+            query_state[~(query_state == 0).all(axis=-1)] + state_offsets
+        )
         support_state_offsetted = (
             [s[~(s == 0).all(axis=-1)] + state_offsets for s in support_state]
             if isinstance(support_state, list)
@@ -437,48 +443,64 @@ class ApplyOffsetsDataset(Dataset):
         targets_offseted = targets[targets != self.pad_action] + target_offsets
 
         # Now we glue everything together
-        context_in = np.concatenate([
-            np.concatenate([
-                np.array([2] * 7).astype(int)[None],
-                ss,
-                np.array([3] * 7).astype(int)[None],
-                np.concatenate([
-                    xs[:, None],
-                    np.tile(np.zeros_like(xs)[:, None], (1, 6))
-                ], axis=-1),
-                np.array([4] * 7).astype(int)[None],
-                np.concatenate([
-                    ys[:, None],
-                    np.tile(np.zeros_like(ys)[:, None], (1, 6))
-                ], axis=-1),
-            ], axis=0)
-            for ss, xs, ys in zip(support_state_offsetted, x_supports_offseted, y_supports_offseted)
-        ] + [
+        context_in = np.concatenate(
+            [
+                np.concatenate(
+                    [
+                        np.array([2] * 7).astype(int)[None],
+                        ss,
+                        np.array([3] * 7).astype(int)[None],
+                        np.concatenate(
+                            [xs[:, None], np.tile(np.zeros_like(xs)[:, None], (1, 6))],
+                            axis=-1,
+                        ),
+                        np.array([4] * 7).astype(int)[None],
+                        np.concatenate(
+                            [ys[:, None], np.tile(np.zeros_like(ys)[:, None], (1, 6))],
+                            axis=-1,
+                        ),
+                    ],
+                    axis=0,
+                )
+                for ss, xs, ys in zip(
+                    support_state_offsetted, x_supports_offseted, y_supports_offseted
+                )
+            ]
+            + [
                 np.array([5] * 7).astype(int)[None],
                 query_state_offseted,
                 np.array([6] * 7).astype(int)[None],
-                np.concatenate([
-                    queries_offseted[:, None],
-                    np.tile(np.zeros_like(queries_offseted)[:, None], (1, 6))
-                ], axis=-1),
-                np.array([7] * 7).astype(int)[None]
-        ], axis=0)
-        context_in = np.concatenate([
-            context_in[:self.pad_in],
-            np.tile(
-                np.array([0] * (max(0, self.pad_in - context_in.shape[0])))[:, None],
-                (1, 7)
-            )
-        ])
-        context_out = np.concatenate([
-            targets_offseted[:self.pad_out],
-            np.array([0] * max(0, self.pad_out - targets_offseted.shape[0]))
-        ], axis=0)
-
-        return (
-            context_in,
-            context_out
+                np.concatenate(
+                    [
+                        queries_offseted[:, None],
+                        np.tile(np.zeros_like(queries_offseted)[:, None], (1, 6)),
+                    ],
+                    axis=-1,
+                ),
+                np.array([7] * 7).astype(int)[None],
+            ],
+            axis=0,
         )
+        context_in = np.concatenate(
+            [
+                context_in[: self.pad_in],
+                np.tile(
+                    np.array([0] * (max(0, self.pad_in - context_in.shape[0])))[
+                        :, None
+                    ],
+                    (1, 7),
+                ),
+            ]
+        )
+        context_out = np.concatenate(
+            [
+                targets_offseted[: self.pad_out],
+                np.array([0] * max(0, self.pad_out - targets_offseted.shape[0])),
+            ],
+            axis=0,
+        )
+
+        return (context_in.astype(int), context_out.astype(int))
 
 
 def main():
