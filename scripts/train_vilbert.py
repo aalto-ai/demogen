@@ -356,10 +356,11 @@ class TransformerCrossEncoder(nn.Module):
 
 
 class TransformerEmbeddings(nn.Module):
-    def __init__(self, n_inp, embed_dim, dropout_p=0.0):
+    def __init__(self, n_inp, n_pos, embed_dim, dropout_p=0.0):
         super().__init__()
         self.embedding = nn.Embedding(n_inp, embed_dim)
-        self.pos_embedding = nn.Embedding(n_inp, embed_dim)
+        self.pos_embedding = nn.Embedding(n_pos, embed_dim)
+        self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(p=dropout_p)
 
     def forward(self, instruction):
