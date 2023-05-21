@@ -46,6 +46,7 @@ class DecoderTransformer(nn.Module):
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.embedding_projection = nn.Linear(hidden_size * 2, hidden_size)
         self.pos_encoding = PositionalEncoding1D(hidden_size)
+        self.norm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout_p)
         self.pad_action_idx = pad_action_idx
         self.decoder = nn.TransformerDecoder(
@@ -80,7 +81,7 @@ class DecoderTransformer(nn.Module):
         embedding = self.embedding_projection(
             torch.cat([embedding, self.pos_encoding(embedding)], dim=-1)
         )
-        embedding = self.dropout(embedding)
+        embedding = self.dropout(self.norm(embedding))
 
         decoded = self.decoder(
             tgt=embedding.transpose(0, 1),
@@ -147,7 +148,8 @@ class TransformerMLP(nn.Module):
 
     def forward(self, hidden, residual):
         if self.norm_first:
-            return residual + self.net(self.norm(hidden))
+            # We did the norm earlier
+            return residual + self.net(hidden)
 
         return self.norm(residual + self.net(hidden))
 
@@ -168,6 +170,7 @@ class TransformerCrossAttentionLayer(nn.Module):
             norm_x = self.norm_x(x)
             norm_y = self.norm_y(y)
         else:
+            # We do the norm later in dense
             norm_x = x
             norm_y = y
 
@@ -177,13 +180,6 @@ class TransformerCrossAttentionLayer(nn.Module):
         mha_y, _ = self.mha_y_to_x(
             norm_y, norm_x, norm_x, key_padding_mask=x_key_padding_mask
         )
-
-        if self.norm_first:
-            mha_x = mha_x
-            mha_y = mha_y
-        else:
-            mha_x = self.norm_x(mha_x)
-            mha_y = self.norm_y(mha_y)
 
         return self.dense_x_to_y(mha_x, x), self.dense_y_to_x(mha_y, y)
 
@@ -204,6 +200,7 @@ class TransformerCoSelfAttentionLayer(nn.Module):
             norm_x = self.norm_x(x)
             norm_y = self.norm_y(y)
         else:
+            # We do the norm layer in dense
             norm_x = x
             norm_y = y
 
@@ -213,13 +210,6 @@ class TransformerCoSelfAttentionLayer(nn.Module):
         mha_y, _ = self.mha_y_to_x(
             norm_y, norm_y, norm_y, key_padding_mask=y_key_padding_mask
         )
-
-        if self.norm_first:
-            mha_x = mha_x
-            mha_y = mha_y
-        else:
-            mha_x = self.norm_x(mha_x)
-            mha_y = self.norm_y(mha_y)
 
         return self.dense_x(mha_x, x), self.dense_y(mha_y, y)
 
@@ -325,7 +315,7 @@ class TransformerEmbeddings(nn.Module):
             + projected_instruction
         )
 
-        return self.dropout(projected_instruction)
+        return self.dropout(self.norm(projected_instruction))
 
 
 def nullable_one_hot(vec, cats):
