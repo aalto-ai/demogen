@@ -1042,7 +1042,7 @@ def main():
     parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
     parser.add_argument("--metalearn-demonstrations-limit", type=int, default=18)
     parser.add_argument("--metalearn-include-permutations", action="store_true")
-    parser.add_argument("--pad-instructions-to", type=int, default=8)
+    parser.add_argument("--pad-instructions-to", type=int, default=16)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--log-dir", type=str, default="logs")
