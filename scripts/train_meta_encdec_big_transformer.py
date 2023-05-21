@@ -668,9 +668,12 @@ def main():
 
     meta_trainer = pl.Trainer(
         logger=[
-            TensorBoardLogger(logs_root_dir, version=most_recent_version),
+            TensorBoardLogger(
+                logs_root_dir,
+                version=most_recent_version,
+            ),
             LoadableCSVLogger(
-                logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=10
+                logs_root_dir, version=most_recent_version, flush_logs_every_n_steps=100
             ),
         ],
         callbacks=[
@@ -679,7 +682,7 @@ def main():
         ],
         max_steps=iterations,
         num_sanity_val_steps=1,
-        accelerator='gpu',
+        accelerator="gpu",
         devices=1,
         precision='bf16-mixed',
         default_root_dir=logs_root_dir,
