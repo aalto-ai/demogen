@@ -455,99 +455,36 @@ def main():
                 descending=False,
             ),
         )
-        for config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config
+        for name, config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config_filtered
     ]
 
-    read_metrics_dfs_best_at_0 = match_to_configs(
-        MATCH_CONFIGS,
-        [
-            (
-                config,
-                get_top_values_for_corresponding_value(
-                    read_metrics_df_excluded,
-                    "vexact/dataloader_idx_0",
-                    GSCAN_TEST_SPLIT_DATALOADER_NAMES,
-                    args.result_smoothing,
-                    descending=False,
-                ).describe(),
-            )
-            for config, read_metrics_df_excluded in read_metrics_dfs_excluded
-        ],
-    )
-
-    results_table = (
-        pd.concat(
-            [
-                read_metrics_dfs_best_at_0["transformer_full"].T["mean"],
-                read_metrics_dfs_best_at_0["i2g"].T["mean"],
-                read_metrics_dfs_best_at_0["gandr"].T["mean"],
-            ],
-            axis=1,
+    read_metrics_dfs_best_at_0 = [
+        (
+            name,
+            config,
+            get_top_values_for_corresponding_value(
+                read_metrics_df_excluded,
+                "vexact/dataloader_idx_0",
+                list(TEST_SPLIT_DATALOADER_MAPPINGS[args.dataset].keys()),
+                args.result_smoothing,
+                descending=False,
+            ).describe(),
         )
-        .T.round(2)
-        .astype(str)
-        .reset_index()
-        + " ± "
-        + (
-            pd.concat(
-                [
-                    read_metrics_dfs_best_at_0["transformer_full"].T["std"],
-                    read_metrics_dfs_best_at_0["i2g"].T["std"],
-                    read_metrics_dfs_best_at_0["gandr"].T["std"],
-                ],
-                axis=1,
-            )
-            .T.round(2)
-            .astype(str)
-            .reset_index()
-        )
-    ).T
-    results_table.index = ["index", "A", "B", "C", "D", "E", "F", "G", "H"]
-    results_table.columns = ["ViLBERT", "DemoGen", "GandR"]
-    print("Table 1")
-    print(results_table.to_latex(float_format="%.2f", escape=False))
-
-    ablation_study_table = (
-        pd.concat(
-            [
-                read_metrics_dfs_best_at_0["gscan_oracle_full"].T["mean"],
-                read_metrics_dfs_best_at_0["gscan_metalearn_only_random"].T["mean"],
-                read_metrics_dfs_best_at_0["gscan_metalearn_sample_environments"].T[
-                    "mean"
-                ],
-            ],
-            axis=1,
-        )
-        .T.round(2)
-        .astype(str)
-        .reset_index()
-        + " ± "
-        + (
-            pd.concat(
-                [
-                    read_metrics_dfs_best_at_0["gscan_oracle_full"].T["std"],
-                    read_metrics_dfs_best_at_0["gscan_metalearn_only_random"].T["std"],
-                    read_metrics_dfs_best_at_0["gscan_metalearn_sample_environments"].T[
-                        "std"
-                    ],
-                ],
-                axis=1,
-            )
-            .T.round(2)
-            .astype(str)
-            .reset_index()
-        )
-    )
-    ablation_study_table.columns = ["index", "A", "B", "C", "D", "E", "F", "G", "H"]
-    ablation_study_table.index = [
-        "Apriori Oracle",
-        "Random",
-        "Retrieval",
+        for name, config, read_metrics_df_excluded in read_metrics_dfs_excluded
     ]
-    ablation_study_table = ablation_study_table.drop("index", axis=1)
 
-    print("Table 2")
-    print(ablation_study_table.T.to_latex())
+    read_metrics_dict = {
+        name: metrics for name, config, metrics in read_metrics_dfs_best_at_0
+    }
+
+    print(
+        format_results_table(
+            read_metrics_dict,
+            args.config_columns,
+            column_names=args.column_labels,
+            index=list(TEST_SPLIT_DATALOADER_MAPPINGS[args.dataset].values()),
+        )
+    )
 
 
 if __name__ == "__main__":
