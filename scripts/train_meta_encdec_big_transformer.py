@@ -684,11 +684,18 @@ def main():
         num_sanity_val_steps=1,
         accelerator="gpu",
         devices=1,
-        precision='bf16-mixed',
+        strategy=pl.strategies.FSDPStrategy(
+            activation_checkpointing=(
+                [nn.TransformerEncoderLayer, nn.TransformerDecoderLayer]
+            ),
+        )
+        if args.activation_checkpointing
+        else None,
+        precision="bf16-mixed",
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
-        gradient_clip_val=0.2,
+        # gradient_clip_val=1.0,
         **check_val_opts,
     )
 
