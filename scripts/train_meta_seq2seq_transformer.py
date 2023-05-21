@@ -905,6 +905,7 @@ class PermuteActionsDataset(Dataset):
         pad_word_idx,
         pad_action_idx,
         shuffle=True,
+        shuffle_words=True,
         seed=0,
     ):
         super().__init__()
@@ -914,6 +915,7 @@ class PermuteActionsDataset(Dataset):
         self.pad_word_idx = pad_word_idx
         self.pad_action_idx = pad_action_idx
         self.shuffle = shuffle
+        self.shuffle_words = shuffle_words
         self.generator = np.random.default_rng(seed)
 
     def state_dict(self):
@@ -949,8 +951,9 @@ class PermuteActionsDataset(Dataset):
                 0 : self.pad_action_idx
             ][self.generator.permutation(self.pad_action_idx)]
 
-            x_supports = x_permutation[x_supports]
-            queries = x_permutation[queries]
+            if self.shuffle_words:
+                x_supports = x_permutation[x_supports]
+                queries = x_permutation[queries]
             y_supports = y_permutation[y_supports]
             targets = y_permutation[targets]
 
@@ -1028,6 +1031,7 @@ def main():
     parser.add_argument("--decay-power", type=int, default=-1)
     parser.add_argument("--iterations", type=int, default=2500000)
     parser.add_argument("--disable-shuffle", action="store_true")
+    parser.add_argument("--disable-shuffle-words", action="store_true")
     parser.add_argument("--check-val-every", type=int, default=500)
     parser.add_argument("--limit-val-size", type=int, default=None)
     parser.add_argument("--enable-progress", action="store_true")
@@ -1133,6 +1137,7 @@ def main():
             pad_word,
             pad_action,
             shuffle=not args.disable_shuffle,
+            shuffle_words=not args.disable_shuffle_words,
             # We are testing different random initializations, but
             # keeping the dataloading order constant
             seed=0,
