@@ -136,7 +136,12 @@ def format_log_path(logs_dir, experiment_config, params, model_include_hparams=T
 
 
 def read_csv_and_truncate(path, truncate_key, truncate_value):
-    df = pd.read_csv(path)
+    try:
+        df = pd.read_csv(path)
+        print(f"Read csv {path} - {df.shape} values")
+    except Exception as e:
+        print(f"Could not read csv {path} - {e}")
+        return None
     truncated = truncate_at_key(df, truncate_key, truncate_value)
 
     return truncated
