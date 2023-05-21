@@ -225,11 +225,8 @@ class TransformerIntermediateLayer(nn.Module):
 
 
 class TransformerCrossEncoderLayer(nn.Module):
-    def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0, interleaved_self_attention=False):
+    def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
         super().__init__()
-        self.self_attn = TransformerCoSelfAttentionLayer(
-            emb_dim, emb_dim, nhead=nhead, norm_first=norm_first, dropout_p=dropout_p
-        )
         self.cross_attn = TransformerCrossAttentionLayer(
             emb_dim, emb_dim, nhead=nhead, norm_first=norm_first, dropout_p=dropout_p
         )
@@ -238,11 +235,7 @@ class TransformerCrossEncoderLayer(nn.Module):
         self.output1 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
         self.output2 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
 
-        self.interleaved_self_attention = interleaved_self_attention
-
     def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
-        if self.interleaved_self_attention:
-            x, y = self.self_attn(x, y)
         attn_x, attn_y = self.cross_attn(x, y, x_key_padding_mask, y_key_padding_mask)
         intermediate_x = self.intermediate1(attn_x)
         intermediate_y = self.intermediate2(attn_y)
@@ -252,20 +245,81 @@ class TransformerCrossEncoderLayer(nn.Module):
         return output_x, output_y
 
 
+class TransformerSelfEncoderLayer(nn.Module):
+    def __init__(self, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0):
+        super().__init__()
+        self.self_attn = TransformerCoSelfAttentionLayer(
+            emb_dim, emb_dim, nhead=nhead, norm_first=norm_first, dropout_p=dropout_p
+        )
+        self.intermediate1 = TransformerIntermediateLayer(emb_dim, ff_dim)
+        self.intermediate2 = TransformerIntermediateLayer(emb_dim, ff_dim)
+        self.output1 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
+        self.output2 = TransformerMLP(ff_dim, emb_dim, norm_first, dropout_p)
+
+    def forward(self, x, y, x_key_padding_mask=None, y_key_padding_mask=None):
+        attn_x, attn_y = self.self_attn(x, y, x_key_padding_mask, y_key_padding_mask)
+        intermediate_x = self.intermediate1(attn_x)
+        intermediate_y = self.intermediate2(attn_y)
+        output_x = self.output1(intermediate_x, attn_x)
+        output_y = self.output2(intermediate_y, attn_y)
+
+        return output_x, output_y
+
+
+class TransformerCombinedEncoderLayer(nn.Module):
+    def __init__(
+        self,
+        emb_dim,
+        ff_dim,
+        nhead=4,
+        norm_first=False,
+        dropout_p=0.0,
+        interleaved_self_attention=False,
+    ):
+        super().__init__()
+        self.self_layer = (
+            None
+            if not interleaved_self_attention
+            else (
+                TransformerSelfEncoderLayer(
+                    emb_dim, ff_dim, nhead, norm_first, dropout_p
+                )
+            )
+        )
+        self.cross_layer = TransformerCrossEncoderLayer(
+            emb_dim, ff_dim, nhead, norm_first, dropout_p
+        )
+
+    def forward(self, x, y, x_key_padding_mask, y_key_padding_mask):
+        if self.self_layer is not None:
+            x, y = self.self_layer(x, y, x_key_padding_mask, y_key_padding_mask)
+
+        x, y = self.cross_layer(x, y, x_key_padding_mask, y_key_padding_mask)
+
+        return x, y
+
+
 class TransformerCrossEncoder(nn.Module):
     def __init__(
-        self, nlayers, emb_dim, ff_dim, nhead=4, norm_first=False, dropout_p=0.0, interleaved_self_attention=False
+        self,
+        nlayers,
+        emb_dim,
+        ff_dim,
+        nhead=4,
+        norm_first=False,
+        dropout_p=0.0,
+        interleaved_self_attention=False,
     ):
         super().__init__()
         self.layers = nn.ModuleList(
             [
-                TransformerCrossEncoderLayer(
+                TransformerCombinedEncoderLayer(
                     emb_dim,
                     ff_dim,
                     nhead=nhead,
                     norm_first=norm_first,
                     dropout_p=dropout_p,
-                    interleaved_self_attention=interleaved_self_attention
+                    interleaved_self_attention=interleaved_self_attention,
                 )
                 for _ in range(nlayers)
             ]
