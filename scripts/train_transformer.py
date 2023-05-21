@@ -67,6 +67,9 @@ def main():
         f"Batch size {args.train_batch_size}, mult {args.batch_size_mult}, total {args.train_batch_size * args.batch_size_mult}"
     )
 
+    torch.set_float32_matmul_precision("medium")
+    print("Flash attention:", torch.backends.cuda.flash_sdp_enabled())
+
     os.makedirs(model_dir, exist_ok=True)
 
     if os.path.exists(f"{model_path}"):
