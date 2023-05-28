@@ -454,6 +454,7 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
             weight_decay=self.hparams.wd,
             decay_power=self.hparams.decay_power,
             warmup_proportion=self.hparams.warmup_proportion,
+            optimizer_kwargs={"fused": True},
         )
 
     def encode(self, base_instruction, base_state, all_mask, instruction_mask):
