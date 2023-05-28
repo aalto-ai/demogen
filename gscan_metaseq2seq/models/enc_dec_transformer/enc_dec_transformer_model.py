@@ -31,7 +31,7 @@ class StateEncoderTransformer(nn.Module):
             self.n_state_components * self.embedding_dim, self.embedding_dim
         )
         self.embedding = nn.Embedding(input_size, embedding_dim)
-        self.embedding_projection = nn.Linear(embedding_dim * 2, embedding_dim)
+        self.norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout_p)
         self.encoding = nn.Parameter(torch.randn(embedding_dim))
         self.pos_encoding = PositionalEncoding1D(embedding_dim)
@@ -52,14 +52,11 @@ class StateEncoderTransformer(nn.Module):
         z_padding_bits = z_padded == self.pad_word_idx
 
         state_embed_seq = self.state_projection(self.state_embedding(state_padded))
-
         z_embed_seq = self.embedding(z_padded)
-        z_embed_seq = torch.cat([self.pos_encoding(z_embed_seq), z_embed_seq], dim=-1)
-        z_embed_seq = self.embedding_projection(z_embed_seq)
-        state_embed_seq = self.dropout(state_embed_seq)
-        z_embed_seq = self.dropout(z_embed_seq)
+        z_embed_seq = z_embed_seq + self.pos_encoding(z_embed_seq)
 
         z_embed_seq = torch.cat([state_embed_seq, z_embed_seq], dim=1)
+        z_embed_seq = self.dropout(self.norm(z_embed_seq))
         padding_bits = torch.cat([state_padding_bits, z_padding_bits], dim=-1)
 
         encoded_seq = self.transformer_encoder(
@@ -85,8 +82,8 @@ class SequenceEncoderTransformer(nn.Module):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.embedding = nn.Embedding(input_size, embedding_dim)
-        self.embedding_projection = nn.Linear(embedding_dim * 2, embedding_dim)
         self.dropout = nn.Dropout(dropout_p)
+        self.norm = nn.LayerNorm(embedding_dim)
         self.encoding = nn.Parameter(torch.randn(embedding_dim))
         self.pos_encoding = PositionalEncoding1D(embedding_dim)
         self.pad_word_idx = pad_word_idx
@@ -105,9 +102,7 @@ class SequenceEncoderTransformer(nn.Module):
         z_padding_bits = z_padded == self.pad_word_idx
 
         z_embed_seq = self.embedding(z_padded)
-        z_embed_seq = torch.cat([self.pos_encoding(z_embed_seq), z_embed_seq], dim=-1)
-        z_embed_seq = self.embedding_projection(z_embed_seq)
-        z_embed_seq = self.dropout(z_embed_seq)
+        z_embed_seq = self.dropout(self.norm(z_embed_seq + self.pos_encoding(z_embed_seq)))
 
         encoded_seq = self.transformer_encoder(
             z_embed_seq.transpose(1, 0),
@@ -141,9 +136,8 @@ class DecoderTransformer(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.dropout_p = dropout_p
-        self.tanh = nn.Tanh()
         self.embedding = nn.Embedding(output_size, hidden_size)
-        self.embedding_projection = nn.Linear(hidden_size * 2, hidden_size)
+        self.norm = nn.LayerNorm(hidden_size)
         self.pos_encoding = PositionalEncoding1D(hidden_size)
         self.dropout = nn.Dropout(dropout_p)
         self.pad_action_idx = pad_action_idx
@@ -173,9 +167,7 @@ class DecoderTransformer(nn.Module):
         input_padding_bits = inputs == self.pad_action_idx
 
         embedding = self.embedding(inputs)  # batch_size x hidden_size
-        embedding = self.embedding_projection(
-            torch.cat([embedding, self.pos_encoding(embedding)], dim=-1)
-        )
+        embedding = self.norm(embedding + self.pos_encoding(embedding))
         embedding = self.dropout(embedding)
 
         decoded = self.decoder(
