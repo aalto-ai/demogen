@@ -251,7 +251,6 @@ def try_gen_instructions(
     sample_n,
     batch_size,
     decode_len,
-    dictionaries,
     device="cpu",
 ):
     sampled_instructions = instruction_gen_closure(inputs, sample_n)
@@ -377,7 +376,6 @@ def generate_instructions_and_rank(
     sample_n,
     batch_size,
     decode_len,
-    dictionaries,
     device="cpu",
 ):
     for batch in dataloader:
@@ -395,7 +393,6 @@ def generate_instructions_and_rank(
                     sample_n,
                     batch_size,
                     decode_len,
-                    dictionaries,
                     device=device,
                 )
                 break
