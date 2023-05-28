@@ -456,14 +456,7 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
             warmup_proportion=self.hparams.warmup_proportion,
         )
 
-    def forward(
-        self,
-        base_instruction,
-        base_state,
-        all_mask,
-        instruction_mask,
-        right_shifted_instruction,
-    ):
+    def encode(self, base_instruction, base_state, all_mask, instruction_mask):
         masked_instruction = base_instruction.clone()
 
         encoded_state = self.state_encoder_projection(self.state_encoder(base_state))
@@ -483,6 +476,11 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
         t_encoded_inp = self.transformer.encoder(
             encoded_inp.transpose(0, 1), src_key_padding_mask=all_mask
         )
+
+        return t_encoded_inp.transpose(0, 1)
+
+    def decode(self, encodings, encoding_mask, decoder_in):
+        encoded_right_shifted_instruction = self.embedding_instructions(decoder_in)
         encoded_right_shifted_instruction = (
             encoded_right_shifted_instruction
             + self.decoder_positional_encoding(encoded_right_shifted_instruction)
@@ -491,18 +489,30 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
             self.norm_decoded_output(encoded_right_shifted_instruction)
         )
 
-        decoded_instruction = self.transformer(
-            src=encoded_inp.transpose(0, 1),
-            tgt=encoded_right_shifted_instruction.transpose(0, 1),
-            src_key_padding_mask=all_mask,
-            memory_key_padding_mask=all_mask,
-            tgt_key_padding_mask=(right_shifted_instruction == self.pad_word_idx),
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
-                right_shifted_instruction.shape[1]
-            ).to(self.device),
-        ).transpose(0, 1)
+        return self.project(
+            self.transformer.decoder(
+                memory=encodings.transpose(0, 1),
+                memory_key_padding_mask=encoding_mask,
+                tgt=encoded_right_shifted_instruction.transpose(0, 1),
+                tgt_key_padding_mask=(decoder_in == self.pad_word_idx),
+                tgt_mask=nn.Transformer.generate_square_subsequent_mask(
+                    decoder_in.shape[1]
+                ).to(self.device),
+            ).transpose(0, 1)
+        )
 
-        return self.project(decoded_instruction)
+    def forward(
+        self,
+        base_instruction,
+        base_state,
+        all_mask,
+        instruction_mask,
+        right_shifted_instruction,
+    ):
+        encodings = self.encode(
+            base_instruction, base_state, all_mask, instruction_mask
+        )
+        return self.decode(encodings, all_mask, right_shifted_instruction)
 
     def training_step(self, x, idx):
         instruction, state = x
