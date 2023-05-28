@@ -879,8 +879,9 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     transformer_model.load_state_dict(transformer_model_weights["state_dict"])
 
     transformer_model_trainer = pl.Trainer(
-        gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        accelerator="gpu" if torch.cuda.is_available() else None,
+        devices=1 if torch.cuda.is_available() else 0,
+        precision="16-mixed" if torch.cuda.is_available() else None,
     )
     transformer_model_trainer.validate(
         transformer_model,
