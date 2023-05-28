@@ -169,8 +169,11 @@ def train_clip(
         norm_first=False,
         lr=1e-4,
         decay_power=-1,
-        warmup_proportion=0.1,
+        warmup_proportion=0.1
     )
+    if load is not None:
+        instruction_clip.load_state_dict(torch.load(load))
+    print(instruction_clip)
 
     exp_name = "clip"
     model_name = "transformer"
