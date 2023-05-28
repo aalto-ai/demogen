@@ -22,7 +22,10 @@ class MonotonicRandomPositionEmbedding(nn.Module):
         self.embedding = nn.Embedding(num_positions, emb_dim)
         self.num_positions = num_positions
 
-    def forward(self, x):
+    def forward(self, x, deterministic=False):
+        if deterministic:
+            return self.embedding(torch.arange(x.shape[-1], device=x.device))
+
         permutation = (
             torch.from_numpy(
                 np.sort(np.random.permutation(self.num_positions)[: x.shape[1]])
