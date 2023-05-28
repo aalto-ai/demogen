@@ -692,6 +692,7 @@ def train_state_encoder_decoder(
     vocab_size,
     batch_size,
     device="cuda",
+    load=None,
 ):
     nlayers = 4
     nhead = 8
@@ -735,6 +736,10 @@ def train_state_encoder_decoder(
         warmup_proportion=0.1,
     )
 
+    if load is not None:
+        model.load_state_dict(torch.load(load))
+
+    os.makedirs(logs_root_dir, exist_ok=True)
     trainer = pl.Trainer(
         logger=[
             TensorBoardLogger(logs_root_dir),
