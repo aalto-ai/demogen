@@ -1177,7 +1177,7 @@ def train_encoder_decoder(
         precision=16 if device == "cuda" else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=batch_size_mult,
-        gradient_clip_val=0.2,
+        # gradient_clip_val=0.2,
     )
 
     trainer.fit(model, train_dataloader)
