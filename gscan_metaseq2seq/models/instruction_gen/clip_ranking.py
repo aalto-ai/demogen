@@ -85,6 +85,7 @@ class InstructionCLIPBCELearner(pl.LightningModule):
             weight_decay=self.hparams.wd,
             decay_power=self.hparams.decay_power,
             warmup_proportion=self.hparams.warmup_proportion,
+            optimizer_kwargs={"fused": True}
         )
 
     def forward(self, x):
