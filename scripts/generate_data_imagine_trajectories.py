@@ -853,22 +853,22 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     if args.save_mlm_model:
         torch.save(model.state_dict(), args.save_mlm_model)
 
-    instruction_clip = train_clip(
-        balanced_training_data_subset,
-        args.seed,
-        0 if args.load_clip_model else args.clip_train_iterations,
-        pad_word,
-        len(WORD2IDX),
-        device=args.device,
-    )
+    if False:
+        instruction_clip = train_clip(
+            balanced_training_data_subset,
+            args.seed,
+            0 if args.load_clip_model else args.clip_train_iterations,
+            pad_word,
+            len(WORD2IDX),
+            device=args.device,
+            load=args.load_clip_model,
+            dictionaries=dictionaries,
+        )
 
-    if args.load_clip_model:
-        instruction_clip.load_state_dict(torch.load(args.load_clip_model))
+        if args.save_clip_model:
+            torch.save(instruction_clip.state_dict(), args.save_clip_model)
 
-    if args.save_clip_model:
-        torch.save(instruction_clip.state_dict(), args.save_clip_model)
-
-    instruction_clip.positional_encoding.cached_penc = None
+        instruction_clip.positional_encoding.cached_penc = None
 
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
