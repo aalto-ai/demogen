@@ -666,6 +666,14 @@ def main():
     logs_root_dir = f"{args.log_dir}/{exp_name}/{model_name}/{dataset_name}/{seed}"
     most_recent_version = args.version
 
+    strategy_kwargs = {
+        "strategy": pl.strategies.FSDPStrategy(
+            activation_checkpointing=(
+                [nn.TransformerEncoderLayer, nn.TransformerDecoderLayer]
+            ),
+        )
+    } if args.activation_checkpointing else {}
+
     meta_trainer = pl.Trainer(
         logger=[
             TensorBoardLogger(
@@ -684,18 +692,12 @@ def main():
         num_sanity_val_steps=1,
         accelerator="gpu",
         devices=1,
-        strategy=pl.strategies.FSDPStrategy(
-            activation_checkpointing=(
-                [nn.TransformerEncoderLayer, nn.TransformerDecoderLayer]
-            ),
-        )
-        if args.activation_checkpointing
-        else None,
         precision="bf16-mixed",
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
         # gradient_clip_val=1.0,
+        **strategy_kwargs,
         **check_val_opts,
     )
 
