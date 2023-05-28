@@ -551,7 +551,7 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
         )
 
         loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
-        self.log("loss", loss)
+        self.log("tloss", loss, prog_bar=True)
 
         return loss
 
