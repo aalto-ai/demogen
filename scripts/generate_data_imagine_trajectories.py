@@ -900,9 +900,11 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     return (
         make_gscan_instruction_gen_closure(
-            model, WORD2IDX["[pad]"], None, device=args.device, noise_level=0.1
+            model, pad_word, None, device=args.device, noise_level=0.2
         ),
-        make_gscan_clip_ranking_closure(instruction_clip, pad_word, device=args.device),
+        make_gscan_seq2seq_ranking_closure(
+            model, pad_word, WORD2IDX["[sos]"], device=args.device
+        ),
         make_gscan_generate_targets_closure(
             transformer_model, pad_word, pad_action, device=args.device
         ),
