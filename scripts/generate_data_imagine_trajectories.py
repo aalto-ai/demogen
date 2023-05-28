@@ -233,6 +233,141 @@ def make_gscan_format_output_closure():
     return format_output
 
 
+class SamplingError(Exception):
+    def __init__(self):
+        super().__init__()
+
+    def __str__(self):
+        return "SamplingError"
+
+
+def try_gen_instructions(
+    inputs,
+    targets,
+    instruction_gen_closure,
+    instruction_ranking_closure,
+    target_gen_closure,
+    format_output_closure,
+    sample_n,
+    batch_size,
+    decode_len,
+    dictionaries,
+    device="cpu",
+):
+    sampled_instructions = instruction_gen_closure(inputs, sample_n)
+
+    # Now for each element in the batch, we take
+    # the set (involves a conversion back to tuples
+    # but its fine)
+    sampled_instructions_sets = [
+        set([tuple(x.tolist()) for x in sampled_instruction])
+        for sampled_instruction in sampled_instructions
+    ]
+    sampled_instruction_set_ids = np.concatenate(
+        [np.array([i] * len(s)) for i, s in enumerate(sampled_instructions_sets)]
+    )
+    # We want batches of inputs, so we transpose here
+    sampled_instruction_set_inputs = [
+        np.concatenate(
+            [
+                np.repeat(
+                    input_element[None].numpy(),
+                    len(sampled_instruction_set),
+                    axis=0,
+                )
+                for input_element, sampled_instruction_set in zip(
+                    input_elements_batch, sampled_instructions_sets
+                )
+            ],
+            axis=0,
+        )
+        for input_elements_batch in inputs
+    ]
+    try:
+        concat_sampled_instruction_set_inputs = np.concatenate(
+            [
+                np.stack([np.array(x) for x in sampled_instruction_set])
+                for sampled_instruction_set in sampled_instructions_sets
+            ]
+        )
+    except ValueError:
+        raise SamplingError()
+
+    per_id_results = defaultdict(list)
+
+    for i in trange(
+        concat_sampled_instruction_set_inputs.shape[0] // batch_size + 1,
+        desc="Score/pred batch",
+    ):
+        first_index = i * batch_size
+        last_index = (i + 1) * batch_size
+
+        # Skip if this batch would have a size of zero
+        if first_index >= concat_sampled_instruction_set_inputs.shape[0]:
+            continue
+
+        sampled_instruction_set_ids_batch = torch.from_numpy(
+            sampled_instruction_set_ids[first_index:last_index]
+        ).to(device)
+        sampled_instruction_set_inputs_batch = tuple(
+            [
+                torch.from_numpy(
+                    sampled_instruction_set_inputs_elements[first_index:last_index]
+                ).to(device)
+                for sampled_instruction_set_inputs_elements in sampled_instruction_set_inputs
+            ]
+        )
+        sampled_instruction_set_batch = torch.from_numpy(
+            concat_sampled_instruction_set_inputs[first_index:last_index]
+        ).to(device)
+        sampled_instruction_set_scores = instruction_ranking_closure(
+            sampled_instruction_set_batch, sampled_instruction_set_inputs_batch
+        )
+        sampled_instruction_set_targets = target_gen_closure(
+            sampled_instruction_set_batch,
+            sampled_instruction_set_inputs_batch,
+            decode_len,
+        )
+
+        # Now we populate per_id_results with the score
+        # and the result_set_ids
+        for batch_id, sample_result, predicted_target, score in zip(
+            sampled_instruction_set_ids_batch.cpu(),
+            sampled_instruction_set_batch.cpu(),
+            sampled_instruction_set_targets.cpu(),
+            sampled_instruction_set_scores.cpu(),
+        ):
+            batch_id = batch_id.item()
+
+            # Filter out demonstrations that do not give any new information
+            if (targets[batch_id] == predicted_target).all(axis=-1):
+                continue
+
+            per_id_results[batch_id].append(
+                (sample_result.numpy(), predicted_target.numpy(), score.item())
+            )
+
+    # Now we sort the per_id_results ascending by score
+    per_id_results = {
+        i: sorted(results, key=lambda x: -x[-1])
+        for i, results in per_id_results.items()
+    }
+
+    if any([not v for v in per_id_results.items()]):
+        raise SamplingError()
+
+    # Now yield per_id, the state, the query instruction and all supports
+    # and their scores
+    return [
+        format_output_closure(
+            tuple([i[batch_id] for i in inputs]), targets[batch_id], sample_scores
+        )
+        for batch_id, sample_scores in sorted(
+            per_id_results.items(), key=lambda x: x[0]
+        )
+    ]
+
+
 def generate_instructions_and_rank(
     instruction_gen_closure,
     instruction_ranking_closure,
@@ -242,104 +377,30 @@ def generate_instructions_and_rank(
     sample_n,
     batch_size,
     decode_len,
+    dictionaries,
     device="cpu",
 ):
     for batch in dataloader:
         inputs, targets = batch
 
-        sampled_instructions = instruction_gen_closure(inputs, sample_n)
-
-        # Now for each element in the batch, we take
-        # the set (involves a conversion back to tuples
-        # but its fine)
-        sampled_instructions_sets = [
-            set([tuple(x.tolist()) for x in sampled_instruction])
-            for sampled_instruction in sampled_instructions
-        ]
-        sampled_instruction_set_ids = np.concatenate(
-            [np.array([i] * len(s)) for i, s in enumerate(sampled_instructions_sets)]
-        )
-        # We want batches of inputs, so we transpose here
-        sampled_instruction_set_inputs = [
-            np.concatenate(
-                [
-                    np.repeat(
-                        input_element[None].numpy(),
-                        len(sampled_instruction_set),
-                        axis=0,
-                    )
-                    for input_element, sampled_instruction_set in zip(
-                        input_elements_batch, sampled_instructions_sets
-                    )
-                ],
-                axis=0,
-            )
-            for input_elements_batch in inputs
-        ]
-        concat_sampled_instruction_set_inputs = np.concatenate(
-            [
-                np.stack([np.array(x) for x in sampled_instruction_set])
-                for sampled_instruction_set in sampled_instructions_sets
-            ]
-        )
-
-        per_id_results = defaultdict(list)
-
-        for i in range(
-            concat_sampled_instruction_set_inputs.shape[0] // batch_size + 1
-        ):
-            first_index = i * batch_size
-            last_index = (i + 1) * batch_size
-            sampled_instruction_set_ids_batch = torch.from_numpy(
-                sampled_instruction_set_ids[first_index:last_index]
-            ).to(device)
-            sampled_instruction_set_inputs_batch = tuple(
-                [
-                    torch.from_numpy(
-                        sampled_instruction_set_inputs_elements[first_index:last_index]
-                    ).to(device)
-                    for sampled_instruction_set_inputs_elements in sampled_instruction_set_inputs
-                ]
-            )
-            sampled_instruction_set_batch = torch.from_numpy(
-                concat_sampled_instruction_set_inputs[first_index:last_index]
-            ).to(device)
-            sampled_instruction_set_scores = instruction_ranking_closure(
-                sampled_instruction_set_batch, sampled_instruction_set_inputs_batch
-            )
-            sampled_instruction_set_targets = target_gen_closure(
-                sampled_instruction_set_batch,
-                sampled_instruction_set_inputs_batch,
-                decode_len,
-            )
-
-            # Now we populate per_id_results with the score
-            # and the result_set_ids
-            for batch_id, sample_result, predicted_target, score in zip(
-                sampled_instruction_set_ids_batch.cpu(),
-                sampled_instruction_set_batch.cpu(),
-                sampled_instruction_set_targets.cpu(),
-                sampled_instruction_set_scores.cpu(),
-            ):
-                batch_id = batch_id.item()
-                per_id_results[batch_id].append(
-                    (sample_result.numpy(), predicted_target.numpy(), score.item())
+        while True:
+            try:
+                yield from try_gen_instructions(
+                    inputs,
+                    targets,
+                    instruction_gen_closure,
+                    instruction_ranking_closure,
+                    target_gen_closure,
+                    format_output_closure,
+                    sample_n,
+                    batch_size,
+                    decode_len,
+                    dictionaries,
+                    device=device,
                 )
-
-        # Now we sort the per_id_results ascending by score
-        per_id_results = {
-            i: sorted(results, key=lambda x: -x[-1])
-            for i, results in per_id_results.items()
-        }
-
-        # Now yield per_id, the state, the query instruction and all supports
-        # and their scores
-        for batch_id, sample_scores in sorted(
-            per_id_results.items(), key=lambda x: x[0]
-        ):
-            yield format_output_closure(
-                tuple([i[batch_id] for i in inputs]), targets[batch_id], sample_scores
-            )
+                break
+            except SamplingError:
+                continue
 
 
 class StateEncoderDecoderLanguageModel(pl.LightningModule):
