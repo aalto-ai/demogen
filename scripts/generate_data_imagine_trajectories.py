@@ -555,6 +555,9 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
 
         return loss
 
+    def validation_step(self, x, idx):
+        return self.training_step(x, idx)
+
 
 def sample_from_state_encoder_decoder_model_with_mask(
     model,
