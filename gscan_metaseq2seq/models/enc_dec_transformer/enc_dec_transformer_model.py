@@ -8,6 +8,7 @@ from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 from positional_encodings.torch_encodings import PositionalEncoding1D
 import pytorch_lightning as pl
 
+from tqdm.auto import trange
 
 class StateEncoderTransformer(nn.Module):
     def __init__(
@@ -234,7 +235,8 @@ def compute_encoder_decoder_model_loss_and_stats(
 def autoregressive_model_unroll_predictions(
     model, inputs, target, sos_target_idx, eos_target_idx, pad_target_idx
 ):
-    encodings, key_padding_mask = model.encode(*inputs)
+    with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
+        encodings, key_padding_mask = model.encode(*inputs)
 
     # Recursive decoding, start with a batch of SOS tokens
     decoder_in = torch.tensor(sos_target_idx, dtype=torch.long, device=model.device)[
@@ -243,8 +245,8 @@ def autoregressive_model_unroll_predictions(
 
     logits = []
 
-    with torch.inference_mode():
-        for i in range(target.shape[1]):
+    with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
+        for i in trange(target.shape[1], desc="Gen tgts"):
             logits.append(
                 model.decode_autoregressive(decoder_in, encodings, key_padding_mask)[
                     :, -1
