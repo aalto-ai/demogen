@@ -22,6 +22,8 @@ class InducingPointEncoder(nn.Module):
     def __init__(self, emb_dim, nhead, nlayers, norm_first=False, dropout=0.1):
         super().__init__()
         self.inducing_point = nn.Parameter(torch.randn(emb_dim))
+        self.norm = nn.LayerNorm(emb_dim)
+        self.dropout = nn.Dropout(p=dropout)
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=emb_dim,
@@ -34,10 +36,11 @@ class InducingPointEncoder(nn.Module):
         )
 
     def forward(self, x, key_padding_mask):
+        inputs = self.dropout(self.norm(torch.cat(
+            [x, self.inducing_point[None, None].expand(x.shape[0], 1, -1)], dim=1
+        )))
         return self.transformer(
-            torch.cat(
-                [x, self.inducing_point[None, None].expand(x.shape[0], 1, -1)], dim=1
-            ).transpose(0, 1),
+            inputs.transpose(0, 1),
             src_key_padding_mask=torch.cat(
                 [key_padding_mask, torch.zeros_like(key_padding_mask[:, :1])], dim=-1
             ),
@@ -72,6 +75,8 @@ class InstructionCLIPBCELearner(pl.LightningModule):
             emb_dim, nhead, nlayers, norm_first=norm_first, dropout=dropout
         )
         self.pad_word_idx = pad_word_idx
+        self.temp = nn.Parameter(torch.zeros(1))
+        self.bias = nn.Parameter(torch.zeros(1))
 
     def configure_optimizers(self):
         return transformer_optimizer_config(
@@ -93,55 +98,35 @@ class InstructionCLIPBCELearner(pl.LightningModule):
         )
 
         return (
-            self.transformer_encoder_instruction(
+            F.normalize(self.transformer_encoder_instruction(
                 encoded_instruction, instruction_padding
-            )
-            @ self.transformer_encoder_state(projected_state, state_padding).T
-        )
+            ), dim=-1)
+            @ F.normalize(self.transformer_encoder_state(projected_state, state_padding), dim=-1).T
+        ) * self.temp.exp() + self.bias
 
     def training_step(self, x, idx):
         instruction, state = x
 
         instruction_pad = instruction == self.pad_word_idx
-        state_pad = torch.zeros_like(state[..., 0])
-        # Lets do input dropout by randomly masking parts of the state
-        state_pad[
-            :,
-            torch.randperm(state_pad.shape[1], device=state_pad.device)
-            < (state_pad.shape[1] * 0.2),
-        ] = 1
-        state_pad = state_pad.to(torch.bool)
+        state_pad = torch.rand_like(state[..., 0].float()) < 0.2
+        state_pad |= (state == 0).all(dim=-1)
 
         outer_product = self.forward((instruction, state, instruction_pad, state_pad))
 
-        matching_instruction = (
-            (
-                instruction[None, :].expand(instruction.shape[0], -1, -1)
-                == instruction[:, None].expand(-1, instruction.shape[0], -1)
-            )
-            .all(dim=-1)
-            .float()
-        )
-
-        loss = F.binary_cross_entropy_with_logits(
-            outer_product,
-            matching_instruction,
-            pos_weight=torch.tensor(
-                matching_instruction.flatten().shape[0]
-                / (matching_instruction[matching_instruction == 1].shape[0]),
-                device=self.device,
-                dtype=torch.float,
-            ),
-        )
-        self.log("loss", loss)
+        labels = torch.arange(instruction_pad.shape[0], dtype=torch.long).to(instruction_pad.device)
+        loss = (F.cross_entropy(outer_product, labels) + F.cross_entropy(outer_product.T, labels)) / 2.0
+        self.log("tloss", loss, prog_bar=True)
 
         return loss
+
+    def validation_step(self, x, idx):
+        return self.training_step(x, idx)
 
     def predict_step(self, x, idx):
         instruction, state = x
 
         instruction_pad = instruction == self.pad_word_idx
-        state_pad = torch.zeros_like(state[..., 0], dtype=torch.bool)
+        state_pad = (state == 0).all(dim=-1)
 
         outer_product = self.forward((instruction, state, instruction_pad, state_pad))
 
