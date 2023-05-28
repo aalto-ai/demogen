@@ -1816,6 +1816,9 @@ def main():
         args
     )
 
+    torch.set_float32_matmul_precision("medium")
+    print("Flash attention:", torch.backends.cuda.flash_sdp_enabled())
+
     print(args.offset, args.offset + (args.limit or 0))
 
     dataloader_splits = {
