@@ -73,7 +73,7 @@ on the gSCAN baseline data. We suggest using seed 6.
 
     python scripts/train_transformer.py \
     --train-demonstrations data/baseline \
-    --valid-demonstraitons-directory data/baseline \
+    --valid-demonstrations-directory data/baseline \
     --dictionary data/baseline/dictionary.pb \
     --seed 6 \
     --train-batch-size 128 \
