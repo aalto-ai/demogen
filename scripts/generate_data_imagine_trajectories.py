@@ -123,7 +123,9 @@ def make_gscan_clip_ranking_closure(clip_ranking_model, pad_word_idx, device="cp
         state_pad = torch.zeros_like(states[..., 0])
         state_pad = state_pad.to(torch.bool)
 
-        with torch.inference_mode():
+        with torch.inference_mode(), torch.autocast(
+            device_type=device, dtype=torch.float16, enabled=True
+        ):
             encoded_state = clip_ranking_model.state_encoder(states)
             projected_state = clip_ranking_model.state_encoder_projection(encoded_state)
             encoded_instruction = clip_ranking_model.embedding_instructions(
