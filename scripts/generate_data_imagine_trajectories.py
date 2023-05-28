@@ -1863,6 +1863,7 @@ def main():
                     args.gen_sample_n,
                     batch_size=args.batch_size,
                     decode_len=128,
+                    device=args.device,
                 ),
                 1000,
             )
