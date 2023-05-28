@@ -565,6 +565,8 @@ def sample_from_state_encoder_decoder_model_with_mask(
     expanded_state,
     all_mask,
     instruction_mask,
+    pad_tgt_idx,
+    eos_tgt_idx,
     noise_level=0.2,
     device="cpu",
     deterministic=False,
@@ -600,6 +602,11 @@ def sample_from_state_encoder_decoder_model_with_mask(
             decoded_instruction = torch.cat(
                 [decoded_instruction, samples[:, None]], dim=1
             )
+
+            # Set the decoded-so-far instruction to be pad_tgt_idx if we hit pad_tgt_idx once
+            decoded_instruction[
+                (decoded_instruction == pad_tgt_idx).cumsum(dim=-1).bool()
+            ] = pad_tgt_idx
 
         return (
             expanded_instruction.cpu(),
@@ -658,6 +665,8 @@ def sample_from_state_encoder_decoder_model(
         expanded_state,
         all_mask,
         instruction_only_mask,
+        pad_target_idx,
+        eos_target_idx,
         noise_level=noise_level,
         device=device,
         deterministic=deterministic,
