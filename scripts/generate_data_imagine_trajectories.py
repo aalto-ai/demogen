@@ -431,6 +431,9 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
         self.decoder_positional_encoding = MonotonicRandomPositionEmbedding(
             128, emb_dim
         )
+        self.norm_input = nn.LayerNorm(emb_dim)
+        self.norm_decoded_output = nn.LayerNorm(emb_dim)
+        self.dropout = nn.Dropout(p=dropout)
         self.transformer = nn.Transformer(
             d_model=emb_dim,
             dim_feedforward=emb_dim * 4,
@@ -475,13 +478,17 @@ class StateEncoderDecoderLanguageModel(pl.LightningModule):
             ],
             dim=-2,
         )
+        encoded_inp = self.dropout(self.norm_input(encoded_inp))
 
-        encoded_right_shifted_instruction = self.embedding_instructions(
-            right_shifted_instruction
+        t_encoded_inp = self.transformer.encoder(
+            encoded_inp.transpose(0, 1), src_key_padding_mask=all_mask
         )
         encoded_right_shifted_instruction = (
             encoded_right_shifted_instruction
             + self.decoder_positional_encoding(encoded_right_shifted_instruction)
+        )
+        encoded_right_shifted_instruction = self.dropout(
+            self.norm_decoded_output(encoded_right_shifted_instruction)
         )
 
         decoded_instruction = self.transformer(
