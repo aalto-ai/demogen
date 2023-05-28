@@ -141,14 +141,15 @@ def train_clip(
     pad_word,
     vocab_size,
     device="cpu",
+    load=None
 ):
-    nlayers = 4
+    nlayers = 8
     nhead = 8
-    hidden_size = 128
+    hidden_size = 512
     dropout_p = 0.1
     train_batch_size = 128
     batch_size_mult = 1
-    dataset_name = "gscan_normal"
+    dataset_name = "gscan_clip"
     check_val_every = 500
 
     clip_train_dataloader = DataLoader(
@@ -161,9 +162,9 @@ def train_clip(
     instruction_clip = InstructionCLIPBCELearner(
         vocab_size,
         pad_word,
-        nlayers=4,
-        nhead=8,
-        emb_dim=512,
+        nlayers=nlayers,
+        nhead=nhead,
+        emb_dim=hidden_size,
         dropout=dropout_p,
         norm_first=False,
         lr=1e-4,
