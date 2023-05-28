@@ -151,6 +151,46 @@ def make_gscan_clip_ranking_closure(clip_ranking_model, pad_word_idx, device="cp
     return compute_scores
 
 
+def make_gscan_seq2seq_ranking_closure(model, pad_word_idx, sos_word_idx, device="cpu"):
+    model.eval()
+
+    def compute_scores(instructions, inputs):
+        states, query_instructions = inputs
+
+        states = states.to(device)
+        instructions = instructions.to(device)
+
+        instruction_pad = instructions == pad_word_idx
+        query_instruction_pad = query_instructions == pad_word_idx
+        state_pad = (states == 0).all(dim=-1).bool()
+
+        with torch.inference_mode(), torch.autocast(
+            device_type=device, dtype=torch.float16, enabled=True
+        ):
+            logits = model(
+                query_instructions,
+                states,
+                torch.cat([query_instruction_pad, state_pad], dim=-1),
+                query_instruction_pad,
+                torch.cat(
+                    [
+                        torch.ones_like(instructions[:, :1]) * sos_word_idx,
+                        instructions[:, :-1],
+                    ],
+                    dim=-1,
+                ),
+            ).log_softmax(dim=-1)
+            selected_logits = logits.gather(-1, instructions.unsqueeze(-1)).squeeze(-1)
+            selected_logits[instruction_pad] = 0.0
+            scores = selected_logits.sum(dim=-1) / (~instruction_pad).float().sum(
+                dim=-1
+            )
+
+            return scores
+
+    return compute_scores
+
+
 def make_gscan_generate_targets_closure(
     transformer_model, pad_word_idx, pad_action_idx, device="cpu"
 ):
