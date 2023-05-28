@@ -694,9 +694,9 @@ def train_state_encoder_decoder(
     device="cuda",
     load=None,
 ):
-    nlayers = 4
+    nlayers = 8
     nhead = 8
-    hidden_size = 128
+    hidden_size = 512
     dropout_p = 0.1
     train_batch_size = batch_size
     batch_size_mult = 1
@@ -743,20 +743,24 @@ def train_state_encoder_decoder(
     trainer = pl.Trainer(
         logger=[
             TensorBoardLogger(logs_root_dir),
-            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
         ],
         callbacks=[pl.callbacks.LearningRateMonitor()],
         max_steps=mlm_iterations,
         num_sanity_val_steps=10,
         accelerator="gpu",
         devices=1,
-        precision=16 if device == "cuda" else 32,
+        precision="16-mixed" if device == "cuda" else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=batch_size_mult,
-        gradient_clip_val=0.2,
+        limit_val_batches=128,
+        # gradient_clip_val=0.2,
     )
 
     trainer.fit(model, train_dataloader)
+
+    # We validate on the train_dataloader, but its just a sanity check to make sure that
+    # we loaded a valid model
+    trainer.validate(model, train_dataloader)
 
     return model
 
