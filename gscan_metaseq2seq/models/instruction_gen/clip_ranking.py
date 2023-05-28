@@ -183,23 +183,28 @@ def train_clip(
 
     check_val_opts = {}
 
+    os.makedirs(logs_root_dir, exist_ok=True)
     instruction_clip_trainer = pl.Trainer(
         logger=[
             TensorBoardLogger(logs_root_dir),
-            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
         ],
         callbacks=[pl.callbacks.LearningRateMonitor()],
         max_steps=clip_iterations,
         num_sanity_val_steps=10,
-        gpus=1 if device == "cuda" else 0,
-        precision=16 if device == "cuda" else 32,
+        accelerator="gpu" if device == "cuda" else None,
+        devices=1 if device == "cuda" else 0,
+        precision="16-mixed" if device == "cuda" else 32,
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=batch_size_mult,
-        gradient_clip_val=0.2,
+        limit_val_batches=128,
+        #gradient_clip_val=0.2,
         **check_val_opts,
     )
 
     instruction_clip_trainer.fit(
+        instruction_clip, clip_train_dataloader
+    )
+    instruction_clip_trainer.validate(
         instruction_clip, clip_train_dataloader
     )
 
