@@ -1799,6 +1799,8 @@ def main():
         "--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu"
     )
     parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--gen-batch-size", type=int, default=16)
+    parser.add_argument("--gen-sample-n", type=int, default=256)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
     parser.add_argument("--offset", type=int, default=0)
@@ -1828,7 +1830,7 @@ def main():
                     ),
                 ),
             ),
-            batch_size=16,
+            batch_size=args.gen_batch_size,
             pin_memory=True,
         )
         for split, dataset in datasets.items()
@@ -1858,7 +1860,7 @@ def main():
                     generate_targets_closure,
                     format_output_closure,
                     tqdm(dataloader),
-                    256,
+                    args.gen_sample_n,
                     batch_size=args.batch_size,
                     decode_len=128,
                 ),
