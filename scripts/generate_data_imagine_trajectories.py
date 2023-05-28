@@ -929,7 +929,7 @@ def gscan_load_data(args):
         split: MapDataset(
             PaddingDataset(
                 demos,
-                (8, 128, (36, 7)),
+                (32, 128, (36, 7)),
                 (WORD2IDX["[pad]"], ACTION2IDX["[pad]"], 0),
             ),
             lambda x: ((x[2], x[0]), x[1]),
