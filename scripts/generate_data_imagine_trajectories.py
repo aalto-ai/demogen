@@ -1200,7 +1200,9 @@ def sample_from_encoder_decoder_model_with_mask(
 
     unroll_length = expanded_instruction.shape[1]
 
-    with torch.inference_mode():
+    with torch.inference_mode(), torch.autocast(
+        device_type=device, dtype=torch.float16, enabled=True
+    ):
         decoded_instruction = (
             torch.ones_like(expanded_instruction[:, :1]) * model.sos_word_idx
         )
