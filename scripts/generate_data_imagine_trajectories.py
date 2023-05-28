@@ -1803,8 +1803,8 @@ def main():
     parser.add_argument("--gen-sample-n", type=int, default=256)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
-    parser.add_argument("--offset", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--offset", type=float, default=0)
+    parser.add_argument("--limit", type=float, default=None)
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1823,9 +1823,14 @@ def main():
             Subset(
                 dataset,
                 np.arange(
-                    min(args.offset, len(dataset)),
+                    min(math.floor(args.offset * len(dataset)), len(dataset)),
                     min(
-                        args.offset + (len(dataset) if not args.limit else args.limit),
+                        math.floor(args.offset * len(dataset))
+                        + (
+                            len(dataset)
+                            if not args.limit
+                            else math.floor(args.limit * len(dataset))
+                        ),
                         len(dataset),
                     ),
                 ),
