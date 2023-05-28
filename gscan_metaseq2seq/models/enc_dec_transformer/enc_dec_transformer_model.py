@@ -175,10 +175,7 @@ class DecoderTransformer(nn.Module):
             memory=encoder_outputs,
             memory_key_padding_mask=encoder_padding,
             tgt_key_padding_mask=input_padding_bits,
-            tgt_mask=torch.triu(
-                torch.full((inputs.shape[-1], inputs.shape[-1]), float("-inf")),
-                diagonal=1,
-            ).to(inputs.device),
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(input_padding_bits.shape[-1]).to(input_padding_bits.device).bool(),
         ).transpose(0, 1)
 
         return self.out(decoded)
