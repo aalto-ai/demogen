@@ -37,7 +37,7 @@ from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
     train_clip,
 )
 
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 
 
 def batched(iterable, n):
@@ -576,7 +576,9 @@ def sample_from_state_encoder_decoder_model_with_mask(
 
     unroll_length = expanded_instruction.shape[1]
 
-    with torch.inference_mode():
+    with torch.inference_mode(), torch.autocast(
+        device_type=device, dtype=torch.float16, enabled=True
+    ):
         decoded_instruction = (
             torch.ones_like(expanded_instruction[:, :1]) * model.sos_word_idx
         )
@@ -585,12 +587,14 @@ def sample_from_state_encoder_decoder_model_with_mask(
         # input is not padded
         instruction_mask[:, -1] = False
 
-        for i in range(unroll_length):
-            logits = model(
-                expanded_instruction,
-                expanded_state,
+        encodings = model.encode(
+            expanded_instruction, expanded_state, all_mask, instruction_mask
+        )
+
+        for i in trange(unroll_length, desc="Gen instrs"):
+            logits = model.decode(
+                encodings,
                 all_mask,
-                instruction_mask,
                 decoded_instruction,
             )
             if deterministic:
