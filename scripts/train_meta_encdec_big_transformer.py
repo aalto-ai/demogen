@@ -370,10 +370,8 @@ class ShuffleDemonstrationsDataset(Dataset):
             x_supports,
             y_supports,
         ) = self.dataset[idx]
-        x_supports = np.copy(x_supports)
-        y_supports = np.copy(y_supports)
 
-        support_permutation = self.generator.permutation(x_supports.shape[0])
+        support_permutation = self.generator.permutation(len(x_supports))
 
         return (
             query_state,
@@ -382,8 +380,8 @@ class ShuffleDemonstrationsDataset(Dataset):
             else support_state,
             queries,
             targets,
-            x_supports[support_permutation],
-            y_supports[support_permutation],
+            [x_supports[i] for i in support_permutation] if isinstance(x_supports, list) else x_supports[support_permutation],
+            [y_supports[i] for i in support_permutation] if isinstance(y_supports, list) else y_supports[support_permutation],
         )
 
 
@@ -419,6 +417,8 @@ class ApplyOffsetsDataset(Dataset):
             y_supports,
         ) = self.dataset[idx]
 
+        query_state = np.stack(query_state)
+
         state_offsets = self.offsets[1:8]
         query_offsets = self.offsets[8]
         target_offsets = self.offsets[9]
@@ -427,7 +427,10 @@ class ApplyOffsetsDataset(Dataset):
             query_state[~(query_state == 0).all(axis=-1)] + state_offsets
         )
         support_state_offsetted = (
-            [s[~(s == 0).all(axis=-1)] + state_offsets for s in support_state]
+            [
+                s[~(s == 0).all(axis=-1)] + state_offsets
+                for s in map(lambda s: np.stack(s), support_state)
+            ]
             if isinstance(support_state, list)
             else ([support_state + state_offsets] * len(x_supports))
         )
