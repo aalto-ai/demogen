@@ -159,9 +159,8 @@ class TransformerImgLearner(pl.LightningModule):
             embed_dim,
             nlayers,
             nhead,
-            dropout_p,
-            norm_first,
-            pad_word_idx,
+            norm_first=norm_first,
+            dropout_p=dropout_p,
         )
         self.decoder = DecoderTransformer(
             embed_dim,
