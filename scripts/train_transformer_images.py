@@ -197,7 +197,7 @@ class TransformerImgLearner(pl.LightningModule):
         return self.decoder(decoder_in, encoder_outputs, encoder_padding)
 
     def forward(self, states, queries, decoder_in):
-        encoded, encoder_padding = self.encoder(states, queries)
+        encoded, encoder_padding = self.encode(states, queries)
         return self.decode_autoregressive(decoder_in, encoded, encoder_padding)
 
     def training_step(self, x, idx):
