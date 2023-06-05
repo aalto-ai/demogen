@@ -1774,6 +1774,33 @@ def cogs_add_subparser(subparsers):
     gscan_parser.add_argument("--limit-load", type=int, default=None)
 
 
+def load_and_count_file(file_path):
+    with open(file_path, "rb") as f:
+        return len(pickle.load(f))
+
+
+def load_and_count_from_split_dir(split_path):
+    filenames = os.listdir(split_path)
+    filenames = sorted(filenames, key=lambda x: int(os.path.splitext(x)[0]))
+
+    return sum(
+        [load_and_count_file(os.path.join(split_path, fname)) for fname in filenames]
+    )
+
+
+def compute_resume_points(data_output_directory):
+    try:
+        return {
+            dirname: load_and_count_from_split_dir(
+                os.path.join(data_output_directory, dirname)
+            )
+            for dirname in os.listdir(data_output_directory)
+            if os.path.isdir(dirname)
+        }
+    except IOError:
+        return {}
+
+
 DATASET_CONFIGS = {
     "gscan": {
         "add_subparser": gscan_add_subparser,
@@ -1802,6 +1829,7 @@ def main():
     parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
     parser.add_argument("--offset", type=float, default=0)
     parser.add_argument("--limit", type=float, default=None)
+    parser.add_argument("--resume", action="store_true")
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1812,6 +1840,10 @@ def main():
     dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](
         args
     )
+    resume_points = compute_resume_points(args.data_output_directory)
+    datasets_with_resume_points = {
+        k: (v, resume_points.get(k, 0)) for k, v in datasets.items()
+    }
 
     torch.set_float32_matmul_precision("medium")
     print("Flash attention:", torch.backends.cuda.flash_sdp_enabled())
@@ -1823,9 +1855,13 @@ def main():
             Subset(
                 dataset,
                 np.arange(
-                    min(math.floor(args.offset * len(dataset)), len(dataset)),
+                    min(
+                        math.floor(args.offset * len(dataset)) + resume_point_offset,
+                        len(dataset),
+                    ),
                     min(
                         math.floor(args.offset * len(dataset))
+                        + resume_point_offset
                         + (
                             len(dataset)
                             if not args.limit
@@ -1838,7 +1874,7 @@ def main():
             batch_size=args.gen_batch_size,
             pin_memory=True,
         )
-        for split, dataset in datasets.items()
+        for split, (dataset, resume_point_offset) in datasets_with_resume_points.items()
         if not args.only_splits or split in args.only_splits
     }
     (
