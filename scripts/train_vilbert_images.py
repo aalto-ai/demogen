@@ -688,6 +688,7 @@ def main():
     )
     print(meta_module)
 
+    pl.seed_everything(0)
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.train_batch_size,
