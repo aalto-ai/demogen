@@ -175,15 +175,22 @@ def find_target_object(state, size, color, noun, idx2word, idx2color, idx2noun):
     return sorted_by_size[0]
 
 
-def state_to_situation(query_instruction, state, word2idx, colors, nouns):
+def state_to_situation(
+    query_instruction, state, word2idx, colors, nouns, need_target=True
+):
     idx2word = [w for w in word2idx if w != word2idx["[pad]"]]
-    verb, adverb, size, color, noun = segment_instruction(
-        query_instruction, word2idx, colors, nouns
-    )
+
+    if need_target:
+        verb, adverb, size, color, noun = segment_instruction(
+            query_instruction, word2idx, colors, nouns
+        )
+        target_object = find_target_object(
+            state, size, color, noun, idx2word, colors, nouns
+        )
+    else:
+        target_object = None
+
     agent = find_agent_position(state)
-    target_object = find_target_object(
-        state, size, color, noun, idx2word, colors, nouns
-    )
     return (
         [idx2word[w] for w in query_instruction],
         Situation(
