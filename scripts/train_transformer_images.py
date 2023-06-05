@@ -254,7 +254,12 @@ class ImageRenderingDemonstrationsDataset(Dataset):
     def __getitem__(self, i):
         instruction, actions, state = self.train_demonstrations[i]
         words, situation = state_to_situation(
-            instruction, state, self.word2idx, self.colors, self.nouns
+            instruction,
+            state,
+            self.word2idx,
+            self.colors,
+            self.nouns,
+            need_target=False,
         )
 
         self.world = reinitialize_world(self.world, situation, self.vocabulary)
