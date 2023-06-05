@@ -1,7 +1,7 @@
 import numpy as np
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPolygon
-from PyQt5.QtCore import QPoint, QRect
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPolygonF as QPolygon
+from PyQt5.QtCore import QPointF as QPoint, QRectF as QRect
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QTextEdit
 from PyQt5.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QFrame
 
