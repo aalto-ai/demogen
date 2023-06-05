@@ -97,7 +97,7 @@ class ImageEncoderTransformer(nn.Module):
                 nhead=nhead,
                 dim_feedforward=embed_dim * 4,
                 norm_first=norm_first,
-                dropout_p=dropout_p,
+                dropout=dropout_p,
             ),
             num_layers=nlayers,
         )
