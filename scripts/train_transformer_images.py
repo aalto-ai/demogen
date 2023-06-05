@@ -190,7 +190,8 @@ class TransformerImgLearner(pl.LightningModule):
         )
 
     def encode(self, states, queries):
-        return self.encoder(states, queries)
+        instruction_key_padding_mask = queries == self.pad_word_idx
+        return self.encoder(states, queries, instruction_key_padding_mask)
 
     def decode_autoregressive(self, decoder_in, encoder_outputs, encoder_padding):
         return self.decoder(decoder_in, encoder_outputs, encoder_padding)
