@@ -116,9 +116,10 @@ class ImageEncoderTransformer(nn.Module):
 
         key_padding_mask = torch.cat(
             [
-                torch.zeros_like(projected_state[..., :1].bool()),
+                torch.zeros_like(projected_state[..., 0].bool()),
                 instruction_key_padding_mask,
-            ]
+            ],
+            dim=-1,
         )
 
         encoding = self.encoder(
