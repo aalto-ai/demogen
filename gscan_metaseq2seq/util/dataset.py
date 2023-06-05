@@ -66,17 +66,15 @@ class PaddingDataset(Dataset):
         item = self.dataset[i]
 
         if isinstance(i, np.ndarray):
-            items = self.dataset[i]
             return tuple(
                 [
                     pad_to(a, p, v)
                     for a, p, v in zip(
-                        items, [self.paddings] * items.shape[0], self.pad_values
+                        item, [self.paddings] * item.shape[0], self.pad_values
                     )
                 ]
             )
         else:
-            item = self.dataset[i]
             return tuple(
                 [
                     pad_to(a, p, v)
