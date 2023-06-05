@@ -168,8 +168,8 @@ class TransformerImgLearner(pl.LightningModule):
             nlayers,
             nhead,
             pad_action_idx,
-            dropout_p=dropout_p,
             norm_first=norm_first,
+            dropout_p=dropout_p,
         )
         self.y_categories = y_categories
         self.pad_word_idx = pad_word_idx
