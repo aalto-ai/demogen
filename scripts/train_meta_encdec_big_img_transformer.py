@@ -704,7 +704,9 @@ class ShuffleDemonstrationsDataset(Dataset):
 def render_one_state(
     instruction, state, word2idx, world, vocabulary, colors, nouns, image_downsample
 ):
-    words, situation = state_to_situation(instruction, state, word2idx, colors, nouns)
+    words, situation = state_to_situation(
+        instruction, state, word2idx, colors, nouns, need_target=False
+    )
 
     world = reinitialize_world(world, situation, vocabulary)
 
