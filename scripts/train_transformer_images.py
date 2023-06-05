@@ -123,7 +123,7 @@ class ImageEncoderTransformer(nn.Module):
         )
 
         encoding = self.encoder(
-            inputs.transpose(0, 1), key_padding_mask=key_padding_mask
+            inputs.transpose(0, 1), src_key_padding_mask=key_padding_mask
         )
 
         return encoding, key_padding_mask
