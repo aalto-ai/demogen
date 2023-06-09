@@ -252,6 +252,8 @@ def try_gen_instructions(
     batch_size,
     decode_len,
     device="cpu",
+    no_query_overlap=False,
+    deduplicate_by_output=False
 ):
     sampled_instructions = instruction_gen_closure(inputs, sample_n)
 
@@ -291,6 +293,9 @@ def try_gen_instructions(
         )
     except ValueError:
         raise SamplingError()
+
+    # Note: we are kind of assuming the gscan dataset here
+    original_pred_targets = target_gen_closure(inputs[1], inputs, decode_len).cpu()
 
     per_id_results = defaultdict(list)
 
@@ -342,18 +347,43 @@ def try_gen_instructions(
             if (targets[batch_id] == predicted_target).all(axis=-1):
                 continue
 
+            # Also filter out demonstrations which match what we would have predicted
+            # under the original instruction.
+            #
+            # In practice, this does not seem to help performance very much
+            if no_query_overlap and (original_pred_targets[batch_id] == predicted_target).all(axis=-1):
+                continue
+
             per_id_results[batch_id].append(
                 (sample_result.numpy(), predicted_target.numpy(), score.item())
             )
 
-    # Now we sort the per_id_results ascending by score
+    if any([not v for v in per_id_results.items()]):
+        raise SamplingError()
+
+    if deduplicate_by_output:
+        # Keep only unique trajectories. We do this by sorting by the predicted
+        # target (as a string, lexicographically) as the primary sort key, then the
+        # negated score as the secondary sort key. Then we can take groups and
+        # take only the first item from each group. This is to handle the case where
+        # multiple generated instructions end up demonstrating the same thing - this
+        # duplication does not really help us, so we just eliminate it
+        #
+        # In practice, this does not seem to help performance very much
+        per_id_results = {
+            i: [list(g)[0] for k, g in itertools.groupby(
+                sorted(results, key=lambda x: ("".join(list(map(str, x[1]))), -x[-1])),
+                key=lambda x: "".join(list(map(str, x[1])))
+            )]
+            for i, results in per_id_results.items()
+        }
+
+    # Now we sort the per_id_results descending by score
+    # (eg, a higher score is better)
     per_id_results = {
         i: sorted(results, key=lambda x: -x[-1])
         for i, results in per_id_results.items()
     }
-
-    if any([not v for v in per_id_results.items()]):
-        raise SamplingError()
 
     # Now yield per_id, the state, the query instruction and all supports
     # and their scores
@@ -377,6 +407,8 @@ def generate_instructions_and_rank(
     batch_size,
     decode_len,
     device="cpu",
+    no_query_overlap=False,
+    deduplicate_by_output=False
 ):
     for batch in dataloader:
         inputs, targets = batch
@@ -394,6 +426,8 @@ def generate_instructions_and_rank(
                     batch_size,
                     decode_len,
                     device=device,
+                    no_query_overlap=no_query_overlap,
+                    deduplicate_by_output=deduplicate_by_output
                 )
                 break
             except SamplingError:
@@ -1850,6 +1884,8 @@ def main():
     parser.add_argument("--offset", type=float, default=0)
     parser.add_argument("--limit", type=float, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--no-query-overlap", action="store_true")
+    parser.add_argument("--deduplicate-by-outputs", action="store_true")
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1925,6 +1961,8 @@ def main():
                     batch_size=args.batch_size,
                     decode_len=128,
                     device=args.device,
+                    no_query_overlap=args.no_query_overlap,
+                    deduplicate_by_output=args.deduplicate_by_output
                 ),
                 1000,
             )
