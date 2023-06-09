@@ -589,25 +589,45 @@ def sample_from_state_encoder_decoder_model_with_mask(
         )
 
         for i in trange(unroll_length, desc="Gen instrs"):
-            logits = model.decode(
-                encodings,
-                all_mask,
-                decoded_instruction,
-            )
-            if deterministic:
-                samples = logits[:, -1].argmax(dim=-1)
-            else:
-                samples = torch.distributions.Categorical(
-                    logits=logits[:, -1] + 10
-                ).sample()
-            decoded_instruction = torch.cat(
-                [decoded_instruction, samples[:, None]], dim=1
-            )
+            stopped_mask = (decoded_instruction == pad_tgt_idx).any(dim=-1)
+            still_going_mask = ~stopped_mask
+            still_going_indices = torch.nonzero(still_going_mask).flatten()
 
-            # Set the decoded-so-far instruction to be pad_tgt_idx if we hit pad_tgt_idx once
-            decoded_instruction[
-                (decoded_instruction == pad_tgt_idx).cumsum(dim=-1).bool()
-            ] = pad_tgt_idx
+            if still_going_mask.any(dim=-1):
+                decoded_instruction_still_going = decoded_instruction[still_going_mask]
+                encodings_still_going = encodings[still_going_mask]
+                key_padding_mask_still_going = all_mask[still_going_mask]
+
+                current_logits = model.decode(
+                    encodings_still_going,
+                    key_padding_mask_still_going,
+                    decoded_instruction_still_going,
+                )
+                if deterministic:
+                    samples = current_logits[:, -1].argmax(dim=-1)
+                else:
+                    samples = torch.distributions.Categorical(
+                        logits=current_logits[:, -1] + 10
+                    ).sample()
+
+                scatter_target = torch.zeros_like(samples[0, None].expand(encodings.shape[0]))
+                scatter_target.scatter_(
+                    0,
+                    still_going_indices,
+                    samples
+                )
+                decoded_instruction = torch.cat(
+                    [decoded_instruction, scatter_target[:, None]], dim=1
+                )
+            else:
+                decoded_instruction = torch.cat(
+                    [decoded_instruction, torch.ones_like(decoded_instruction)[:, :1] * pad_tgt_idx], dim=1
+                )
+
+        # Set the decoded-so-far instruction to be pad_tgt_idx if we hit pad_tgt_idx once
+        decoded_instruction[
+            (decoded_instruction == pad_tgt_idx).cumsum(dim=-1).bool()
+        ] = pad_tgt_idx
 
         return (
             expanded_instruction.cpu(),
