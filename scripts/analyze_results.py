@@ -405,6 +405,8 @@ def format_results_table(metrics, configs, index, column_names=None):
 
     if column_names is not None:
         results_table.columns = column_names
+    else:
+        results_table.columns = [k for k in configs]
 
     return results_table.to_latex(float_format="%.2f", escape=False)
 
