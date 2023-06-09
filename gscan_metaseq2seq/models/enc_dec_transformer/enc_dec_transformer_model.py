@@ -247,11 +247,31 @@ def autoregressive_model_unroll_predictions(
 
     with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
         for i in trange(target.shape[1], desc="Gen tgts"):
-            logits.append(
-                model.decode_autoregressive(decoder_in, encodings, key_padding_mask)[
-                    :, -1
-                ]
-            )
+            stopped_mask = (decoder_in == eos_target_idx).any(dim=-1)
+            still_going_mask = ~stopped_mask
+            still_going_indices = torch.nonzero(still_going_mask).flatten()
+
+            if still_going_mask.any(dim=-1):
+                decoder_in_still_going = decoder_in[still_going_mask]
+                encodings_still_going = encodings.transpose(0, 1)[still_going_mask].transpose(0, 1)
+                key_padding_mask_still_going = key_padding_mask[still_going_mask]
+
+                current_logits = model.decode_autoregressive(
+                    decoder_in_still_going,
+                    encodings_still_going,
+                    key_padding_mask_still_going
+                )[:, -1]
+
+                scatter_target = torch.zeros_like(current_logits[0, None, :].expand(encodings.shape[1], current_logits.shape[1]))
+                scatter_target.scatter_(
+                    0,
+                    still_going_indices[:, None].expand(still_going_indices.shape[0], current_logits.shape[1]),
+                    current_logits
+                )
+                logits.append(scatter_target)
+            else:
+                logits.append(logits[-1].clone())
+
             decoder_out = logits[-1].argmax(dim=-1)
             decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
 
