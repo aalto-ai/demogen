@@ -414,7 +414,7 @@ def format_results_table(metrics, configs, index, column_names=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--logs-dir", required=True)
-    parser.add_argument("--limit", type=int, default=30000)
+    parser.add_argument("--limit", type=int, default=300000)
     parser.add_argument("--drop-bad-seeds", type=int, default=3)
     parser.add_argument("--exclude-by-a-smoothing", type=int, default=50)
     parser.add_argument("--result-smoothing", type=int, default=1)
