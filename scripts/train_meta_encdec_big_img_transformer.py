@@ -297,22 +297,30 @@ class BigImgTransformerLearner(pl.LightningModule):
         # Now that we have the padding sequences, we can assemble
         # the selection indices by taking the cumulative sum of
         # padding - 1
-        non_padding_selection_idx = inv_padding_sequence.int().cumsum(dim=-1) - 1
+        non_padding_target_idx = (
+            inv_padding_sequence.int().cumsum(dim=-1) - 1
+        ) * inv_padding_sequence.int()
 
         # All the padding goes to indices that are now offset by the max
         # value of the non-padding selection index + 1, eg, if the
         # non-padding ended at index 10, then padding starts at index 11
-        padding_selection_idx = (
+        padding_target_idx = (
             padding_sequence.int().cumsum(dim=-1)
             - 1
-            + (non_padding_selection_idx.max(dim=-1).values[..., None] + 1)
+            + (non_padding_target_idx.max(dim=-1).values[..., None] + 1)
         ) * padding_sequence.int()
 
-        # Add them together to get the reselection index. This will keep
-        # all the non-padding as-is and moves all the padding to the end
-        reselection_idx = (
-            non_padding_selection_idx * inv_padding_sequence.int()
-        ) + padding_selection_idx
+        # Add them together to get the target index. This is
+        # where we want all the elements to go in the padding_idx
+        # so that the padding elements go to the end.
+        target_idx = non_padding_target_idx  + padding_target_idx
+
+        # Now we have to argsort the target_idx to get the reselection_idx.
+        # This tells us the order in which to select elements from the
+        # original sequence such that we get all the non-padding elements
+        # first and then all the padding at the end. We can use torch.gather
+        # with this.
+        reselection_idx = target_idx.argsort(dim=-1)
 
         # Assign a single padding value to all the padding in the
         # original tensor
