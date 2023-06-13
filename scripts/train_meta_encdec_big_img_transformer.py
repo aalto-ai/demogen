@@ -111,6 +111,7 @@ class BigImgTransformerLearner(pl.LightningModule):
         metalearn_dropout_p=0.0,
         metalearn_include_permutations=False,
         max_context_size=1024,
+        need_support_states=False
     ):
         super().__init__()
         self.patch_encoding = ImagePatchEncoding(in_channels, embed_dim, patch_size)
@@ -205,7 +206,6 @@ class BigImgTransformerLearner(pl.LightningModule):
             [
                 torch.cat(
                     [
-                        encoded_support_state_img,
                         self.special_tokens["sep_state_support"][None, None, None]
                         .expand(
                             encoded_support_state_img.shape[0],
@@ -214,7 +214,7 @@ class BigImgTransformerLearner(pl.LightningModule):
                             -1,
                         )
                         .clone(),
-                        encoded_support_instructions,
+                        *([encoded_support_state_img] if self.hparams.need_support_states else []),
                         self.special_tokens["sep_instr_support"][None, None, None]
                         .expand(
                             encoded_support_state_img.shape[0],
@@ -223,7 +223,7 @@ class BigImgTransformerLearner(pl.LightningModule):
                             -1,
                         )
                         .clone(),
-                        encoded_support_outputs,
+                        encoded_support_instructions,
                         self.special_tokens["sep_target_support"][None, None, None]
                         .expand(
                             encoded_support_state_img.shape[0],
@@ -232,6 +232,7 @@ class BigImgTransformerLearner(pl.LightningModule):
                             -1,
                         )
                         .clone(),
+                        encoded_support_outputs,
                     ],
                     dim=-2,
                 ).flatten(1, 2),
@@ -250,6 +251,18 @@ class BigImgTransformerLearner(pl.LightningModule):
             dim=-2,
         )
 
+        sep_nopad_token = torch.zeros_like(
+            self.special_tokens["sep_state_support"][..., 0][
+                None, None, None
+            ]
+            .expand(
+                encoded_support_state_img.shape[0],
+                encoded_support_state_img.shape[1],
+                1,
+            )
+            .clone()
+        ).bool()
+
         # Now we make the corresponding padding sequence. A value
         # of True means padded
         #
@@ -258,66 +271,24 @@ class BigImgTransformerLearner(pl.LightningModule):
             [
                 torch.cat(
                     [
-                        support_img_padding[:, :, None].expand(
+                        sep_nopad_token,
+                        *([support_img_padding[:, :, None].expand(
                             encoded_support_state_img.shape[0],
                             encoded_support_state_img.shape[1],
                             encoded_support_state_img.shape[2],
-                        ),
-                        torch.zeros_like(
-                            self.special_tokens["sep_state_support"][..., 0][
-                                None, None, None
-                            ]
-                            .expand(
-                                encoded_support_state_img.shape[0],
-                                encoded_support_state_img.shape[1],
-                                1,
-                            )
-                            .clone()
-                        ).bool(),
+                        )] if self.hparams.need_support_states else []),
+                        sep_nopad_token,
                         support_instructions == self.pad_word_idx,
-                        torch.zeros_like(
-                            self.special_tokens["sep_instr_support"][..., 0][
-                                None, None, None
-                            ]
-                            .expand(
-                                encoded_support_instructions.shape[0],
-                                encoded_support_instructions.shape[1],
-                                1,
-                            )
-                            .clone()
-                        ).bool(),
+                        sep_nopad_token,
                         support_targets == self.pad_action_idx,
-                        torch.zeros_like(
-                            self.special_tokens["sep_target_support"][..., 0][
-                                None, None, None
-                            ]
-                            .expand(
-                                encoded_support_instructions.shape[0],
-                                encoded_support_instructions.shape[1],
-                                1,
-                            )
-                            .clone()
-                        ).bool(),
                     ],
                     dim=-1,
                 ).flatten(1, 2),
-                torch.zeros_like(
-                    self.special_tokens["sep_query_state"][..., 0][None, None]
-                    .expand(encoded_query_state_img.shape[0], 1)
-                    .clone()
-                ).bool(),
+                sep_nopad_token[:, 0],
                 torch.zeros_like(encoded_query_state_img[..., 0]).bool(),
-                torch.zeros_like(
-                    self.special_tokens["sep_query_instr"][..., 0][None, None]
-                    .expand(encoded_query_instruction.shape[0], 1)
-                    .clone()
-                ).bool(),
+                sep_nopad_token[:, 0],
                 query_instruction == self.pad_word_idx,
-                torch.zeros_like(
-                    self.special_tokens["sep_query_end"][..., 0][None, None]
-                    .expand(encoded_query_instruction.shape[0], 1)
-                    .clone()
-                ).bool(),
+                sep_nopad_token[:, 0],
             ],
             dim=-1,
         )
