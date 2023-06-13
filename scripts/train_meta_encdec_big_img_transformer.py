@@ -802,6 +802,8 @@ def main():
     parser.add_argument("--activation-checkpointing", action="store_true")
     parser.add_argument("--image-downsample", type=int, default=5)
     parser.add_argument("--patch-size", type=int, default=12)
+    parser.add_argument("--max-context-size", type=int, default=1024)
+    parser.add_argument("--need-support-states", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -926,7 +928,8 @@ def main():
         warmup_proportion=args.warmup_proportion,
         metalearn_dropout_p=args.metalearn_dropout_p,
         metalearn_include_permutations=args.metalearn_include_permutations,
-        max_context_size=1024,
+        max_context_size=args.max_context_size,
+        need_support_states=args.need_support_states
     )
     print(meta_module)
 
