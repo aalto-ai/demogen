@@ -357,6 +357,11 @@ MATCH_CONFIGS = {
         "dataset": "baseline",
         "headline": "gscan",
     },
+    "baseline_transformer_img": {
+        "model": "transformer_img_encoder_only_decode_actions",
+        "dataset": "baseline",
+        "headline": "gscan",
+    },
     "baseline_pp_vilbert": {
         "model": "vilbert_cross_encoder_decode_actions",
         "dataset": "baseline_paraphrased",
@@ -365,6 +370,11 @@ MATCH_CONFIGS = {
     },
     "baseline_pp_transformer": {
         "model": "transformer_encoder_only_decode_actions",
+        "dataset": "baseline_paraphrased",
+        "headline": "gscan",
+    },
+    "baseline_pp_transformer_img": {
+        "model": "transformer_img_encoder_only_decode_actions",
         "dataset": "baseline_paraphrased",
         "headline": "gscan",
     },
@@ -419,7 +429,15 @@ MATCH_CONFIGS = {
     "i2g": {"dataset": "i2g", "headline": "meta_gscan"},
     "i2g_seq2seq_big_transformer": {
         "dataset": "i2g_seq2seq_model_score",
-        "model": "meta_encdec_big_transformer",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
+    "i2g_seq2seq_big_transformer_img": {
+        "dataset": "i2g_seq2seq_model_score",
+        "model": "meta_img_encdec_big_transformer",
         "headline": "meta_gscan",
         "tag": "none",
         "dropout": "0.1",
@@ -435,7 +453,7 @@ MATCH_CONFIGS = {
     },
     "i2g_seq2seq_big_transformer_pp_16": {
         "dataset": "i2g_seq2seq_paraphrased",
-        "model": "meta_encdec_big_transformer",
+        "model": "meta_symbol_encdec_big_transformer",
         "headline": "meta_gscan",
         "tag": "none",
         "dropout": "0.1",
@@ -448,6 +466,14 @@ MATCH_CONFIGS = {
         "tag": "none",
         "dropout": "0.1",
         "ml_d_limit": "24",
+    },
+    "i2g_seq2seq_big_transformer_pp_16_img": {
+        "dataset": "i2g_seq2seq_paraphrased",
+        "model": "meta_img_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
     },
     "gandr": {"dataset": "gandr", "headline": "meta_gscan"},
     "gscan_oracle_full": {"dataset": "metalearn_allow_any", "headline": "meta_gscan"},
