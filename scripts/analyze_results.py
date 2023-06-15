@@ -231,14 +231,7 @@ def read_and_collate_from_directory(
                     [
                         (
                             seed,
-                            read_csv_and_truncate(
-                                os.path.join(
-                                    logs_dir,
-                                    format_log_path(logs_dir, config, {"seed": seed}),
-                                ),
-                                "step",
-                                limit,
-                            ),
+                            format_log_path(logs_dir, config, {"seed": seed}),
                         )
                         for index, seed in values
                         if seed not in exclude_seeds
@@ -256,6 +249,97 @@ def read_and_collate_from_directory(
     ]
 
     return list(filter(lambda x: x[1], detected_config_and_csv_tuples))
+
+
+def list_and_collate_from_directory(
+    logs_dir, filter_expression=None, exclude_seeds=[]
+):
+    listing = os.listdir(logs_dir)
+    parsed_listing = list(
+        map(
+            lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(),
+            filter(
+                lambda x: True
+                if filter_expression is None
+                else re.match(filter_expression, x) is not None,
+                listing,
+            ),
+        )
+    )
+    keys = sorted(parsed_listing[0].keys())
+    keys_not_seed = [k for k in keys if k != "seed"]
+    grouped_listing_indices = [
+        (
+            {k: v for k, v in zip(keys_not_seed, key_tuple)},
+            list(
+                map(
+                    lambda index: (index, parsed_listing[index]["seed"]),
+                    list(zip(*group))[0],
+                )
+            ),
+        )
+        for key_tuple, group in itertools.groupby(
+            sorted(
+                list(enumerate(parsed_listing)),
+                key=lambda x: collate_func_key(x[1], keys_not_seed),
+            ),
+            lambda x: collate_func_key(x[1], keys_not_seed),
+        )
+    ]
+
+    detected_config_and_csv_tuples = [
+        (
+            config,
+            list(
+                filter(
+                    lambda x: x[1] is not None,
+                    [
+                        (
+                            seed,
+                            format_log_path(logs_dir, config, {"seed": seed}),
+                        )
+                        for index, seed in values
+                        if seed not in exclude_seeds
+                        and os.path.exists(
+                            os.path.join(
+                                logs_dir,
+                                format_log_path(logs_dir, config, {"seed": seed}),
+                            )
+                        )
+                    ],
+                )
+            ),
+        )
+        for config, values in grouped_listing_indices
+    ]
+
+    return list(filter(lambda x: x[1], detected_config_and_csv_tuples))
+
+
+def read_matched_configs_at_limit(logs_dir, matched_configs, limit):
+    return list(
+        map(
+            lambda x: (
+                x[0],
+                x[1],
+                list(
+                    filter(
+                        lambda y: y[-1] is not None,
+                        map(
+                            lambda y: (y[0], read_csv_and_truncate(
+                                os.path.join(logs_dir, y[-1]),
+                                "step",
+                                limit,
+                            )),
+                            x[-1]
+                        )
+                    )
+                )
+            ),
+            matched_configs
+        )
+    )
+
 
 
 MATCH_CONFIGS = {
@@ -453,19 +537,23 @@ def main():
     parser.add_argument("--column-labels", nargs="*")
     args = parser.parse_args()
 
-    read_metrics_dfs_at_limit_by_config = read_and_collate_from_directory(
+    metrics_dfs_filenames_by_config = list_and_collate_from_directory(
         args.logs_dir,
-        args.limit,
         filter_expression=args.filter_expression,
-        exclude_seeds=args.exclude_seeds or [],
+        exclude_seeds=args.exclude_seeds or []
     )
 
-    # Match already to configs and filter out the ones we don't display
-    read_metrics_dfs_at_limit_by_config_filtered = list(
+    metrics_dfs_filenames_by_config = list(
         filter(
             lambda x: x[0] in args.config_columns,
-            match_to_configs(MATCH_CONFIGS, read_metrics_dfs_at_limit_by_config),
+            match_to_configs(MATCH_CONFIGS, metrics_dfs_filenames_by_config)
         )
+    )
+
+    read_metrics_dfs_at_limit_by_config = read_matched_configs_at_limit(
+        args.logs_dir,
+        metrics_dfs_filenames_by_config,
+        args.limit
     )
 
     read_metrics_dfs_excluded = [
@@ -481,7 +569,7 @@ def main():
                 descending=False,
             ),
         )
-        for name, config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config_filtered
+        for name, config, read_metrics_df_at_limit_and_seeds in read_metrics_dfs_at_limit_by_config
     ]
 
     read_metrics_dfs_best_at_0 = [
