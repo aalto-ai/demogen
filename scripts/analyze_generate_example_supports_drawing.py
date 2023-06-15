@@ -169,21 +169,21 @@ def plot_at_index(
     ]
 
     sorted_instrs = [
-        ((demo_instr, demo_acts, demo_state), (correct, valid), relevant)
-        for (demo_instr, demo_acts, demo_state), (correct, valid), relevant in sorted(
+        ((demo_instr, demo_acts, demo_state, demo_score), (correct, valid), relevant)
+        for (demo_instr, demo_acts, demo_state, demo_score), (correct, valid), relevant in sorted(
             list(
                 zip(
-                    zip(examples[index][-3], examples[index][-2], support_states),
+                    zip(examples[index][-3], examples[index][-2], support_states, examples[index][-1]),
                     corrects_and_valids,
                     relevants,
                 )
             ),
-            key=lambda x: (~x[-1], ~x[-2][1], ~x[-2][0]),
+            key=lambda x: (~x[-1], ~x[-2][1], ~x[-2][0], -x[-3][-1]),
         )
     ]
 
     for (
-        (demo_instr, demo_acts, demo_state),
+        (demo_instr, demo_acts, demo_state, demo_score),
         (correct, valid),
         relevant,
     ) in sorted_instrs:
@@ -191,6 +191,7 @@ def plot_at_index(
             " ".join([idx2word[w] for w in demo_instr if w != word2idx["[pad]"]])
             + " "
             + " ".join(map(str, [relevant, valid, correct]))
+            + str(demo_score)
         )
         print(
             " -- "
@@ -234,9 +235,11 @@ def plot_at_index(
             + " ".join(
                 [idx2word[w] for w in sorted_instrs[0][0][0] if w != word2idx["[pad]"]]
             )
-            + '"}};\n'
-        )
-        + (
+            +
+            " ({:0.2f}) ".format(np.exp(sorted_instrs[0][-1]))
+            +
+            "}};"
+        ) + (
             "\n".join(
                 [
                     r"\node [fill="
@@ -245,17 +248,20 @@ def plot_at_index(
                     + str(i + 1)
                     + r".west, anchor=west] (i"
                     + str(i + 2)
-                    + r") {\footnotesize{$I_"
-                    + str(i + 2)
+                    + r") {\footnotesize{$I_{"
+                    + str(i + 2) + "}"
                     + "$ = ``"
                     + (
                         " ".join(
                             [idx2word[w] for w in demo_instr if w != word2idx["[pad]"]]
                         )
-                        + "}};"
-                    )
+                        +
+                        " ({:0.2f}) ".format(np.exp(demo_score))
+                        +
+                        "}"
+                    ) + "};"
                     for i, (
-                        (demo_instr, demo_acts, demo_state),
+                        (demo_instr, demo_acts, demo_state, demo_score),
                         (correct, valid),
                         relevant,
                     ) in enumerate(sorted_instrs[1:])
@@ -289,8 +295,8 @@ def plot_at_index(
                     + str(i + 1)
                     + r".west, anchor=west] (a"
                     + str(i + 2)
-                    + r") {\footnotesize{$A_"
-                    + str(i + 2)
+                    + r") {\footnotesize{$A_{"
+                    + str(i + 2) + "}"
                     + "$ = ``"
                     + (
                         " ".join(
@@ -305,7 +311,7 @@ def plot_at_index(
                         + "}};"
                     )
                     for i, (
-                        (demo_instr, demo_acts, demo_state),
+                        (demo_instr, demo_acts, demo_state, demo_score),
                         (correct, valid),
                         relevant,
                     ) in enumerate(sorted_instrs[1:])
