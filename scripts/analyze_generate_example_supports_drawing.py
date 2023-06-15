@@ -107,6 +107,7 @@ def plot_at_index(
     action2idx,
     color_dictionary,
     noun_dictionary,
+    analyze_if_correct=False
 ):
     idx2word = [w for w in word2idx]
     idx2action = [w for w in action2idx]
@@ -119,6 +120,7 @@ def plot_at_index(
         word2idx,
         color_dictionary,
         noun_dictionary,
+        need_target=analyze_if_correct
     )
     query_target_object = situation.target_object
 
@@ -151,7 +153,7 @@ def plot_at_index(
             noun_dictionary,
             world,
             vocabulary,
-        )
+        ) if analyze_if_correct else (False, False)
         for demo_instr, demo_acts, demo_state in zip(
             examples[index][-3], examples[index][-2], support_states
         )
@@ -162,7 +164,7 @@ def plot_at_index(
             state_to_situation(
                 demo_instr, demo_state, word2idx, color_dictionary, noun_dictionary
             )[1].target_object.object,
-        )
+        ) if analyze_if_correct else False
         for demo_instr, demo_state in zip(examples[index][-3], support_states)
     ]
 
