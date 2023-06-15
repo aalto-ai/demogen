@@ -334,6 +334,7 @@ def main():
     parser.add_argument("--limit-load", type=int)
     parser.add_argument("--split", required=True)
     parser.add_argument("--index", type=int, required=True)
+    parser.add_argument("--analyze-if-correct", action="store_true")
     args = parser.parse_args()
 
     (
@@ -360,6 +361,7 @@ def main():
         ACTION2IDX,
         color_dictionary,
         noun_dictionary,
+        analyze_if_correct=args.analyze_if_correct
     )
 
 
