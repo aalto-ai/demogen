@@ -55,12 +55,12 @@ def load_data(
     )
 
 
-def load_data_directories(data_directory, dictionary_path, limit_load=None):
+def load_data_directories(data_directory, dictionary_path, limit_load=None, only_splits=None):
     assert os.path.isdir(os.path.join(data_directory, "train"))
 
     meta_train_demonstrations = load_concat_pickle_files_from_directory(
         os.path.join(data_directory, "train"), limit_load=limit_load
-    )
+    ) if only_splits is None or "train" in only_splits else []
     valid_trajectories_dict = {
         fname: load_concat_pickle_files_from_directory(
             os.path.join(data_directory, fname), limit_load=limit_load
@@ -68,6 +68,7 @@ def load_data_directories(data_directory, dictionary_path, limit_load=None):
         for fname in sorted(os.listdir(data_directory))
         if os.path.isdir(os.path.join(data_directory, fname))
         and fname not in ("train", "valid")
+        and (only_splits is None or fname in only_splits)
     }
 
     with open(dictionary_path, "rb") as f:
