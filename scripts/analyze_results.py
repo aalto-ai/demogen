@@ -32,7 +32,7 @@ def exclude_worst_performing_by_metric(
 
 
 def get_top_values_for_corresponding_value(
-    dfs, corresponding, values, rolling=1, descending=False
+    name, dfs, corresponding, values, rolling=1, descending=False
 ):
     select_cols = values + ([corresponding] if corresponding not in values else [])
 
@@ -49,9 +49,9 @@ def get_top_values_for_corresponding_value(
         )[-1][0]
         for rolling_df in rolling_dfs
     ]
-    print(list(zip(argwheres, map(lambda df: df.shape[0], rolling_dfs))))
+    print(name, list(zip(argwheres, map(lambda df: df.shape[0], rolling_dfs))))
 
-    return pd.DataFrame(
+    values_df = pd.DataFrame(
         np.stack(
             [
                 nonrolling_df[values].iloc[argwhere].values
@@ -60,6 +60,9 @@ def get_top_values_for_corresponding_value(
         ),
         columns=values,
     )
+    print(name)
+    print(values_df)
+    return values_df
 
 
 def format_experiment_name(experiment_config, params):
@@ -577,6 +580,7 @@ def main():
             name,
             config,
             get_top_values_for_corresponding_value(
+                name,
                 read_metrics_df_excluded,
                 "vexact/dataloader_idx_0",
                 list(TEST_SPLIT_DATALOADER_MAPPINGS[args.dataset].keys()),
