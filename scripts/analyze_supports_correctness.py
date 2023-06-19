@@ -178,7 +178,7 @@ def main():
     parser.add_argument(
         "--show-columns",
         nargs="+",
-        default=("valid", "correct_and_valid"),
+        default=("valid", "correct", "correct_and_valid", "correct_if_valid"),
         choices=("valid", "correct", "correct_if_valid", "correct_and_valid"),
     )
     args = parser.parse_args()
