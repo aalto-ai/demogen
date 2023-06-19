@@ -287,7 +287,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-directory", required=True)
     parser.add_argument("--limit-load", type=int, default=None)
-    parser.add_argument("--limit-demos", type=int, default=None)
+    parser.add_argument("--limit-demos", type=int, default=16)
     parser.add_argument("--load-analyzed", type=str)
     parser.add_argument("--datasets", nargs="+")
     parser.add_argument(
