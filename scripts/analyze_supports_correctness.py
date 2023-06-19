@@ -232,7 +232,7 @@ def main():
             if not args.only_splits
             else args.only_splits
         ]
-        .T[args.show_columns]
+        .T[list(args.show_columns)]
         .to_latex(float_format="%.2f", escape=False)
     )
 
