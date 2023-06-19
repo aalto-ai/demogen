@@ -173,7 +173,7 @@ def main():
     parser.add_argument("--data-directory", required=True)
     parser.add_argument("--dictionary", required=True)
     parser.add_argument("--only-splits", default=None, nargs="*")
-    parser.add_argument("--limit-demos", default=None, type=int)
+    parser.add_argument("--limit-demos", default=16, type=int)
     parser.add_argument("--limit-load", default=None, type=int)
     parser.add_argument(
         "--show-columns",
