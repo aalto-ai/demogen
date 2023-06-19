@@ -49,17 +49,6 @@ def instruction_is_correct(
     ]
     dataset_actions = encoded_targets.tolist()
 
-    print(
-        oracle_actions[: len(dataset_actions)],
-        dataset_actions[: len(oracle_actions)],
-        np.array(oracle_actions[: len(dataset_actions)])
-        == np.array(dataset_actions[: len(oracle_actions)]),
-        len(oracle_actions),
-        len(dataset_actions),
-        oracle_actions == dataset_actions,
-        situation.target_object is not None,
-    )
-
     return oracle_actions == dataset_actions, situation.target_object is not None
 
 
