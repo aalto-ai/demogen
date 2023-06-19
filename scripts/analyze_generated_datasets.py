@@ -213,6 +213,7 @@ def load_data_and_make_hit_results(
         data_directory,
         os.path.join(data_directory, "dictionary.pb"),
         limit_load=limit_load,
+        only_splits=splits
     )
 
     color_dictionary = sorted(color_dictionary)
