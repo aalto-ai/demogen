@@ -192,7 +192,7 @@ def main():
         ),
         (meta_train_demonstrations, meta_valid_demonstrations_dict),
     ) = load_data_directories(
-        args.data_directory, args.dictionary, limit_load=args.limit_load
+        args.data_directory, args.dictionary, limit_load=args.limit_load, only_splits=args.only_splits
     )
 
     color_dictionary = sorted(color_dictionary)
