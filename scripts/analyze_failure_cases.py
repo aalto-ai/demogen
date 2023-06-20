@@ -20,7 +20,7 @@ from gscan_metaseq2seq.util.dataset import (
     ReorderSupportsByDistanceDataset,
     MapDataset,
 )
-from train_meta_seq2seq_transformer import ImaginationMetaLearner
+from train_meta_encdec_big_symbol_transformer import BigSymbolTransformerLearner
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
     TransformerLearner,
 )
@@ -114,9 +114,9 @@ def make_target_commands_frequency_table(examples, actions):
     return frequency_counts_df
 
 
-def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True):
-    module = ImaginationMetaLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
-    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1)
+def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True, batch_size=64):
+    module = BigSymbolTransformerLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
+    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1, precision="16-mixed")
     preds = trainer.predict(module, DataLoader(dataset, batch_size=64))
 
     predicted_targets_stacked, logits_stacked, exacts_stacked = list(
@@ -127,12 +127,12 @@ def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True)
 
 
 def get_transformer_predictions(
-    transformer_checkpoint, transformer_dataset, use_cuda=True
+    transformer_checkpoint, transformer_dataset, use_cuda=True, batch_size=64
 ):
     transformer_module = TransformerLearner.load_from_checkpoint(transformer_checkpoint)
 
     # Sanity check - does this transformer perform well?
-    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1)
+    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1, precision="16-mixed")
     trainer.validate(
         transformer_module,
         DataLoader(Subset(transformer_dataset, torch.arange(1024)), batch_size=64),
@@ -487,15 +487,18 @@ def frequency_count_conditional_probabilities(gscan_dataset, ACTION2IDX):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--compositional-splits", type=str, required=True)
+    parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--metalearn-data-directory", type=str, required=True)
     parser.add_argument("--baseline-data-directory", type=str, required=True)
     parser.add_argument("--meta-seq2seq-checkpoint", type=str, required=True)
     parser.add_argument("--transformer-checkpoint", type=str, required=True)
-    parser.add_argument("--disable-cuda", action="store_false")
+    parser.add_argument("--disable-cuda", action="store_true")
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--pad-instructions-to", type=int, default=8)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
+    parser.add_argument("--metalearn-demonstrations-limit", type=int, default=16)
+    parser.add_argument("--batch-size", type=int, default=64)
     args = parser.parse_args()
 
     with open(f"{args.compositional_splits}", "r") as f:
@@ -525,6 +528,7 @@ def main():
 
     pad_word = WORD2IDX["[pad]"]
     pad_action = ACTION2IDX["[pad]"]
+    pad_state = 0
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
@@ -532,14 +536,22 @@ def main():
         ReorderSupportsByDistanceDataset(
             MapDataset(
                 MapDataset(
-                    Subset(
-                        meta_valid_demonstrations_dict["h"],
+                    meta_train_demonstrations,
+                    lambda x: (
+                        x[2],
+                        x[3],
+                        x[0],
+                        x[1],
+                        x[4],
+                        x[5],
+                        x[6],
                     ),
-                    lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
                 ),
                 lambda x: (
                     x[0],
-                    [x[1]] * len(x[-1]) if not isinstance(x[1][0], list) else x[1],
+                    [x[1]] * len(x[-1])
+                    if not isinstance(x[1][0], list)
+                    else x[1],
                     x[2],
                     x[3],
                     x[4],
@@ -550,18 +562,18 @@ def main():
             args.metalearn_demonstrations_limit,
         ),
         (
-            (args.pad_state_to, 7),
-            (args.metalearn_demonstrations_limit, args.pad_state_to, 7),
-            args.pad_instructions_to,
-            args.pad_actions_to,
-            (args.metalearn_demonstrations_limit, args.pad_instructions_to),
-            (args.metalearn_demonstrations_limit, args.pad_actions_to),
+            (args.pad_state_to, None),
+            (args.metalearn_demonstrations_limit, args.pad_state_to, None),
+            32,
+            128,
+            (args.metalearn_demonstrations_limit, 32),
+            (args.metalearn_demonstrations_limit, 128),
         ),
-        (0, 0, pad_word, pad_action, pad_word, pad_action),
+        (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
     )
     transformer_dataset = PaddingDataset(
         valid_demonstrations_dict["h"],
-        (8, 128, (36, 7)),
+        (32, 128, (36, 7)),
         (pad_word, pad_action, 0),
     )
 
@@ -581,10 +593,10 @@ def main():
     )
 
     print("Exact match accurracy - transformer")
-    print(np.array(transformer_exacts_stacked).astype(np.float).mean())
+    print(np.array(transformer_exacts_stacked).astype(float).mean())
 
     print("Exact match accurracy - meta-seq2seq")
-    print(np.array(exacts_stacked).astype(np.float).mean())
+    print(np.array(exacts_stacked).astype(float).mean())
 
     error_classifications_indices = classify_error_types(
         gscan_dataset,
