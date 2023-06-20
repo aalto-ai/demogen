@@ -76,6 +76,73 @@ class DictEmbedding(nn.Module):
         return self.embedding(getattr(self, key))
 
 
+def autoregressive_model_unroll_predictions(
+    model, inputs, target, sos_target_idx, eos_target_idx, pad_target_idx
+):
+    with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
+        encodings, key_padding_mask = model.encode(*inputs)
+
+    # Recursive decoding, start with a batch of SOS tokens
+    decoder_in = torch.tensor(sos_target_idx, dtype=torch.long, device=model.device)[
+        None
+    ].expand(target.shape[0], 1)
+
+    logits = []
+
+    with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
+        for i in trange(target.shape[1], desc="Gen tgts"):
+            stopped_mask = (decoder_in == eos_target_idx).any(dim=-1)
+            still_going_mask = ~stopped_mask
+            still_going_indices = torch.nonzero(still_going_mask).flatten()
+
+            if still_going_mask.any(dim=-1):
+                decoder_in_still_going = decoder_in[still_going_mask]
+                encodings_still_going = encodings.transpose(0, 1)[still_going_mask].transpose(0, 1)
+                key_padding_mask_still_going = key_padding_mask[still_going_mask]
+
+                current_logits = model.decode_autoregressive(
+                    decoder_in_still_going,
+                    encodings_still_going,
+                    key_padding_mask_still_going
+                )[:, -1]
+
+                scatter_target = torch.zeros_like(current_logits[0, None, :].expand(encodings.shape[1], current_logits.shape[1]))
+                scatter_target.scatter_(
+                    0,
+                    still_going_indices[:, None].expand(still_going_indices.shape[0], current_logits.shape[1]),
+                    current_logits
+                )
+                logits.append(scatter_target)
+            else:
+                logits.append(logits[-1].clone())
+
+            decoder_out = logits[-1].argmax(dim=-1)
+            decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
+
+        decoded = decoder_in
+        logits = torch.stack(logits, dim=1)
+
+        # these are shifted off by one
+        decoded_eq_mask = (
+            (decoded == eos_target_idx).int().cumsum(dim=-1).bool()[:, :-1]
+        )
+        decoded_eq_mask = torch.cat([
+            torch.zeros_like(decoded_eq_mask[:, :1]),
+            decoded_eq_mask
+        ], dim=-1)
+        decoded[decoded_eq_mask] = pad_target_idx
+        decoded = decoded[:, 1:]
+
+    exacts = (decoded == target).all(dim=-1).cpu().numpy()
+
+    return ([
+        decoded,
+        logits,
+        exacts,
+        target
+    ])
+
+
 class BigSymbolTransformerLearner(pl.LightningModule):
     def __init__(
         self,
@@ -497,60 +564,84 @@ class BigSymbolTransformerLearner(pl.LightningModule):
 
     def predict_step(self, x, idx, dl_idx=0):
         (
-            x_permutation,
-            y_permutation,
-            query_state,
-            support_state,
-            queries,
+            query_state_img,
+            support_state_imgs,
+            query_instruction,
             targets,
-            x_supports,
-            y_supports,
+            support_instructions,
+            support_targets,
         ) = x
-        decoder_in = torch.ones_like(targets)[:, :1] * self.sos_action_idx
-        support_mask = torch.zeros_like(x_supports[..., 0]).bool()
+        (
+            context_in,
+            context_pad,
+            _,
+            _,
+        ) = self.assemble_multimodal_inputs(
+            query_state_img,
+            support_state_imgs,
+            query_instruction,
+            targets,
+            support_instructions,
+            support_targets,
+        )
 
-        if self.hparams.metalearn_include_permutations:
-            # We concatenate the x and y permutations to the supports, this way
-            # they get encoded and also go through the attention process. The
-            # permutations are never masked.
-            x_supports = torch.cat([x_permutation[..., None, :], x_supports], dim=1)
-            y_supports = torch.cat([y_permutation[..., None, :], y_supports], dim=1)
-            support_mask = torch.cat(
-                [torch.zeros_like(x_permutation[..., :1]).bool(), support_mask], dim=1
-            )
+        # Now we can add positional encodings to everything
+        # and do the usual norm + dropout
+        context_in = context_in + self.pos_encoding(context_in)
+        context_in = self.dropout(self.norm(context_in))
 
-        padding = queries == self.pad_word_idx
+        encoded_sequence = self.transformer.encoder(
+            src=context_in.transpose(0, 1),
+            src_key_padding_mask=context_pad
+        )
 
-        # We do autoregressive prediction, predict for as many steps
-        # as there are targets, but don't use teacher forcing
+        decoder_in = torch.tensor([self.sos_action_idx])[None].expand(
+            context_in.shape[0], 1
+        ).cuda()
         logits = []
 
-        with torch.no_grad():
-            encoded = self.encoder(
-                query_state,
-                # We expand the support_state if it was not already expanded.
-                support_state
-                if support_state.ndim == 4
-                else support_state[:, None].expand(-1, x_supports.shape[1], -1, -1),
-                x_supports,
-                y_supports,
-                support_mask,
-                queries,
-            )
+        for i in range(targets.shape[1]):
+            stopped_mask = (decoder_in == self.eos_action_idx).any(dim=-1)
+            still_going_mask = ~stopped_mask
+            still_going_indices = torch.nonzero(still_going_mask).flatten()
 
-            for i in range(targets.shape[1]):
-                logits.append(
-                    self.decode_autoregressive(decoder_in, encoded, padding)[:, -1]
+            if still_going_mask.any(dim=-1):
+                decoder_in_still_going = decoder_in[still_going_mask]
+                encodings_still_going = encoded_sequence.transpose(0, 1)[still_going_mask].transpose(0, 1)
+                key_padding_mask_still_going = context_pad[still_going_mask]
+
+                decoder_embeddings = self.out_embedding(decoder_in_still_going)
+                decoder_embeddings = decoder_embeddings + self.pos_encoding(decoder_embeddings)
+                decoder_embeddings = self.dropout(self.norm(decoder_embeddings))
+
+                current_logits = self.out(self.transformer.decoder(
+                    tgt=decoder_embeddings.transpose(0, 1),
+                    memory=encodings_still_going,
+                    tgt_key_padding_mask=(decoder_in_still_going == self.pad_action_idx),
+                    memory_key_padding_mask=key_padding_mask_still_going
+                )[-1])
+
+                scatter_target = torch.zeros_like(current_logits[0, None, :].expand(encoded_sequence.shape[1], current_logits.shape[1]))
+                scatter_target.scatter_(
+                    0,
+                    still_going_indices[:, None].expand(still_going_indices.shape[0], current_logits.shape[1]),
+                    current_logits
                 )
-                decoder_out = logits[-1].argmax(dim=-1)
-                decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
+                logits.append(scatter_target)
+            else:
+                logits.append(logits[-1].clone())
 
-            decoded_eq_mask = (
-                (decoder_in == self.eos_action_idx).int().cumsum(dim=-1).bool()[:, :-1]
-            )
-            decoded = decoder_in[:, 1:]
-            decoded[decoded_eq_mask] = self.pad_action_idx
-            logits = torch.stack(logits, dim=1)
+            decoder_out = logits[-1].argmax(dim=-1)
+            decoder_in = torch.cat([decoder_in, decoder_out[:, None]], dim=1)
+
+        decoded = decoder_in
+        logits = torch.stack(logits, dim=1)
+
+        decoded_eq_mask = (
+            (decoder_in == self.eos_action_idx).int().cumsum(dim=-1).bool()[:, :-1]
+        )
+        decoded = decoder_in[:, 1:]
+        decoded[decoded_eq_mask] = self.pad_action_idx
 
         exacts = (decoded == targets).all(dim=-1)
 
