@@ -904,23 +904,6 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     if args.save_mlm_model:
         torch.save(model.state_dict(), args.save_mlm_model)
 
-    if False:
-        instruction_clip = train_clip(
-            balanced_training_data_subset,
-            args.seed,
-            0 if args.load_clip_model else args.clip_train_iterations,
-            pad_word,
-            len(WORD2IDX),
-            device=args.device,
-            load=args.load_clip_model,
-            dictionaries=dictionaries,
-        )
-
-        if args.save_clip_model:
-            torch.save(instruction_clip.state_dict(), args.save_clip_model)
-
-        instruction_clip.positional_encoding.cached_penc = None
-
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
     transformer_model_weights = torch.load(args.load_transformer_model)
@@ -1810,8 +1793,6 @@ def gscan_add_subparser(subparsers):
     gscan_parser.add_argument("--load-mlm-model", type=str)
     gscan_parser.add_argument("--save-mlm-model", type=str)
     gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
-    gscan_parser.add_argument("--load-clip-model", type=str)
-    gscan_parser.add_argument("--save-clip-model", type=str)
     gscan_parser.add_argument("--limit-load", type=int, default=None)
 
 
