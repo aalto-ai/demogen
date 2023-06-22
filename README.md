@@ -69,13 +69,13 @@ and their supports with GandR goes into `/path/to/gandr/output`.
 To generate data similar to DemoGen, there are a few steps to be follows.
 
 First, you need to train a regular encoder-decoder Transformer
-on the gSCAN baseline data. We suggest using seed 6.
+on the gSCAN baseline data. We used seed 5
 
     python scripts/train_transformer.py \
     --train-demonstrations data/baseline \
     --valid-demonstrations-directory data/baseline \
     --dictionary data/baseline/dictionary.pb \
-    --seed 6 \
+    --seed 5 \
     --train-batch-size 128 \
     --iterations 300000 \
     --version 100 \
@@ -106,7 +106,7 @@ can use it for `--train-demonstrations` and `--valid-demonstrations`.
 
 To train the meta-learning models, use something like:
 
-    python scripts/train_meta_seq2seq_transformer.py \
+    python scripts/train_meta_encdec_big_symbol_transformer.py \
     --train-demonstrations data/metalearn/train.pb \
     --valid-demonstrations data/metalearn/valid \
     --dictionary data/baseline/dictionary.pb \
@@ -158,21 +158,57 @@ a 12x12 cell after downsampling from 60x60 by 5x).
     --version 100 \
     --enable-progress
 
+    python scripts/train_transformer_images.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --patch-size 12 \
+    --image-downsample 5 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
+    python scripts/train_meta_encdec_big_img_transformer.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --patch-size 12 \
+    --image-downsample 5 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
 # Analyzing the results and reproducing the Tables in the main paper.
 
 Assuming that you run over seeds 0 through 9
 then you can run the `analyze_results.py` script on your `logs` dir with `--logs-dir logs`. This will open all the
 logs, exclude the worst seeds and generate the tables.
 
-    python scripts/analyze_results.py --logs-dir path/to/logs
+    python scripts/analyze_results.py \
+    --logs-dir ~/lumi/gscan_metaseq2seq_submission/logs --filter-expression ".*(meta_gscan|transformer_.*encoder_only_decode_actions).*" \
+    --dataset gscan \
+    --config-columns baseline_transformer gandr i2g_seq2seq_big_transformer \
+    --column-labels "Transformer" "GandR" "DemoGen" \
+    --drop-bad-seeds 0 \
+    --result-smoothing 10
 
 # Analyzing the generated datasets
 
 To reproduce Table 1 in the main paper (showing the properties
 of the generated demonstrations), you can run the following script:
 
-    python analyze_generated_datasets.py \
-    --data-directory path/to/directory/with/generated/datasets --datasets i2g gandr metalearn_allow_any metalearn_find_matching_instruction_demos_allow_any metalearn_random_instructions_same_layout_allow_any
+    python scripts/analyze_generated_datasets.py \
+    --datasets i2g_seq2seq_model_score gandr metalearn_find_matching_instruction_demos_allow_any metalearn_allow_any metalearn_random_instructions_same_layout_allow_any  \
+    --data-directory /l/data/gscan/acl \
+    --splits a b c d e f g h
 
 
 This will spend a while loading the datasets and performing
@@ -223,3 +259,30 @@ trained meta-seq2seq model and transformer model.
     --transformer-checkpoint path/to/transformer.ckpt
 
 The plots, `comparison_edit_distance_mistakes.pdf`, `num_pulls_vs_edit_distance.pdf` and `pulls_vs_edit_distance_violinplot.pdf` get saved in the current directory.
+
+# Generating paraphrases of the instructions with openai-gpt3.5
+
+    python scripts/extract_sentences_from_dataset_jsons.py \
+    --toplevel-data-directory /path/to/gscan/original/data \
+    --dataset-filename-pattern .*compositional_splits.txt \
+    --write-sentences sentences.json
+
+    python scripts/generate_chatgpt_responses.py  \
+    --api-key YOUR_API_KEY \
+    --sentence-list-input sentences.json \
+    --responses-list-output responses.json \
+    --mode paraphrase_all \
+    --prompt simple
+
+    python scripts/generate_gscan_dataset_natural_language.py \
+    --dataset /path/to/original/gscan/dataset.txt \
+    --paraphrases-outputs responses.json \
+    --dataset-output paraphrased-dataset.txt
+
+# Analyzing the paraphrased setences
+
+   python scripts/analyze_paraphrased_instructions.py \
+   --original-dataset-path /path/to/original/gscan/dataset.txt \
+   --paraphrased-dataset-path paraphrased-dataset.txt \
+   --dataset-name gscan \
+   --output-directory OUTPUT_DIR
