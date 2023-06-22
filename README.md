@@ -274,10 +274,17 @@ The plots, `comparison_edit_distance_mistakes.pdf`, `num_pulls_vs_edit_distance.
     --mode paraphrase_all \
     --prompt simple
 
+We also provide the data to download the generated responses for each dataset directly:
+
+ - [gSCAN](https://emnlp-2023-submission-demogen.s3.eu-north-1.amazonaws.com/gscan_responses_output.json)
+ - [gSCAN-SR](https://emnlp-2023-submission-demogen.s3.eu-north-1.amazonaws.com/gscan_sr_responses_output.json)
+ - [ReaSCAN](https://emnlp-2023-submission-demogen.s3.eu-north-1.amazonaws.com/reascan_responses_output.json)
+
     python scripts/generate_gscan_dataset_natural_language.py \
     --dataset /path/to/original/gscan/dataset.txt \
     --paraphrases-outputs responses.json \
     --dataset-output paraphrased-dataset.txt
+
 
 # Analyzing the paraphrased setences
 
