@@ -371,6 +371,22 @@ MATCH_CONFIGS = {
         "dataset": "baseline",
         "headline": "gscan",
     },
+    "baseline_transformer_i2g_seq2seq": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "i2g_seq2seq_model_score",
+        "headline": "gscan",
+        "tag": "include_demos"
+    },
+    "baseline_roformer": {
+        "model": "roformer_encoder_only_decode_actions",
+        "dataset": "baseline",
+        "headline": "gscan",
+    },
+    "baseline_universal_transformer": {
+        "model": "universal_transformer_encoder_only_decode_actions",
+        "dataset": "baseline",
+        "headline": "gscan",
+    },
     "baseline_transformer_img": {
         "model": "transformer_img_encoder_only_decode_actions",
         "dataset": "baseline",
