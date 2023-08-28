@@ -132,7 +132,7 @@ def get_transformer_predictions(
     transformer_module = TransformerLearner.load_from_checkpoint(transformer_checkpoint)
 
     # Sanity check - does this transformer perform well?
-    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1, precision="16-mixed")
+    trainer = pl.Trainer(accelerator="gpu" if use_cuda else "cpu", devices=1, precision="16-mixed" if use_cuda else "32")
     trainer.validate(
         transformer_module,
         DataLoader(Subset(transformer_dataset, torch.arange(1024)), batch_size=64),
