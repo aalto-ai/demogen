@@ -536,7 +536,7 @@ def main():
         ReorderSupportsByDistanceDataset(
             MapDataset(
                 MapDataset(
-                    meta_train_demonstrations,
+                    valid_demonstrations_dict["h"],
                     lambda x: (
                         x[2],
                         x[3],
