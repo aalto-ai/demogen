@@ -185,6 +185,14 @@ TEST_SPLIT_DATALOADER_MAPPINGS = {
 _RE_DIRECTORY_NAME = r"(?P<headline>[a-z_]+)_s_(?P<seed>[0-9])_m_(?P<model>[0-9a-z_]+)_l_(?P<layers>[0-9]+)_h_(?P<heads>[0-9]+)_d_(?P<hidden>[0-9]+)_it_(?P<iterations>[0-9]+)_b_(?P<batch_size>[0-9]+)_d_(?P<dataset>[0-9a-z_]+)_t_(?P<tag>[a-z_0-9]+)_drop_(?P<dropout>[0-9\.]+)(?:_ml_d_limit_(?P<ml_d_limit>[0-9]+))?"
 
 
+def check_matches_or_warn(regex, string):
+    if not re.match(regex, string):
+        print(f"String {string} doesn't match regex {regex}")
+        return False
+
+    return True
+
+
 def collate_func_key(x, keys):
     return tuple([x[k] for k in keys if k != "seed"])
 
@@ -197,11 +205,14 @@ def read_and_collate_from_directory(
         map(
             lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(),
             filter(
-                lambda x: True
-                if filter_expression is None
-                else re.match(filter_expression, x) is not None,
+                lambda x: (
+                    check_matches_or_warn(_RE_DIRECTORY_NAME, x) and (
+                        filter_expression is None or
+                        re.match(filter_expression, x) is not None
+                    )
+                ),
                 listing,
-            ),
+            )
         )
     )
     keys = sorted(parsed_listing[0].keys())
@@ -262,11 +273,14 @@ def list_and_collate_from_directory(
         map(
             lambda x: re.match(_RE_DIRECTORY_NAME, x).groupdict(),
             filter(
-                lambda x: True
-                if filter_expression is None
-                else re.match(filter_expression, x) is not None,
+                lambda x: (
+                    check_matches_or_warn(_RE_DIRECTORY_NAME, x) and (
+                        filter_expression is None or
+                        re.match(filter_expression, x) is not None
+                    )
+                ),
                 listing,
-            ),
+            )
         )
     )
     keys = sorted(parsed_listing[0].keys())
