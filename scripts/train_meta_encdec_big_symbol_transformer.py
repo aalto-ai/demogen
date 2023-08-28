@@ -645,7 +645,7 @@ class BigSymbolTransformerLearner(pl.LightningModule):
 
         exacts = (decoded == targets).all(dim=-1)
 
-        return decoded, logits, exacts
+        return decoded, logits, exacts, targets
 
 
 class PermuteActionsDataset(Dataset):

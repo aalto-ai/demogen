@@ -119,7 +119,7 @@ def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True,
     trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1, precision="16-mixed")
     preds = trainer.predict(module, DataLoader(dataset, batch_size=64))
 
-    predicted_targets_stacked, logits_stacked, exacts_stacked = list(
+    predicted_targets_stacked, logits_stacked, exacts_stacked, actual_targets_stacked = list(
         map(torch.cat, zip(*preds))
     )
 
@@ -147,7 +147,7 @@ def get_transformer_predictions(
         transformer_predicted_targets_stacked,
         transformer_logits_stacked,
         transformer_exacts_stacked,
-        ___,
+        transformer_targets_stacked,
     ) = list(
         map(lambda x: list(itertools.chain.from_iterable(x)), zip(*transformer_preds))
     )
@@ -156,6 +156,7 @@ def get_transformer_predictions(
         transformer_predicted_targets_stacked,
         transformer_logits_stacked,
         transformer_exacts_stacked,
+        transformer_targets_stacked,
     )
 
 
