@@ -163,8 +163,13 @@ def to_count_matrix(action_word_arrays, word_vocab_size, action_vocab_size):
     return count_matrix
 
 
-def to_tfidf(tfidf_transformer, count_matrix):
-    return tfidf_transformer.transform(count_matrix).todense().astype("float32")
+def to_tfidf(tfidf_transformer, count_matrix, word_vocab_size, action_vocab_size):
+    tfidf_array = np.array(tfidf_transformer.transform(count_matrix).todense()).astype("float32")
+
+    # Balance the array by premultiplying the word part by action_vocab_size/word_vocab_size
+    tfidf_array[:, :word_vocab_size] *= action_vocab_size / word_vocab_size
+
+    return tfidf_array
 
 
 def transformer_predict(transformer_learner, state, instruction, decode_len):
