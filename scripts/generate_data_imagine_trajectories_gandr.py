@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 
 import faiss
 from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import normalize
 from pytorch_lightning.loggers import TensorBoardLogger
 from positional_encodings.torch_encodings import PositionalEncoding1D
 
@@ -120,7 +120,12 @@ def train_transformer(
     print(model)
 
     if weights_path:
-        model.load_state_dict(torch.load(weights_path))
+        transformer_weights = torch.load(weights_path)
+        model.load_state_dict(
+            transformer_weights["state_dict"]
+            if "state_dict" in transformer_weights
+            else transformer_weights
+        )
 
     pl.seed_everything(seed)
     trainer = pl.Trainer(
