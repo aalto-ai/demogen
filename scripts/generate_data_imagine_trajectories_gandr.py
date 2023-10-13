@@ -703,8 +703,8 @@ def main():
         pad_action,
         ACTION2IDX["[sos]"],
         ACTION2IDX["[eos]"],
-        hidden_size=128,
-        nlayers=8,
+        hidden_size=512,
+        nlayers=12,
         nhead=8,
         device=args.device,
     )
