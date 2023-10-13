@@ -253,7 +253,8 @@ def try_gen_instructions(
     decode_len,
     device="cpu",
     no_query_overlap=False,
-    deduplicate_by_output=False
+    deduplicate_by_output=False,
+    no_sort=False
 ):
     sampled_instructions = instruction_gen_closure(inputs, sample_n)
 
@@ -380,10 +381,11 @@ def try_gen_instructions(
 
     # Now we sort the per_id_results descending by score
     # (eg, a higher score is better)
-    per_id_results = {
-        i: sorted(results, key=lambda x: -x[-1])
-        for i, results in per_id_results.items()
-    }
+    if not no_sort:
+        per_id_results = {
+            i: sorted(results, key=lambda x: -x[-1])
+            for i, results in per_id_results.items()
+        }
 
     # Now yield per_id, the state, the query instruction and all supports
     # and their scores
@@ -408,7 +410,8 @@ def generate_instructions_and_rank(
     decode_len,
     device="cpu",
     no_query_overlap=False,
-    deduplicate_by_output=False
+    deduplicate_by_output=False,
+    no_sort=False
 ):
     for batch in dataloader:
         inputs, targets = batch
@@ -427,7 +430,8 @@ def generate_instructions_and_rank(
                     decode_len,
                     device=device,
                     no_query_overlap=no_query_overlap,
-                    deduplicate_by_output=deduplicate_by_output
+                    deduplicate_by_output=deduplicate_by_output,
+                    no_sort=no_sort
                 )
                 break
             except SamplingError:
@@ -1867,6 +1871,7 @@ def main():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--no-query-overlap", action="store_true")
     parser.add_argument("--deduplicate-by-outputs", action="store_true")
+    parser.add_argument("--no-sort", action="store_true")
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1943,7 +1948,8 @@ def main():
                     decode_len=128,
                     device=args.device,
                     no_query_overlap=args.no_query_overlap,
-                    deduplicate_by_output=args.deduplicate_by_output
+                    deduplicate_by_output=args.deduplicate_by_output,
+                    no_sort=args.no_sort
                 ),
                 1000,
             )
