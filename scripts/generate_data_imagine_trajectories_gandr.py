@@ -189,6 +189,7 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
         transformer_learner.sos_action_idx,
         transformer_learner.eos_action_idx,
         transformer_learner.pad_action_idx,
+        quiet=True
     )
 
     return decoded, logits
