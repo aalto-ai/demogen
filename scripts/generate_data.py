@@ -1981,7 +1981,7 @@ def main():
     splits = {s: SPLITS_NAMES_MAP.get(s, s) for s in list(d["examples"].keys())}
 
     if args.only_splits:
-        splits = {k: v for k, v in splits.items() if k in args.only_splits}
+        splits = {k: v for k, v in splits.items() if v in args.only_splits}
 
     os.makedirs(f"{args.output_directory}/valid", exist_ok=True)
 
