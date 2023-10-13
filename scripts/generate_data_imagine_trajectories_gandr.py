@@ -672,6 +672,8 @@ def main():
                 args.save_state_autoencoder_transformer,
             )
 
+    torch.set_float32_matmul_precision("medium")
+
     transformer_validation_datasets = [
         Subset(
             PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
