@@ -9,8 +9,11 @@ from collections import defaultdict
 import pickle
 import multiprocessing
 import random
+import faiss
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.preprocessing import StandardScaler, normalize
 
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 
 from gscan_metaseq2seq.gscan.world import Situation
 from gscan_metaseq2seq.util.solver import (
