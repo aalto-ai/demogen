@@ -358,7 +358,14 @@ def main():
                 [NAME_MAP.get(n, n) for n in args.datasets]
             ]
             .loc[INDEX_COLS]
-            .to_latex(float_format="%.3f", escape=False)
+            .to_latex(
+                float_format="%.2f",
+                formatters={
+                    name: (lambda x: f"\\footnotesize{{{x:.2f}}}")
+                    for name in [NAME_MAP.get(n, n) for n in args.datasets]
+                },
+                escape=False
+            )
         )
         print("}")
         print("}")
