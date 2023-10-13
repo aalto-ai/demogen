@@ -338,11 +338,13 @@ def gandr_like_search(
 
         near_neighbour_supports_batch = [
             (
-                [train_dataset[i] for i in near_neighbour_indices],
-                near_neighbour_distances,
+                [train_dataset[i] for i in near_neighbour_indices[np.array(retrieval_indices)]],
+                near_neighbour_distances[np.array(retrieval_indices)],
             )
-            for near_neighbour_indices, near_neighbour_distances in zip(
-                near_neighbour_indices_batch, near_neighbour_distances_batch
+            for near_neighbour_indices, near_neighbour_distances, retrieval_indices in zip(
+                near_neighbour_indices_batch,
+                near_neighbour_distances_batch,
+                selected_examples_per_batch_indices
             )
         ]
 
