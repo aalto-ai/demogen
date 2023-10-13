@@ -633,7 +633,12 @@ def main():
             noun_dictionary,
         ),
         (train_demonstrations, valid_demonstrations_dict),
-    ) = load_data_directories(args.training_data, args.dictionary)
+    ) = load_data_directories(
+        args.training_data,
+        args.dictionary,
+        only_splits=list(set(["train"]) | set(args.only_splits)) if args.only_splits else None,
+        limit_load=args.limit
+    )
 
     pad_action = ACTION2IDX["[pad]"]
     pad_word = WORD2IDX["[pad]"]
