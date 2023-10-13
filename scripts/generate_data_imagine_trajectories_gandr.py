@@ -212,8 +212,10 @@ def gandr_like_search(
 ):
     transformer_prediction_model.to(device)
     transformer_prediction_model.eval()
-    state_autoencoder_transformer.to(device)
-    state_autoencoder_transformer.eval()
+
+    if state_autoencoder_transformer is not None:
+        state_autoencoder_transformer.to(device)
+        state_autoencoder_transformer.eval()
 
     for batch in dataloader:
         instruction, targets, state = batch
