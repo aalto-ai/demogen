@@ -1145,6 +1145,7 @@ GENERATION_STRATEGIES = {
 
 def generate_supports_for_data_point(
     data_example,
+    index,
     world,
     vocabulary,
     generation_mode,
@@ -1160,6 +1161,7 @@ def generate_supports_for_data_point(
         support_target_commands,
         support_layouts,
     ) = GENERATION_STRATEGIES[generation_mode](
+        index,
         command,
         target_commands,
         situation,
@@ -1202,15 +1204,16 @@ def yield_metalearning_examples(
             for error, result in pool.imap_unordered(
                 generate_supports_for_data_point_star,
                 map(
-                    lambda x: (
+                    lambda x, i: (
                         x,
+                        i,
                         world,
                         vocabulary,
                         generation_mode,
                         generation_payload,
                         generation_options,
                     ),
-                    examples_set,
+                    enumerate(examples_set),
                 ),
                 chunksize=100,
             ):
@@ -1221,9 +1224,10 @@ def yield_metalearning_examples(
                 yield result
     else:
         # Slow path, we need to keep the whole dataset
-        for example in examples_set:
+        for i, example in enumerate(examples_set):
             error, result = generate_supports_for_data_point(
                 example,
+                i,
                 world,
                 vocabulary,
                 generation_mode,
