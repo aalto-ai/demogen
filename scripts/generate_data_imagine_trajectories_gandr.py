@@ -713,8 +713,9 @@ def main():
         torch.save(transformer_model.state_dict(), args.save_transformer_model)
 
     transformer_model_trainer = pl.Trainer(
-        gpus=1 if torch.cuda.is_available() else 0,
-        precision=16 if torch.cuda.is_available() else None,
+        accelerator="gpu" if torch.cuda.is_available() else 0,
+        devices=1 if torch.cuda.is_available() else 0,
+        precision="16-mixed" if torch.cuda.is_available() else None,
     )
 
     transformer_model_trainer.validate(
