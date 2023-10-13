@@ -145,11 +145,37 @@ def summarize_hits(hits):
         and right_adverb_and_object_and_distance_at_least_once
     )
 
+    # (0) - query_verb == support_verb,
+    # (1) - query_adverb == support_adverb,
+    # (2) - query_size + query_color + query_noun == support_size + support_color + support_noun,
+    # (3) - (query_agent_position[-2:] == support_agent_pos[-2:]).all(),
+    # (4) - support_target_object is not None and (
+    #   query_target_object[-2:] == support_target_object[-2:]
+    # ).all(),
+    # (5) - support_target_object is not None and (
+    #       (query_target_object[-2:] - query_agent_position[-2:])
+    #        == (support_target_object[-2:] - support_agent_pos[-2:])
+    #       ).all(),
+    # (6) - support_target_object is not None
+    #       and (query_target_object[:3] == support_target_object[:3]).all(),
+    # (7) support_target_object is not None,
     sums = hits[..., [2, 3, 4, 5, 6, 7]].sum(axis=0)
 
     return np.concatenate(
         [
+            # Desc Obj (2) -> 0
+            # Agent Pos (3) -> 1
+            # Tgt Pos (4) -> 2
+            # Correct Dist (5) -> 3
+            # Tgt Obj (6) -> 4
+            # Has tgt (7) -> 5
             sums,
+            # Verb & Desc Obj -> 6
+            # Adverb & Desc Obj -> 7
+            # 6 & 7 -> 8
+            # 6 & 5 -> 9
+            # 7 & 5 -> 10
+            # 9 & 10 -> 11
             np.array(
                 [
                     right_verb_and_object_at_least_once * hits.shape[0],
@@ -258,7 +284,18 @@ NAME_MAP = {
 def extract_split_to_table(dataset_summaries, split):
     df = pd.DataFrame.from_dict(
         {k: v[split] for k, v in dataset_summaries.items()}, orient="columns"
-    ).drop([5, 9, 10], axis="index")
+    )
+
+    # Desc Obj (2) -> 0
+    # Agent Pos (3) -> 1
+    # Tgt Pos (4) -> 2
+    # Correct Dist (5) -> 3
+    # Tgt Obj (6) -> 4
+    # Verb & Desc Obj -> 6
+    # Adverb & Desc Obj -> 7
+    # 6 & 7 -> 8
+    # (6 & 5) & (7 & 5) -> 11
+    df = df.drop([5, 9, 10], axis="index")
     df.index = INDEX_COLS
     df.columns = [NAME_MAP.get(n, n) for n in df.columns]
 
