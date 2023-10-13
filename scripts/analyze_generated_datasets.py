@@ -273,10 +273,11 @@ def load_data_and_make_hit_results(
 
 
 NAME_MAP = {
-    "i2g_seq2seq_model_score": "DemoGen",
+    "i2g_seq2seq_model_score": "DemoG",
     "gandr": "GandR",
+    "coverage_retrieval": "CovR",
     "metalearn_allow_any": "Expert",
-    "metalearn_find_matching_instruction_demos_allow_any": "Retrieval",
+    "metalearn_find_matching_instruction_demos_allow_any": "OtherS",
     "metalearn_random_instructions_same_layout_allow_any": "Random",
 }
 
