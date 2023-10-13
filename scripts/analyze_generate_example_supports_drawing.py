@@ -222,7 +222,7 @@ def plot_at_index(
         + r"""}};
             \node[inner sep=0pt, below=of state.south] (query)
         {\footnotesize{$I^Q$ = ``"""
-        + " ".join(" ".join([w for w in instr if w != "[pad]"]))
+        + " ".join([w for w in instr if w != "[pad]"])
         + r"""\"}};
         \end{tikzpicture}
     };
