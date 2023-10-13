@@ -255,7 +255,7 @@ def gandr_like_search(
             if state_encodings is not None
             else tfidf_vectors
         )
-        scaled_vectors = scaler.transform(unscaled_vectors)
+        scaled_vectors = normalize(unscaled_vectors, axis=1)
 
         near_neighbour_distances_batch, near_neighbour_indices_batch = index.search(
             scaled_vectors,
