@@ -247,6 +247,8 @@ def gandr_like_search(
                 word_vocab_size,
                 action_vocab_size,
             ),
+            word_vocab_size,
+            action_vocab_size
         )
         unscaled_vectors = (
             np.concatenate([tfidf_vectors, state_encodings], axis=-1)
@@ -259,6 +261,80 @@ def gandr_like_search(
             scaled_vectors,
             sample_n,
         )
+
+        batch_one_grams = [
+            i[i != pad_word_idx].numpy()
+            for i in instruction
+        ]
+        batch_two_grams = [
+            np.stack([
+                one_grams[i:i + 1] for i in range(len(one_grams) - 1)
+            ])
+            for one_grams in batch_one_grams
+        ]
+        batch_one_gram_coverage = [
+            np.zeros(len(one_grams)).astype(bool)
+            for one_grams in batch_one_grams
+        ]
+        batch_two_gram_coverage = [
+            np.zeros(len(two_grams)).astype(bool)
+            for two_grams in batch_two_grams
+        ]
+        coverages_per_batch_indices = [
+            [] for i in instruction
+        ]
+        selected_examples_per_batch_indices = [
+            [] for i in instruction
+        ]
+
+        for batch_index, retrieved_example_indices in enumerate(near_neighbour_indices_batch):
+            for retrieval_index, example_index in enumerate(retrieved_example_indices):
+                query_instruction_nopad = instruction[batch_index][instruction[batch_index] != pad_word_idx].numpy()
+                retrieval_instruction_nopad = train_dataset[example_index][train_dataset[example_index] != pad_word_idx]
+                if (
+                    (query_instruction_nopad.shape ==
+                     retrieval_instruction_nopad.shape) and
+                    (query_instruction_nopad == retrieval_instruction_nopad).all()
+                ):
+                    continue
+
+                retrieval_one_grams = retrieval_instruction_nopad
+                retrieval_two_grams = np.stack([
+                    retrieval_one_grams[i:i + 1] for i in range(len(retrieval_one_grams) - 1)
+                ])
+
+                matches_one_grams = (retrieval_one_grams[:, None] == batch_one_grams[batch_index][None]).any(axis=0)
+                matches_two_grams = (retrieval_two_grams[:, None] == batch_two_grams[batch_index][None]).all(axis=-1).any(axis=0)
+
+                coverages_per_batch_indices[batch_index].append(
+                    (example_index, retrieval_index, matches_one_grams, matches_two_grams)
+                )
+
+            # Sort by two-gram coverage, one-gram coverage and retrieval index (closeness)
+            sorted_coverages = sorted(
+                coverages_per_batch_indices[batch_index],
+                key=lambda x: (-x[3].sum(), -x[2].sum(), x[1])
+            )
+
+            for example_index, retrieval_index, example_one_gram_coverages, example_two_gram_coverages in sorted_coverages:
+                matches_any_new_one_grams = np.logical_xor(example_one_gram_coverages, batch_one_gram_coverage[batch_index])
+                matches_any_new_two_grams = np.logical_xor(example_two_gram_coverages, batch_two_gram_coverage[batch_index])
+
+                if not (matches_any_new_one_grams.any() or matches_any_new_two_grams.any()):
+                    continue
+
+                batch_one_gram_coverage[batch_index] |= matches_any_new_one_grams
+                batch_two_gram_coverage[batch_index] |= matches_any_new_two_grams
+
+                selected_examples_per_batch_indices[batch_index].append(retrieval_index)
+
+                if len(selected_examples_per_batch_indices[batch_index]) >= 16:
+                    break
+
+            selected_examples_per_batch_indices[batch_index].extend(list(
+                filter(lambda x: x not in selected_examples_per_batch_indices[batch_index],
+                       map(lambda x: x[1], sorted_coverages))
+            )[:max(0, 16 - len(selected_examples_per_batch_indices[batch_index]))])
 
         near_neighbour_supports_batch = [
             (
