@@ -822,10 +822,9 @@ def main():
                     index,
                     train_demonstrations,
                     tfidf_transformer,
-                    scaler,
                     state_autoencoder_transformer,
                     tqdm(dataloader),
-                    16,
+                    256,
                     decode_len=128,
                     pad_word_idx=pad_word,
                     pad_action_idx=pad_action,
@@ -833,11 +832,11 @@ def main():
                     action_vocab_size=len(ACTION2IDX),
                     device=args.device,
                 ),
-                1000,
+                10000,
             )
         ):
             with open(
-                os.path.join(args.data_output_directory, split, f"{i}.pb"), "wb"
+                os.path.join(args.data_output_directory, split, f"{i + save_offset}.pb"), "wb"
             ) as f:
                 pickle.dump(batch, f)
 
