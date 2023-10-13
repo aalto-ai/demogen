@@ -1951,7 +1951,7 @@ def main():
                     deduplicate_by_output=args.deduplicate_by_output,
                     no_sort=args.no_sort
                 ),
-                1000,
+                10000,
             )
         ):
             with open(
