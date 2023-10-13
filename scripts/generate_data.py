@@ -571,7 +571,7 @@ def parse_sparse_situation(
         # attribute bits + agent + agent direction + location
         num_grid_channels = 7 + (3 if reascan_boxes else 0)
         grid = []
-        agent_representation = np.zeros([num_grid_channels], dtype=np.int)
+        agent_representation = np.zeros([num_grid_channels], dtype=np.int32)
         agent_representation[3] = 1
         agent_representation[4] = agent_direction
         agent_representation[5] = agent_row
@@ -618,7 +618,7 @@ def parse_sparse_situation(
         # attribute bits + agent + agent direction
         num_grid_channels = 5 + (3 if reascan_boxes else 0)
         grid = np.zeros([grid_size, grid_size, num_grid_channels], dtype=int)
-        agent_representation = np.zeros([num_grid_channels], dtype=np.int)
+        agent_representation = np.zeros([num_grid_channels], dtype=np.int32)
         agent_representation[-2] = 1
         agent_representation[-1] = agent_direction
 
@@ -687,7 +687,7 @@ def add_eos_to_actions(actions, eos_token_idx):
 
 
 def generate_relevant_supports_oracle(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (colors, nouns, allow_demonstration_splits) = payload
 
@@ -740,7 +740,7 @@ def generate_relevant_supports_oracle(
 
 
 def generate_instructions_find_support_in_any_layout(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         sorted_example_indices_by_command,
@@ -792,7 +792,7 @@ def generate_instructions_find_support_in_any_layout(
 
 
 def generate_random_instructions_find_support_in_any_layout(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         sorted_example_indices_by_command,
@@ -846,7 +846,7 @@ def find_in_sorted_list(a, x):
 
 
 def find_supports_with_same_agent_target_offset(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         sorted_example_indices_by_x_y_distance_to_agent,
@@ -893,7 +893,7 @@ def find_supports_with_same_agent_target_offset(
 
 
 def find_supports_with_any_target_object_in_same_position(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         sorted_example_indices_by_target_x_y,
@@ -940,7 +940,7 @@ def find_supports_with_any_target_object_in_same_position(
 
 
 def find_supports_by_matching_object_in_same_diff(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         example_indices_by_target_x_y_diff_object,
@@ -1008,7 +1008,7 @@ def serialize_situation(situation):
 
 
 def find_supports_by_matching_environment_layout(
-    command, target_commands, situation, world, vocabulary, payload, options
+    index, command, target_commands, situation, world, vocabulary, payload, options
 ):
     (
         example_indices_by_matching_environment,
@@ -1320,11 +1320,11 @@ def yield_baseline_examples(
         )
 
 
-def baseline_payload(dataset, vocabulary, current_split):
+def baseline_payload(dataset, vocabulary, word2idx, current_split):
     return None
 
 
-def generate_oracle_payload(dataset, vocabulary, current_split):
+def generate_oracle_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
     return (
         vocabulary.get_nouns(),
         vocabulary.get_color_adjectives(),
@@ -1332,7 +1332,7 @@ def generate_oracle_payload(dataset, vocabulary, current_split):
     )
 
 
-def generate_oracle_find_any_matching_payload(dataset, vocabulary, current_split):
+def generate_oracle_find_any_matching_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
     sorted_example_indices_by_command = sort_indices_by_command(
         dataset["examples"]["train"]
     )
@@ -1347,7 +1347,7 @@ def generate_oracle_find_any_matching_payload(dataset, vocabulary, current_split
 
 
 def generate_random_instructions_find_in_any_layout_payload(
-    dataset, vocabulary, current_split
+    dataset, vocabulary, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_command = sort_indices_by_command(
         dataset["examples"]["train"]
@@ -1357,7 +1357,7 @@ def generate_random_instructions_find_in_any_layout_payload(
 
 
 def find_supports_with_same_agent_target_offset_payload(
-    dataset, vocabulary, current_split
+    dataset, vocabulary, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_offsets = sort_indices_by_offsets(
         dataset["examples"]["train"]
@@ -1374,7 +1374,7 @@ def find_supports_with_same_agent_target_offset_payload(
 
 
 def find_supports_with_any_target_object_in_same_position_payload(
-    dataset, vocabulary, current_split
+    dataset, vocabulary, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_target_positions = sort_indices_by_target_positions(
         dataset["examples"]["train"]
@@ -1391,7 +1391,7 @@ def find_supports_with_any_target_object_in_same_position_payload(
 
 
 def find_supports_by_matching_object_in_same_diff_payload(
-    dataset, vocabulary, current_split
+    dataset, vocabulary, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_diff_and_description = (
         sort_indices_by_target_diff_and_description(dataset["examples"]["train"])
@@ -1408,7 +1408,7 @@ def find_supports_by_matching_object_in_same_diff_payload(
 
 
 def find_supports_by_matching_environment_layout_payload(
-    dataset, vocabulary, current_split
+    dataset, vocabulary, word2idx, current_split, global_payload
 ):
     sorted_examples_by_serialized_layouts = sort_indices_by_serialized_situation(
         dataset["examples"]["train"]
@@ -1422,6 +1422,9 @@ def find_supports_by_matching_environment_layout_payload(
         sorted_example_indices_by_command,
         dataset["examples"]["train"],
     )
+
+def null_global_payload(dataset, vocabulary, word2idx):
+    return None
 
 
 GENERATION_CONFIGS = {
@@ -1551,6 +1554,18 @@ SPLITS_ALLOW_ORACLE_DEMONSTRATIONS = {
     "contextual": ["A", "B", "C", "D", "E", "G", "H"],
     "adverb_1": ["A", "B", "C", "D", "E", "F", "G", "H"],
     "adverb_2": ["A", "B", "C", "D", "E", "F", "G"],
+}
+
+PREPROCESSING_GLOBAL_PAYLOAD_GENERATOR = {
+    "baseline": null_global_payload,
+    "generate_oracle": null_global_payload,
+    "generate_find_matching": null_global_payload,
+    "retrieve_similar_state": retrieve_similar_state_global_payload,
+    "random_find_matching": null_global_payload,
+    "find_by_environment_layout": null_global_payload,
+    "find_by_matching_same_object_in_same_diff": null_global_payload,
+    "find_by_matching_any_object_in_same_target_position": null_global_payload,
+    "find_by_matching_any_object_in_same_diff": null_global_payload,
 }
 
 PREPROCESSING_PAYLOAD_GENERATOR = {
@@ -1685,10 +1700,14 @@ def main():
 
     os.makedirs(f"{args.output_directory}/valid", exist_ok=True)
 
+    global_payload = PREPROCESSING_GLOBAL_PAYLOAD_GENERATOR[
+        GENERATION_CONFIGS[args.generate_mode]["generate_mode"]
+    ](d, vocabulary, INPUT_WORD2IDX)
+
     for split, split_name in tqdm(splits.items()):
         payload = PREPROCESSING_PAYLOAD_GENERATOR[
             GENERATION_CONFIGS[args.generate_mode]["generate_mode"]
-        ](d, vocabulary, split)
+        ](d, vocabulary, INPUT_WORD2IDX, split, global_payload, args)
 
         os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
