@@ -233,7 +233,7 @@ def compute_encoder_decoder_model_loss_and_stats(
 
 
 def autoregressive_model_unroll_predictions(
-    model, inputs, target, sos_target_idx, eos_target_idx, pad_target_idx
+    model, inputs, target, sos_target_idx, eos_target_idx, pad_target_idx, quiet=False
 ):
     with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
         encodings, key_padding_mask = model.encode(*inputs)
@@ -246,7 +246,7 @@ def autoregressive_model_unroll_predictions(
     logits = []
 
     with torch.inference_mode(), torch.autocast(device_type=str(target.device).split(":")[0], dtype=torch.float16, enabled=True):
-        for i in trange(target.shape[1], desc="Gen tgts"):
+        for i in trange(target.shape[1], desc="Gen tgts", disable=quiet):
             stopped_mask = (decoder_in == eos_target_idx).any(dim=-1)
             still_going_mask = ~stopped_mask
             still_going_indices = torch.nonzero(still_going_mask).flatten()
