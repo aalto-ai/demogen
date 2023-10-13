@@ -791,6 +791,87 @@ def generate_instructions_find_support_in_any_layout(
     return (None, (support_instructions, support_targets, support_layouts))
 
 
+def encode_situation_as_onehot(situation, color2idx, noun2idx):
+    return (
+        parse_sparse_situation(
+            situation.to_dict(),
+            6,
+            color2idx,
+            noun2idx,
+            "all",
+            False
+        )[:, :-2, None] == np.arange(5, dtype=np.int32)[None, None]
+    ).reshape(36, -1).astype(np.int32)
+
+
+def retrieve_layout_instruction_coverage(
+    index, command, target_commands, situation, world, vocabulary, payload, options
+):
+    # Similar to Gupta et al 2023, we walk down the list and try to greedily
+    # cover n-grams
+    #
+    # In practice what we do is wait for one and two-grams to be covered
+    # given the examples that we have
+    retrievals, train_examples, word2idx = payload
+    one_grams = np.array([word2idx[w] for w in command])
+    two_grams = np.stack([
+        one_grams[i:i + 1] for i in range(len(command) - 1)
+    ])
+
+    one_gram_coverage = np.zeros(len(one_grams)).astype(bool)
+    two_gram_coverage = np.zeros(len(two_grams)).astype(bool)
+
+    # We select greedily if the example covers something new
+    selected_examples = []
+
+    coverages = []
+
+    for retrieval_index, example_index in enumerate(retrievals[index]):
+        retrieval_command = train_examples[example_index]["command"].split(",")
+
+        # Don't do exact matches
+        if retrieval_command == command:
+            continue
+
+        retrieval_one_grams = np.array([word2idx[w] for w in retrieval_command])
+        retrieval_two_grams = np.stack([
+            retrieval_one_grams[i:i + 1] for i in range(len(command) - 1)
+        ])
+
+        matches_one_grams = (retrieval_one_grams[:, None] == one_grams[None]).any(axis=0)
+        matches_two_grams = (retrieval_two_grams[:, None] == two_grams[None]).all(axis=-1).any(axis=0)
+
+        coverages.append((example_index, retrieval_index, matches_one_grams, matches_two_grams))
+
+    # Sort by two gram coverage, one gram coverage, retrieval index (closeness)
+    sorted_coverages = sorted(coverages, key=lambda x: (-x[3].sum(), -x[2].sum(), x[1]))
+
+    for example_index, retrieval_index, example_one_gram_coverages, example_two_gram_coverages in sorted_coverages:
+        matches_any_new_one_grams = np.logical_xor(example_one_gram_coverages, one_gram_coverage)
+        matches_any_new_two_grams = np.logical_xor(example_two_gram_coverages, two_gram_coverage)
+
+        selected_examples.append(example_index)
+        one_gram_coverage |= matches_any_new_one_grams
+        two_gram_coverage |= matches_any_new_two_grams
+
+        if len(selected_examples) == 16:
+            break
+
+    return (
+        None,
+        tuple(list(zip(*[
+            (
+                parse_command_repr(train_examples[i]["command"]),
+                parse_command_repr(train_examples[i]["target_commands"]),
+                Situation.from_representation(
+                    train_examples[i]["situation"]
+                ).to_dict(),
+            )
+            for i in selected_examples
+        ])))
+    )
+
+
 def generate_random_instructions_find_support_in_any_layout(
     index, command, target_commands, situation, world, vocabulary, payload, options
 ):
@@ -1053,6 +1134,7 @@ def find_supports_by_matching_environment_layout(
 GENERATION_STRATEGIES = {
     "generate_oracle": generate_relevant_supports_oracle,
     "generate_find_matching": generate_instructions_find_support_in_any_layout,
+    "retrieve_similar_state": retrieve_layout_instruction_coverage,
     "random_find_matching": generate_random_instructions_find_support_in_any_layout,
     "find_by_environment_layout": find_supports_by_matching_environment_layout,
     "find_by_matching_same_object_in_same_diff": find_supports_by_matching_object_in_same_diff,
@@ -1346,6 +1428,69 @@ def generate_oracle_find_any_matching_payload(dataset, vocabulary, word2idx, cur
     )
 
 
+def to_count_matrix(word_arrays, word_vocab_size):
+    count_matrix = np.zeros(
+        (len(word_arrays), word_vocab_size)
+    )
+
+    for i, word_array in enumerate(word_arrays):
+        for element in word_array:
+            count_matrix[i, element] += 1
+
+    return count_matrix
+
+
+def to_tfidf(tfidf_transformer, count_matrix):
+    return tfidf_transformer.transform(count_matrix).todense().astype("float32")
+
+
+def retrieve_similar_state_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
+    index, state_scaler, state_pca, train_text_tfidf = global_payload
+    colors = sorted(vocabulary.get_color_adjectives())
+    COLOR2IDX = {c: i + 1 for i, c in enumerate(colors)}
+
+    nouns = sorted(vocabulary.get_nouns())
+    NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
+
+    split_state_vectors = vectorize_all_example_situations(
+        tqdm(dataset["examples"][current_split]),
+        COLOR2IDX,
+        NOUN2IDX
+    )
+
+    pca_split_state_vectors = state_pca.apply(
+        state_scaler.transform(split_state_vectors)
+    ).astype(np.float32)
+    split_word_counts = to_count_matrix([
+        np.array([word2idx[w] for w in e["command"].split(",")])
+        for e in dataset["examples"][current_split]
+    ], len(word2idx))
+    split_text_tfidf = vectorize_example_text(
+        split_word_counts,
+        train_text_tfidf,
+        pca_split_state_vectors.shape[-1]
+    )
+
+    normalized_split_vectors = normalize(np.concatenate([
+        np.array(pca_split_state_vectors),
+        np.array(split_text_tfidf.todense())
+    ], axis=-1), axis=1).astype(np.float32)
+
+    # Once we're at this point, lets release a bunch of stuff we don't need anymore
+    del split_text_tfidf
+    del split_state_vectors
+
+    search_results = np.concatenate([
+        index.search(normalized_split_vectors[b * 128:(b + 1) * 128], 128)[1]
+        for b in trange(
+            (params.limit or normalized_split_vectors.shape[0]) // 128 + 1,
+            desc=f"Finding near neighbours for split {current_split}"
+        )
+    ], axis=0)
+
+    return search_results, dataset["examples"]["train"], word2idx
+
+
 def generate_random_instructions_find_in_any_layout_payload(
     dataset, vocabulary, word2idx, current_split, global_payload
 ):
@@ -1422,6 +1567,136 @@ def find_supports_by_matching_environment_layout_payload(
         sorted_example_indices_by_command,
         dataset["examples"]["train"],
     )
+
+
+def vectorize_state(situation, grid_size, color2dix, noun2idx, encoding_scheme, reascan_boxes):
+    return (parse_sparse_situation(
+        Situation.from_representation(situation).to_dict(), 6, color2dix, noun2idx, "all", False
+    )[:, :-2, None] == np.arange(5, dtype=np.int32)[None, None]).reshape(-1).astype(np.float32)
+
+
+def vectorize_state_star(args):
+    return vectorize_state(*args)
+
+
+def vectorize_all_example_situations(examples, color2idx, noun2idx):
+    with multiprocessing.Pool() as pool:
+        return np.stack(
+            list(
+                pool.map(
+                    vectorize_state_star,
+                    map(
+                        lambda e: (
+                            e["situation"],
+                            6,
+                            color2idx,
+                            noun2idx,
+                            "all",
+                            False
+                        ),
+                        tqdm(examples)
+                    )
+                )
+            )
+        )
+
+
+def vectorize_example_text(word_counts, tfidf, dim_state):
+    unscaled_train_text_tfidf = tfidf.fit_transform(word_counts)
+    # Multiply by d_pca / d_tfidf to ensure that each component has the same
+    # contribution in the vector search
+    unscaled_train_text_tfidf = unscaled_train_text_tfidf * (dim_state / unscaled_train_text_tfidf.shape[-1]) * (1 / 8)
+    return unscaled_train_text_tfidf
+
+
+def retrieve_similar_state_global_payload(dataset, vocabulary, word2idx):
+    colors = sorted(vocabulary.get_color_adjectives())
+    COLOR2IDX = {c: i + 1 for i, c in enumerate(colors)}
+
+    nouns = sorted(vocabulary.get_nouns())
+    NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
+
+    train_state_vectors = vectorize_all_example_situations(
+        tqdm(dataset["examples"]["train"]),
+        COLOR2IDX,
+        NOUN2IDX
+    )
+
+    state_scaler = StandardScaler()
+    state_scaler.fit(np.array(train_state_vectors))
+    scaled_train_state_vectors = state_scaler.transform(train_state_vectors).astype(np.float32)
+
+    # Used for sanity checks below, but here so that everything is together
+    normalized_train_state_vectors = normalize(train_state_vectors, axis=1)
+    normalized_scaled_train_state_vectors = normalize(scaled_train_state_vectors, axis=1)
+
+    state_pca = faiss.PCAMatrix(scaled_train_state_vectors.shape[-1], 320)
+    state_pca.train(scaled_train_state_vectors)
+
+    pca_train_state_vectors = np.array(state_pca.apply(scaled_train_state_vectors))
+
+    # Sanity check, how well do we reconstruct the original layouts
+    state_pca_b = faiss.vector_to_array(state_pca.b)
+    state_pca_A = faiss.vector_to_array(state_pca.A).reshape(state_pca.d_out, state_pca.d_in)
+    reconstruction_error = ((((pca_train_state_vectors - state_pca_b[None]) @ state_pca_A) - scaled_train_state_vectors) ** 2).mean()
+
+    print(f"PCA reconstruction error {reconstruction_error}")
+
+    train_word_counts = to_count_matrix([
+        np.array([word2idx[w] for w in e["command"].split(",")])
+        for e in dataset["examples"]["train"]
+    ], len(word2idx))
+    train_text_tfidf = TfidfTransformer()
+    train_text_tfidf.fit(train_word_counts)
+    unscaled_train_text_tfidf = train_text_tfidf.transform(train_word_counts)
+
+    unscaled_train_text_tfidf = vectorize_example_text(
+        train_word_counts,
+        train_text_tfidf,
+        pca_train_state_vectors.shape[-1]
+    )
+
+    scaled_train_vectors = normalize(np.concatenate([
+        np.array(pca_train_state_vectors),
+        np.array(unscaled_train_text_tfidf.todense())
+    ], axis=-1), axis=1).astype(np.float32)
+
+    # Voronoi index to improve retrieval speed
+    base_index = faiss.IndexFlatIP(scaled_train_vectors.shape[-1])
+    index = faiss.IndexIVFFlat(base_index, scaled_train_vectors.shape[-1], 512)
+    index.train(scaled_train_vectors[np.random.permutation(scaled_train_vectors.shape[0])[:512 * 40]])
+    index.nprobe = 10
+    index.add(scaled_train_vectors)
+
+    # Sanity check, run NN search on some random subset of the vectors and check
+    # similarity of the states
+    search_sample_indices = np.random.permutation(scaled_train_vectors.shape[0])[:512]
+    search_sample_train_vectors = scaled_train_vectors[search_sample_indices]
+    normalized_search_sample_scaled_train_state_vectors = normalized_train_state_vectors[search_sample_indices]
+    sample_retrieved_indices = index.search(
+        search_sample_train_vectors,
+        128
+    )[1][:, 1:]
+
+    sample_mean_similarities = np.stack([
+        (normalized_train_state_vectors[indices] @ vector[:, None]).mean(axis=0)
+        for vector, indices in zip(normalized_search_sample_scaled_train_state_vectors, sample_retrieved_indices)
+    ]).mean()
+    print(f"Mean similarity of retrieved states {sample_mean_similarities}")
+
+    # Compare with baseline where we create an index just from the state vectors
+    baseline_index = faiss.IndexFlatIP(scaled_train_state_vectors.shape[-1])
+    baseline_index.add(normalized_train_state_vectors)
+    baseline_search_sample_train_vectors = normalized_train_state_vectors[search_sample_indices]
+    baseline_sample_retrieved_indices = baseline_index.search(baseline_search_sample_train_vectors, 2)[1][:, 1:]
+
+    baseline_sample_mean_similarities = np.stack([
+        (normalized_train_state_vectors[indices] @ vector[:, None]).mean(axis=0)
+        for vector, indices in zip(baseline_search_sample_train_vectors, baseline_sample_retrieved_indices)
+    ]).mean()
+    print(f"Baseline mean similarity of retrieved states {baseline_sample_mean_similarities}")
+
+    return index, state_scaler, state_pca, train_text_tfidf
 
 def null_global_payload(dataset, vocabulary, word2idx):
     return None
@@ -1529,6 +1804,11 @@ GENERATION_CONFIGS = {
         "generate_mode": "find_by_matching_same_object_in_same_diff",
         "kwargs": {"can_parallel": False, "num_demos": 16},
     },
+    "metalearn_retrieve_state_coverage": {
+        "yield_func": "metalearning",
+        "generate_mode": "retrieve_similar_state",
+        "kwargs": {"can_parallel": False, "num_demos": 16}
+    }
 }
 
 
@@ -1572,6 +1852,7 @@ PREPROCESSING_PAYLOAD_GENERATOR = {
     "baseline": baseline_payload,
     "generate_oracle": generate_oracle_payload,
     "generate_find_matching": generate_oracle_find_any_matching_payload,
+    "retrieve_similar_state": retrieve_similar_state_payload,
     "random_find_matching": generate_oracle_find_any_matching_payload,
     "find_by_environment_layout": find_supports_by_matching_environment_layout_payload,
     "find_by_matching_same_object_in_same_diff": find_supports_by_matching_object_in_same_diff_payload,
