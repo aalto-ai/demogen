@@ -200,7 +200,6 @@ def gandr_like_search(
     index,
     train_dataset,
     tfidf_transformer,
-    scaler,
     state_autoencoder_transformer,
     dataloader,
     sample_n,
