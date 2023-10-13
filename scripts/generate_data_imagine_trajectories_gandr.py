@@ -767,19 +767,16 @@ def main():
     unscaled_vectors = (
         np.concatenate(
             [
-                tfidf_transformer.transform(count_matrix).todense().astype("float32"),
+                to_tfidf(tfidf_transformer, count_matrix, len(WORD2IDX), len(ACTION2IDX)),
                 state_encodings_by_split["train"],
             ],
             axis=-1,
         )
         if state_encodings_by_split is not None
-        else tfidf_transformer.transform(count_matrix).todense().astype("float32")
+        else to_tfidf(tfidf_transformer, count_matrix, len(WORD2IDX), len(ACTION2IDX))
     )
 
-    scaler = StandardScaler()
-    scaler.fit(unscaled_vectors)
-    scaled_vectors = scaler.transform(unscaled_vectors)
-
+    scaled_vectors = normalize(unscaled_vectors, axis=1)
     index.add(scaled_vectors)
 
     dataloader_splits = {
