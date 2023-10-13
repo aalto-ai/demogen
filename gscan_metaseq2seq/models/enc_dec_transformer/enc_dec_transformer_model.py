@@ -171,12 +171,14 @@ class DecoderTransformer(nn.Module):
         embedding = self.norm(embedding + self.pos_encoding(embedding))
         embedding = self.dropout(embedding)
 
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(input_padding_bits.shape[-1]).to(input_padding_bits.device).to(input_padding_bits.dtype)
+
         decoded = self.decoder(
             tgt=embedding.transpose(0, 1),
             memory=encoder_outputs,
             memory_key_padding_mask=encoder_padding,
             tgt_key_padding_mask=input_padding_bits,
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(input_padding_bits.shape[-1]).to(input_padding_bits.device).bool(),
+            tgt_mask=tgt_mask,
         ).transpose(0, 1)
 
         return self.out(decoded)
