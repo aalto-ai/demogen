@@ -465,6 +465,14 @@ MATCH_CONFIGS = {
         "dropout": "0.1",
         "ml_d_limit": "16",
     },
+    "i2g_seq2seq_big_transformer_noshuffle": {
+        "dataset": "i2g_seq2seq_model_score",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "noshuffle",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
     "i2g_seq2seq_big_transformer_img": {
         "dataset": "i2g_seq2seq_model_score",
         "model": "meta_img_encdec_big_transformer",
