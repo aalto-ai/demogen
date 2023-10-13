@@ -751,8 +751,8 @@ def main():
     np.random.seed(args.seed)
     index = (
         faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX) + args.hidden_size)
-        if args.include_states
-        else faiss.IndexFlatL2(len(WORD2IDX) + len(ACTION2IDX))
+        if args.include_state
+        else faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX))
     )
     count_matrix = to_count_matrix(
         [
