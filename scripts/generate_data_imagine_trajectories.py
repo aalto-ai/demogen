@@ -1967,7 +1967,7 @@ def main():
                     decode_len=128,
                     device=args.device,
                     no_query_overlap=args.no_query_overlap,
-                    deduplicate_by_output=args.deduplicate_by_output,
+                    deduplicate_by_output=args.deduplicate_by_outputs,
                     no_sort=args.no_sort
                 ),
                 10000,
