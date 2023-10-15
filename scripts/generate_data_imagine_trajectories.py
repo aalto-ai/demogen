@@ -911,10 +911,29 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
     transformer_model_weights = torch.load(args.load_transformer_model)
-    transformer_model = TransformerLearner(
-        **transformer_model_weights["hyper_parameters"]
+    transformer_model_state_dict = transformer_model_weights["state_dict"] if "state_dict" in transformer_model_weights else transformer_model_weights
+    transformer_model_hparams = transformer_model_weights["hyper_parameters"] if "hyper_parameters" in transformer_model_weights else dict(
+        n_state_components=7,
+        x_categories=len(WORD2IDX),
+        y_categories=len(ACTION2IDX),
+        embed_dim=512,
+        dropout_p=0.0,
+        nlayers=12,
+        nhead=8,
+        pad_word_idx=WORD2IDX['[pad]'],
+        pad_action_idx=ACTION2IDX['[pad]'],
+        sos_action_idx=ACTION2IDX['[sos]'],
+        eos_action_idx=ACTION2IDX['[eos]'],
+        wd=1e-2,
+        lr=1e-4,
+        decay_power=-1,
+        warmup_proportion=0.1,
     )
-    transformer_model.load_state_dict(transformer_model_weights["state_dict"])
+
+    transformer_model = TransformerLearner(
+        **transformer_model_hparams
+    )
+    transformer_model.load_state_dict(transformer_model_state_dict)
 
     transformer_model_trainer = pl.Trainer(
         accelerator="gpu" if torch.cuda.is_available() else None,
