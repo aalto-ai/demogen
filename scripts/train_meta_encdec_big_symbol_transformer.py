@@ -167,7 +167,8 @@ class BigSymbolTransformerLearner(pl.LightningModule):
         metalearn_dropout_p=0.0,
         metalearn_include_permutations=False,
         max_context_size=1024,
-        need_support_states=False
+        need_support_states=False,
+        predict_only_exacts=False
     ):
         super().__init__()
         self.bow_embedding = nn.Sequential(
@@ -571,6 +572,33 @@ class BigSymbolTransformerLearner(pl.LightningModule):
             support_instructions,
             support_targets,
         ) = x
+
+        # If we only need the exacts, we can do much faster parallel prediction
+        if self.hparams.predict_only_exacts:
+            decoder_in = torch.cat(
+                [torch.ones_like(targets)[:, :1] * self.sos_action_idx, targets],
+                dim=-1,
+            )[:, :-1]
+
+            preds = self.forward(
+                (
+                    query_state_img,
+                    support_state_imgs,
+                    query_instruction,
+                    decoder_in,
+                    support_instructions,
+                    support_targets,
+                )
+            )
+
+            actions_mask = targets == self.pad_action_idx
+            argmax_preds = preds.argmax(dim=-1)
+            argmax_preds[actions_mask] = self.pad_action_idx
+            exacts = (argmax_preds == targets).all(dim=-1).to(torch.float)
+
+            return exacts
+
+        # Otherwise we do step-by-step autoregressive prediction
         (
             context_in,
             context_pad,
