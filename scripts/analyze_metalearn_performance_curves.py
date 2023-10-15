@@ -46,7 +46,7 @@ def main():
         ),
         (train_demonstrations, valid_demonstrations_dict),
     ) = load_data_directories(
-        args.data_directory, args.dictionary, limit_load=args.limit_load, only_splits=["h"]
+        args.data_directory, args.dictionary, limit_load=args.limit_load, only_splits=args.only_splits
     )
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
