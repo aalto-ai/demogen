@@ -103,10 +103,20 @@ def main():
         for n in tqdm(args.metalearn_demonstrations_limits)
     ]))
 
-    plot_data = pd.DataFrame(per_n_per_split_exacts, columns=["n", "k", "d"])
+    plot_data = pd.DataFrame(per_n_per_split_exacts, columns=["Number of Demonstrations", "Split", "Exact Match Fraction"])
 
-    sns.lineplot(data=plot_data, x="n", y="d", hue="k")
+    sns.lineplot(data=plot_data, x="Number of Demonstrations", y="Exact Match Fraction", hue="Split")
+    plt.ylim(0, 1.1)
     plt.savefig("demonstrations-efficiency.pdf")
+
+    for split in valid_demonstrations_dict.keys():
+        plt.clf()
+        sns.lineplot(data=plot_data.loc[plot_data["Split"] == split],
+                     x="Number of Demonstrations",
+                     y="Exact Match Fraction",
+                     hue="Split")
+        plt.ylim(0, 1.1)
+        plt.savefig(f"demonstrations-efficiency-{split}.pdf")
 
 
 if __name__ == "__main__":
