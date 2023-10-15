@@ -5,6 +5,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader, Subset
+from tqdm.auto import tqdm
 
 from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.dataset import (
@@ -59,8 +60,8 @@ def main():
     eos_action = ACTION2IDX["[eos]"]
 
     per_n_per_split_exacts = list(itertools.chain.from_iterable([
-        itertools.chain.from_iterable([
-            map(lambda x: (n, k, x), get_metaseq2seq_predictions(
+        list(itertools.chain.from_iterable([
+            list(map(lambda x: (n, k, x), get_metaseq2seq_predictions(
                 args.transformer_checkpoint,
                 PaddingDataset(
                     ReorderSupportsByDistanceDataset(
@@ -94,11 +95,12 @@ def main():
                     (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
                 ),
                 not args.disable_cuda,
-                batch_size=16
-            )[-1].cpu().numpy().astype(np.float32))
-            for k, demonstrations in valid_demonstrations_dict.items()
-        ])
-        for n in args.metalearn_demonstrations_limits
+                batch_size=args.batch_size,
+                only_exacts=True
+            ).cpu().numpy().astype(np.float32)))
+            for k, demonstrations in tqdm(valid_demonstrations_dict.items())
+        ]))
+        for n in tqdm(args.metalearn_demonstrations_limits)
     ]))
 
     plot_data = pd.DataFrame(per_n_per_split_exacts, columns=["n", "k", "d"])
