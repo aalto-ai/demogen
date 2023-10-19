@@ -101,7 +101,23 @@ class PaddingIterableDataset(IterableDataset):
 
     def __next__(self):
         item = next(self.iterable)
-        return recursive_pad_array(item, self.paddings, pad_value=self.pad_values)
+
+        if isinstance(item, np.ndarray):
+            return tuple(
+                [
+                    pad_to(a, p, v)
+                    for a, p, v in zip(
+                        item, [self.paddings] * item.shape[0], self.pad_values
+                    )
+                ]
+            )
+        else:
+            return tuple(
+                [
+                    pad_to(a, p, v)
+                    for a, p, v in zip(item, self.paddings, self.pad_values)
+                ]
+            )
 
 
 class ReshuffleOnIndexZeroDataset(Dataset):
