@@ -815,7 +815,7 @@ def retrieve_layout_instruction_coverage(
     retrievals, train_examples, word2idx = payload
     one_grams = np.array([word2idx[w] for w in command])
     two_grams = np.stack([
-        one_grams[i:i + 1] for i in range(len(command) - 1)
+        one_grams[i:i + 2] for i in range(len(one_grams) - 2)
     ])
 
     one_gram_coverage = np.zeros(len(one_grams)).astype(bool)
@@ -835,7 +835,7 @@ def retrieve_layout_instruction_coverage(
 
         retrieval_one_grams = np.array([word2idx[w] for w in retrieval_command])
         retrieval_two_grams = np.stack([
-            retrieval_one_grams[i:i + 1] for i in range(len(command) - 1)
+            retrieval_one_grams[i:i + 2] for i in range(len(retrieval_one_grams) - 1)
         ])
 
         matches_one_grams = (retrieval_one_grams[:, None] == one_grams[None]).any(axis=0)

@@ -268,7 +268,7 @@ def gandr_like_search(
         ]
         batch_two_grams = [
             np.stack([
-                one_grams[i:i + 1] for i in range(len(one_grams) - 1)
+                one_grams[i:i + 2] for i in range(len(one_grams) - 2)
             ])
             for one_grams in batch_one_grams
         ]
@@ -300,7 +300,7 @@ def gandr_like_search(
 
                 retrieval_one_grams = retrieval_instruction_nopad
                 retrieval_two_grams = np.stack([
-                    retrieval_one_grams[i:i + 1] for i in range(len(retrieval_one_grams) - 1)
+                    retrieval_one_grams[i:i + 2] for i in range(len(retrieval_one_grams) - 2)
                 ])
 
                 matches_one_grams = (retrieval_one_grams[:, None] == batch_one_grams[batch_index][None]).any(axis=0)
