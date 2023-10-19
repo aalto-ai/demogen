@@ -6,10 +6,11 @@ from .padding import pad_to, recursive_pad_array
 
 
 class ReorderSupportsByDistanceDataset(Dataset):
-    def __init__(self, dataset, limit):
+    def __init__(self, dataset, limit, no_reorder=False):
         super().__init__()
         self.dataset = dataset
         self.limit = limit
+        self.no_reorder = no_reorder
 
     def __len__(self):
         return len(self.dataset)
@@ -25,7 +26,10 @@ class ReorderSupportsByDistanceDataset(Dataset):
             similarity_logit,
         ) = self.dataset[idx]
 
-        order = (-np.array(similarity_logit)).argsort()[: self.limit]
+        if self.no_reorder:
+            order = np.arange(similarity_logit.shape[0])[: self.limit]
+        else:
+            order = (-np.array(similarity_logit)).argsort()[: self.limit]
 
         return (
             query_state,
