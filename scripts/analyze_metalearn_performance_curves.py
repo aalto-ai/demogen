@@ -35,8 +35,8 @@ def main():
     parser.add_argument("--pad-instructions-to", type=int, default=8)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
-    parser.add_argument("--metalearn-demonstrations-limits", nargs="+", type=int, default=[4, 8, 12, 16])
-    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--metalearn-demonstrations-limits", nargs="+", type=int, default=[2, 4, 8, 12, 16])
+    parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--only-splits", type=str, nargs="*")
     args = parser.parse_args()
 
