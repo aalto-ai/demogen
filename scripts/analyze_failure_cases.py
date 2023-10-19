@@ -114,10 +114,24 @@ def make_target_commands_frequency_table(examples, actions):
     return frequency_counts_df
 
 
-def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True, batch_size=64):
+def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True, batch_size=64, only_exacts=True, validate_first=True):
     module = BigSymbolTransformerLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
-    trainer = pl.Trainer(accelerator="gpu" if use_cuda else None, devices=1, precision="16-mixed")
-    preds = trainer.predict(module, DataLoader(dataset, batch_size=64))
+    module.hparams.predict_only_exacts = only_exacts
+    trainer = pl.Trainer(
+        accelerator="gpu" if use_cuda else None,
+        devices=1,
+        precision="16-mixed",
+        logger=False
+    )
+    if validate_first:
+        trainer.validate(
+            module,
+            DataLoader(Subset(dataset, torch.arange(min(len(dataset), 1024))), batch_size=64),
+        )
+    preds = trainer.predict(module, DataLoader(dataset, batch_size=batch_size))
+
+    if only_exacts:
+        return torch.cat(preds)
 
     predicted_targets_stacked, logits_stacked, exacts_stacked, actual_targets_stacked = list(
         map(torch.cat, zip(*preds))
