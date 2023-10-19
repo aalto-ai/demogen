@@ -1,4 +1,5 @@
 import argparse
+import os
 import numpy as np
 import itertools
 import pandas as pd
@@ -27,6 +28,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--data-directory", type=str, required=True)
+    parser.add_argument("--output-directory", type=str, required=True)
     parser.add_argument("--transformer-checkpoint", type=str, required=True)
     parser.add_argument("--disable-cuda", action="store_true")
     parser.add_argument("--limit-load", type=int, default=None)
@@ -37,6 +39,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--only-splits", type=str, nargs="*")
     args = parser.parse_args()
+
+    os.makedirs(args.output_directory, exist_ok=True)
 
     (
         (
@@ -107,7 +111,7 @@ def main():
 
     sns.lineplot(data=plot_data, x="Number of Demonstrations", y="Exact Match Fraction", hue="Split")
     plt.ylim(0, 1.1)
-    plt.savefig("demonstrations-efficiency.pdf")
+    plt.savefig(os.path.join(args.output_directory, "demonstrations-efficiency.pdf"))
 
     for split in valid_demonstrations_dict.keys():
         plt.clf()
@@ -116,8 +120,9 @@ def main():
                      y="Exact Match Fraction",
                      hue="Split")
         plt.ylim(0, 1.1)
-        plt.savefig(f"demonstrations-efficiency-{split}.pdf")
+        plt.savefig(os.path.join(args.output_directory, f"demonstrations-efficiency-{split}.pdf"))
 
+    plot_data.to_csv(os.path.join(args.output_directory, "results.csv"))
 
 if __name__ == "__main__":
     main()
