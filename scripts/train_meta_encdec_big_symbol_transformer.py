@@ -1059,6 +1059,7 @@ def main():
                 (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
             ),
             pin_memory=True,
+            batch_size=max([args.train_batch_size, args.valid_batch_size]),
         )
         for demonstrations in meta_valid_demonstrations_dict.values()
     ]
