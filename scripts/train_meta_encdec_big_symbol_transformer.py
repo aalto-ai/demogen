@@ -833,6 +833,7 @@ def main():
     parser.add_argument("--patch-size", type=int, default=12)
     parser.add_argument("--max-context-size", type=int, default=1024)
     parser.add_argument("--need-support-states", action="store_true")
+    parser.add_argument("--no-reorder", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -912,6 +913,7 @@ def main():
                             ),
                         ),
                         args.metalearn_demonstrations_limit,
+                        no_reorder=args.no_reorder
                     ),
                     args.shuffle_demonstrations,
                 ),
@@ -1044,6 +1046,7 @@ def main():
                         ),
                     ),
                     args.metalearn_demonstrations_limit,
+                    no_reorder=args.no_reorder
                 ),
                 (
                     (args.pad_state_to, None),
