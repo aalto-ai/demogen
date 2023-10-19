@@ -473,6 +473,14 @@ MATCH_CONFIGS = {
         "dropout": "0.1",
         "ml_d_limit": "16",
     },
+    "i2g_seq2seq_big_transformer_unscored": {
+        "dataset": "i2g_seq2seq_unscored",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+        "tag": "no_reorder"
+    },
     "i2g_seq2seq_big_transformer_img": {
         "dataset": "i2g_seq2seq_model_score",
         "model": "meta_img_encdec_big_transformer",
