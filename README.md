@@ -34,9 +34,9 @@ Invoke it like this:
 There are a few different `--generate-mode` options:
 
  - `baseline`: No-metalearning, to be used with `train_transformer.py` and `train_vilbert.py`
- - `metalearn_allow_any`: Metalearning with oracle instructions and actions, same as **Expert Heuristic** in the paper.
- - `metalearn_random_instructions_same_layout_allow_any`: Metalearning with oracle instructions and actions, but all valid instructions are generated and then selected randomly to form the supports. Same as **Expert Random** in the paper.
- - `metalearn_find_matching_instruction_demos_allow_any`: Meta-learning with heuristic generated instructions and actions for a query, but each support input is solved in some state found in the training data for that input, same as **Expert Other states**
+ - `metalearn_allow_any`: Metalearning with oracle instructions and actions, same as **Heuristic** in the paper.
+ - `metalearn_random_instructions_same_layout_allow_any`: Metalearning with oracle instructions and actions, but all valid instructions are generated and then selected randomly to form the supports. Same as **Random Instructions** in the paper.
+ - `metalearn_find_matching_instruction_demos_allow_any`: Meta-learning with heuristic generated instructions and actions for a query, but each support input is solved in some state found in the training data for that input, same as **Other States**
 
 ## Generating and Retrieving (GandR)
 
