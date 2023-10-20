@@ -64,6 +64,17 @@ good baseline. To include the state information, use `--include-state`.
 Once the data generation is complete, the generated examples
 and their supports with GandR goes into `/path/to/gandr/output`.
 
+## Retrieving with Coverage (CovR)
+
+This is available as a mode in the `generate_data.py` script.
+
+    python scripts/generate_data.py
+           --gscan-dataset path/to/compositional_splits/dataset.txt
+           --output-directory data/metalearn
+           --generate-mode retrieve_similar_state
+
+This will generate the inner-product search index for finding similar examples automatically.
+
 ## Learning to Generate Data (DemoGen)
 
 To generate data similar to DemoGen, there are a few steps to be follows.
