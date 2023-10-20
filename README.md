@@ -130,6 +130,11 @@ To train the meta-learning models, use something like:
     --enable-progress
 
 
+The scripts `meta_encdec_big_transformer.py` and `train_meta_seq2seq_transformer.py` are from older versions
+of this work. They are left in the repository for historical interest purposes, but aren't used to
+produce the final results.
+
+
 To train the baseline models, use something like:
 
     python scripts/train_transformer.py \
