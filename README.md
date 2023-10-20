@@ -236,7 +236,7 @@ then you can run the `analyze_results.py` script on your `logs` dir with `--logs
 logs, exclude the worst seeds and generate the tables.
 
     python scripts/analyze_results.py \
-    --logs-dir ~/lumi/gscan_metaseq2seq_submission/logs --filter-expression ".*(meta_gscan|transformer_.*encoder_only_decode_actions).*" \
+    --logs-dir /path/to/logs --filter-expression ".*(meta_gscan|transformer_.*encoder_only_decode_actions).*" \
     --dataset gscan \
     --config-columns baseline_transformer gandr i2g_seq2seq_big_transformer \
     --column-labels "Transformer" "GandR" "DemoGen" \
