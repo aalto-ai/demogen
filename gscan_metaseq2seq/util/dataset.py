@@ -27,7 +27,7 @@ class ReorderSupportsByDistanceDataset(Dataset):
         ) = self.dataset[idx]
 
         if self.no_reorder:
-            order = np.arange(similarity_logit.shape[0])[: self.limit]
+            order = np.arange(len(x_supports))[: self.limit]
         else:
             order = (-np.array(similarity_logit)).argsort()[: self.limit]
 
