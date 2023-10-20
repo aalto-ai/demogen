@@ -479,7 +479,7 @@ MATCH_CONFIGS = {
         "headline": "meta_gscan",
         "dropout": "0.1",
         "ml_d_limit": "16",
-        "tag": "no_reorder"
+        "tag": "no_reorder_flag"
     },
     "i2g_seq2seq_big_transformer_img": {
         "dataset": "i2g_seq2seq_model_score",
