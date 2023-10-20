@@ -253,10 +253,42 @@ of the generated demonstrations), you can run the following script:
     --data-directory /path/to/data \
     --splits a b c d e f g h
 
-
 This will spend a while loading the datasets and performing
 the analysis, then print the one table per gSCAN split to
 the stdout.
+
+To reproduce the number of matches up to a given permutation
+discussed in Section 3.2, you can use the following script
+
+    python scripts/analyze_pattern_matching_supports.py \
+    --dictionary /path/to/dictionary.pb \
+    --valid-demonstrations-directory /path/to/data/directory
+
+To reproduce Figure 3 (DemoGen performance vs number of examples),
+you can run the following script
+
+    python scripts/analyze_metalearn_performance_curves \
+    --dictionary /path/to/dictionary.pb \
+    --data-directory /path/to/data/directory
+    --transformer-checkpoint /path/to/demogen/checkpoint.ckpt
+
+To reproduce Table 6 (DemoGen performance vs omitting certain examples),
+you can run the following script
+
+    python scripts/analyze_metalearn_demos_effect \
+    --dictionary /path/to/dictionary.pb \
+    --data-directory /path/to/data/directory
+    --transformer-checkpoint /path/to/demogen/checkpoint.ckpt
+
+# Plotting the nearest neighbours
+
+To plot the nearest neighbours, use the following:
+
+    python scripts/plot_nearest_neighbour_similarities.py \
+    --gscan-dataset /path/to/gscan/dataset.txt \
+    --output-directory output/directory
+
+The result will be plotted in `output/directory/decay_nn.pdf`
 
 # Analyzing the correctness of generated demonstrations
 
