@@ -238,8 +238,8 @@ logs, exclude the worst seeds and generate the tables.
     python scripts/analyze_results.py \
     --logs-dir /path/to/logs --filter-expression ".*(meta_gscan|transformer_.*encoder_only_decode_actions).*" \
     --dataset gscan \
-    --config-columns baseline_transformer gandr i2g_seq2seq_big_transformer \
-    --column-labels "Transformer" "GandR" "DemoGen" \
+    --config-columns baseline_transformer coverage_retreival gandr_coverage i2g_seq2seq_big_transformer \
+    --column-labels "Transformer" "CovR" "GandR" "DemoGen" \
     --drop-bad-seeds 0 \
     --result-smoothing 10
 
@@ -250,7 +250,7 @@ of the generated demonstrations), you can run the following script:
 
     python scripts/analyze_generated_datasets.py \
     --datasets i2g_seq2seq_model_score gandr metalearn_find_matching_instruction_demos_allow_any metalearn_allow_any metalearn_random_instructions_same_layout_allow_any  \
-    --data-directory /l/data/gscan/acl \
+    --data-directory /path/to/data \
     --splits a b c d e f g h
 
 
