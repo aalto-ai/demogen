@@ -149,6 +149,33 @@ To train the baseline models, use something like:
     --version 100 \
     --enable-progress
 
+    # RoFormer
+    python scripts/train_xformer.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
+    # Universal Transformer
+    python scripts/train_universal_transformer.py \
+    --train-demonstrations data/baseline/train.pb \
+    --valid-demonstrations data/baseline/valid \
+    --dictionary data/baseline/dictionary.pb \
+    --seed 0
+    --train-batch-size 32 \
+    --valid-batch-size 32 \
+    --batch-size-mult 4 \
+    --iterations 100 \
+    --version 100 \
+    --enable-progress
+
+
 You might want to use a large `--batch-size-mult` to get large effective batch sizes like in the paper.
 
 Logs (both tensorboard and csv logs) are automatic and go to `logs/gscan_s_{seed}_m_{model_name}_it_{iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{tag}_drop_{dropout}/{model_name}_l_{layers}_h_{heads}_d_{embed_dim}/{dataset_name}/{seed}/lightning_logs/version_{version}`
