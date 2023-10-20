@@ -6,7 +6,7 @@ This zip file contains the code used to generate the results in the main paper.
 
 # Dependencies
 
- - pytorch, pytorch-lightning, numpy.
+ - pytorch, pytorch-lightning, numpy. pandas, faiss
  - You can find exact requirements in `requirements.txt`
 
 # Setup
