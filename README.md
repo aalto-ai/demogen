@@ -365,6 +365,10 @@ A copy of the paraphrqased gSCAN dataset we generated can be found [here](https:
 
 # Analyzing the paraphrased setences
 
+To compute the Zipf $\alpha$, calculate the linguistic diversity and
+calculate the number of unique parses of the paraphrased dataset
+you can use the following:
+
    python scripts/analyze_paraphrased_instructions.py \
    --original-dataset-path /path/to/original/gscan/dataset.txt \
    --paraphrased-dataset-path paraphrased-dataset.txt \
