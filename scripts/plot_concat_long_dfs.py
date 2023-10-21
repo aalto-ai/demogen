@@ -6,6 +6,16 @@ import os
 from tqdm.auto import tqdm
 
 
+def concat_seed(df, i):
+    df['seed'] = i
+    return df
+
+
+def print_through(path):
+    print(path)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csvs", nargs="+", type=str)
@@ -13,8 +23,8 @@ def main():
     args = parser.parse_args()
 
     df = pd.concat([
-        pd.read_csv(csv)
-        for csv in tqdm(args.csvs)
+        concat_seed(pd.read_csv(print_through(csv)), i)
+        for i, csv in enumerate(tqdm(args.csvs))
     ]).reset_index(drop=True).drop("Unnamed: 0", axis=1)
 
     sns.lineplot(data=df, x=df.columns[0], y=df.columns[2], hue=df.columns[1], errorbar="ci")
