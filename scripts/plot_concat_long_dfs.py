@@ -27,7 +27,14 @@ def main():
         for i, csv in enumerate(tqdm(args.csvs))
     ]).reset_index(drop=True).drop("Unnamed: 0", axis=1)
 
-    sns.lineplot(data=df, x=df.columns[0], y=df.columns[2], hue=df.columns[1], errorbar="ci")
+    group_df = df.groupby(['seed', df.columns[0], df.columns[1]])
+    df = group_df.agg({
+        df.columns[0]: "first",
+        df.columns[1]: "first",
+        df.columns[2]: "mean"
+    }).reset_index(drop=True)
+
+    sns.lineplot(data=df, x=df.columns[0], y=df.columns[2], hue=df.columns[1], errorbar="sd")
     plt.ylim(0, 1.1)
     plt.savefig(args.output_file)
 
