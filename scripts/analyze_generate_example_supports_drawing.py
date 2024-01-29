@@ -237,7 +237,7 @@ def plot_at_index(
             +
             " ({:0.2f}) ".format(np.exp(sorted_instrs[0][-1]))
             +
-            "}};"
+            "}};\n"
         ) + (
             "\n".join(
                 [
