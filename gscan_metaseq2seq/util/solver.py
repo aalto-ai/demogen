@@ -201,8 +201,8 @@ def state_to_situation(
             if target_object is None
             else PositionedObject(
                 object=Object(
-                    shape=nouns[target_object[2] - 1],
-                    color=colors[target_object[1] - 1],
+                    shape=nouns[target_object[2]],
+                    color=colors[target_object[1]],
                     size=target_object[0],
                 ),
                 position=Position(target_object[-1], target_object[-2]),
@@ -211,7 +211,7 @@ def state_to_situation(
             placed_objects=[
                 PositionedObject(
                     object=Object(
-                        shape=nouns[o[2] - 1], color=colors[o[1] - 1], size=o[0]
+                        shape=nouns[o[2]], color=colors[o[1]], size=o[0]
                     ),
                     position=Position(o[-1], o[-2]),
                     vector=[],
