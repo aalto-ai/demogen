@@ -682,7 +682,7 @@ def main():
 
     transformer_validation_datasets = [
         Subset(
-            PaddingDataset(data, (8, 128, (36, 7)), (pad_word, pad_action, 0)),
+            PaddingDataset(data, (32, 128, (36, 7)), (pad_word, pad_action, 0)),
             np.random.permutation(512),
         )
         for data in valid_demonstrations_dict.values()
@@ -692,7 +692,7 @@ def main():
         args.load_transformer_model,
         PaddingDataset(
             train_demonstrations,
-            (8, 128, (36, 7)),
+            (32, 128, (36, 7)),
             (
                 pad_word,
                 pad_action,
@@ -834,7 +834,7 @@ def main():
                         ),
                     ),
                 ),
-                (8, 128, (36, 7)),
+                (32, 128, (36, 7)),
                 (pad_word, pad_action, 0),
             ),
             batch_size=args.batch_size,
