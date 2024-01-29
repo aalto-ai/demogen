@@ -937,7 +937,7 @@ def main():
     parser.add_argument("--dataset-name", type=str, default="gscan")
     parser.add_argument("--tag", type=str, default="none")
     parser.add_argument("--metalearn-dropout-p", type=float, default=0.0)
-    parser.add_argument("--metalearn-demonstrations-limit", type=int, default=6)
+    parser.add_argument("--metalearn-demonstrations-limit", type=int, default=16)
     parser.add_argument("--metalearn-include-permutations", action="store_true")
     parser.add_argument("--pad-instructions-to", type=int, default=8)
     parser.add_argument("--pad-actions-to", type=int, default=128)
