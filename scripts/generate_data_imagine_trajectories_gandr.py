@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import os
+from collections import defaultdict
 import math
 import sys
 import pickle
@@ -32,6 +33,11 @@ from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model impo
     TransformerLearner,
     autoregressive_model_unroll_predictions,
 )
+from generate_data import (
+    compute_sorted_set_bsr,
+    compute_sorted_bsr
+)
+from sentence_transformers import SentenceTransformer
 
 from tqdm.auto import tqdm
 
@@ -149,25 +155,20 @@ def train_transformer(
     return model
 
 
-def to_count_matrix(action_word_arrays, word_vocab_size, action_vocab_size):
+def to_count_matrix(action_word_arrays, action_vocab_size):
     count_matrix = np.zeros(
-        (len(action_word_arrays), word_vocab_size + action_vocab_size)
+        (len(action_word_arrays), action_vocab_size)
     )
 
-    for i, (word_array, action_array) in enumerate(action_word_arrays):
-        for element in word_array:
-            count_matrix[i, element] += 1
+    for i, action_array in enumerate(action_word_arrays):
         for element in action_array:
-            count_matrix[i, element + word_vocab_size] += 1
+            count_matrix[i, element] += 1
 
     return count_matrix
 
 
-def to_tfidf(tfidf_transformer, count_matrix, word_vocab_size, action_vocab_size):
+def to_tfidf(tfidf_transformer, count_matrix):
     tfidf_array = np.array(tfidf_transformer.transform(count_matrix).todense()).astype("float32")
-
-    # Balance the array by premultiplying the word part by action_vocab_size/word_vocab_size
-    tfidf_array[:, :word_vocab_size] *= action_vocab_size / word_vocab_size
 
     return tfidf_array
 
@@ -195,17 +196,38 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
     return decoded, logits
 
 
+def balance_dims(first, *rest, factors=None):
+    first_abs_sum = np.linalg.norm(first, axis=-1)
+    rest_abs_sums = [
+        np.linalg.norm(r, axis=-1) for r in rest
+    ]
+    rest_abs_ratios = [
+        first_abs_sum / rs for rs in rest_abs_sums
+    ]
+
+    return np.concatenate([
+        first
+    ] + [
+        r * ra[..., None] * factor
+        for r, ra, factor in zip(rest, rest_abs_ratios, factors or ([1] * len(rest_abs_ratios)))
+    ], axis=-1)
+
+
 def gandr_like_search(
     transformer_prediction_model,
     index,
     train_dataset,
+    train_sentences_unique_list_lookup,
+    train_sentences_unique_all_token_encodings,
     tfidf_transformer,
     state_autoencoder_transformer,
+    sentence_transformer,
     dataloader,
     sample_n,
     decode_len,
     pad_word_idx,
     pad_action_idx,
+    IDX2WORD,
     word_vocab_size,
     action_vocab_size,
     device="cpu",
@@ -236,24 +258,47 @@ def gandr_like_search(
             instruction,
             decode_len,
         )
-
-        tfidf_vectors = to_tfidf(
+        instruction_sentences = [
+            " ".join([IDX2WORD[w] for w in inst[inst != pad_word_idx].cpu().numpy()])
+            for inst in instruction
+        ]
+        sentence_vectors = sentence_transformer.encode(
+            instruction_sentences,
+            normalize_embeddings=True
+        )
+        token_encodings = list(map(lambda x: x.cpu().numpy(), sentence_transformer.encode(
+            instruction_sentences,
+            output_value='token_embeddings',
+            normalize_embeddings=True
+        )))
+        token_encodings = [
+            v / (np.linalg.norm(v, axis=-1)[:, None] + 1e-7)
+            for v in token_encodings
+        ]
+        count_matrix = to_count_matrix(
+            [
+                t[t != pad_action_idx]
+                for t in predicted_targets
+            ],
+            action_vocab_size,
+        )
+        actions_count_matrix_tfidf = to_tfidf(
             tfidf_transformer,
-            to_count_matrix(
-                [
-                    (i[i != pad_word_idx], t[t != pad_action_idx])
-                    for i, t in zip(instruction, predicted_targets)
-                ],
-                word_vocab_size,
-                action_vocab_size,
-            ),
-            word_vocab_size,
-            action_vocab_size
+            count_matrix
+        )
+        non_action_component = (
+            np.concatenate([
+                sentence_vectors,
+                state_encodings,
+            ], dim=-1) if state_encodings is not None else
+            sentence_vectors
         )
         unscaled_vectors = (
-            np.concatenate([tfidf_vectors, state_encodings], axis=-1)
-            if state_encodings is not None
-            else tfidf_vectors
+            balance_dims(
+                actions_count_matrix_tfidf,
+                non_action_component,
+                factors=[(1 / 2)]
+            )
         )
         scaled_vectors = normalize(unscaled_vectors, axis=1)
 
@@ -262,79 +307,20 @@ def gandr_like_search(
             sample_n,
         )
 
-        batch_one_grams = [
-            i[i != pad_word_idx].numpy()
-            for i in instruction
-        ]
-        batch_two_grams = [
-            np.stack([
-                one_grams[i:i + 2] for i in range(len(one_grams) - 2)
-            ])
-            for one_grams in batch_one_grams
-        ]
-        batch_one_gram_coverage = [
-            np.zeros(len(one_grams)).astype(bool)
-            for one_grams in batch_one_grams
-        ]
-        batch_two_gram_coverage = [
-            np.zeros(len(two_grams)).astype(bool)
-            for two_grams in batch_two_grams
-        ]
-        coverages_per_batch_indices = [
-            [] for i in instruction
-        ]
-        selected_examples_per_batch_indices = [
-            [] for i in instruction
-        ]
-
-        for batch_index, retrieved_example_indices in enumerate(near_neighbour_indices_batch):
-            for retrieval_index, example_index in enumerate(retrieved_example_indices):
-                query_instruction_nopad = instruction[batch_index][instruction[batch_index] != pad_word_idx].numpy()
-                retrieval_instruction_nopad = train_dataset[example_index][train_dataset[example_index] != pad_word_idx]
-                if (
-                    (query_instruction_nopad.shape ==
-                     retrieval_instruction_nopad.shape) and
-                    (query_instruction_nopad == retrieval_instruction_nopad).all()
-                ):
-                    continue
-
-                retrieval_one_grams = retrieval_instruction_nopad
-                retrieval_two_grams = np.stack([
-                    retrieval_one_grams[i:i + 2] for i in range(len(retrieval_one_grams) - 2)
-                ])
-
-                matches_one_grams = (retrieval_one_grams[:, None] == batch_one_grams[batch_index][None]).any(axis=0)
-                matches_two_grams = (retrieval_two_grams[:, None] == batch_two_grams[batch_index][None]).all(axis=-1).any(axis=0)
-
-                coverages_per_batch_indices[batch_index].append(
-                    (example_index, retrieval_index, matches_one_grams, matches_two_grams)
-                )
-
-            # Sort by two-gram coverage, one-gram coverage and retrieval index (closeness)
-            sorted_coverages = sorted(
-                coverages_per_batch_indices[batch_index],
-                key=lambda x: (-x[3].sum(), -x[2].sum(), x[1])
+        sorted_near_neighbour_indices_by_coverage = [
+            compute_sorted_bsr(
+                query_token_embeds,
+                [
+                    train_sentences_unique_all_token_encodings[x]
+                    for x in train_sentences_unique_list_lookup[query_near_neighbour_indices]
+                ],
+                16
+            )[:16]
+            for query_token_embeds, query_near_neighbour_indices in zip(
+                token_encodings,
+                near_neighbour_indices_batch
             )
-
-            for example_index, retrieval_index, example_one_gram_coverages, example_two_gram_coverages in sorted_coverages:
-                matches_any_new_one_grams = np.logical_xor(example_one_gram_coverages, batch_one_gram_coverage[batch_index])
-                matches_any_new_two_grams = np.logical_xor(example_two_gram_coverages, batch_two_gram_coverage[batch_index])
-
-                if not (matches_any_new_one_grams.any() or matches_any_new_two_grams.any()):
-                    continue
-
-                batch_one_gram_coverage[batch_index] |= matches_any_new_one_grams
-                batch_two_gram_coverage[batch_index] |= matches_any_new_two_grams
-
-                selected_examples_per_batch_indices[batch_index].append(retrieval_index)
-
-                if len(selected_examples_per_batch_indices[batch_index]) >= 16:
-                    break
-
-            selected_examples_per_batch_indices[batch_index].extend(list(
-                filter(lambda x: x not in selected_examples_per_batch_indices[batch_index],
-                       map(lambda x: x[1], sorted_coverages))
-            )[:max(0, 16 - len(selected_examples_per_batch_indices[batch_index]))])
+        ]
 
         near_neighbour_supports_batch = [
             (
@@ -344,11 +330,24 @@ def gandr_like_search(
             for near_neighbour_indices, near_neighbour_distances, retrieval_indices in zip(
                 near_neighbour_indices_batch,
                 near_neighbour_distances_batch,
-                selected_examples_per_batch_indices
+                sorted_near_neighbour_indices_by_coverage
             )
         ]
 
         for i, (supports, distances) in enumerate(near_neighbour_supports_batch):
+            if False:
+                print("Command:", " ".join([
+                    IDX2WORD[w] for w in instruction[i].numpy()
+                    if w != pad_word_idx
+                ]))
+                print("Supports:", "\n".join([
+                    (
+                        " ".join([IDX2WORD[w] for w in si if w != pad_word_idx]) +
+                        " " +
+                        " ".join([str(w) for w in si if w != pad_action_idx])
+                    )
+                    for si, sa in zip([s[-3] for s in supports], [s[-2] for s in supports])
+                ]))
             yield (
                 instruction[i].numpy(),
                 targets[i].numpy(),
@@ -598,6 +597,10 @@ def generate_state_encodings(
     return encoded_states
 
 
+def premultiply_balance_dimensions(vectors, dim_other):
+    return vectors * (dim_other / vectors.shape[-1]) * (1 / 8)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--training-data", type=str, required=True)
@@ -621,7 +624,10 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=128)
+    parser.add_argument("--num-layers", type=int, default=8)
+    parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--include-state", action="store_true")
     args = parser.parse_args()
 
@@ -637,7 +643,7 @@ def main():
         args.training_data,
         args.dictionary,
         only_splits=list(set(["train"]) | set(args.only_splits)) if args.only_splits else None,
-        limit_load=args.limit
+        limit_load=args.limit_load
     )
 
     pad_action = ACTION2IDX["[pad]"]
@@ -747,33 +753,68 @@ def main():
         if args.save_state_encodings:
             save_state_encodings(state_encodings_by_split, args.save_state_encodings)
 
+    # Make a lookup table of train sentences to indices - this will allow
+    # us to just encode the unique sentences and save some memory.
+    train_sentences_index_dict = defaultdict(list)
+    for i, example in enumerate(tqdm(train_demonstrations)):
+        train_sentences_index_dict[" ".join([IDX2WORD[w] for w in example[0] if w != pad_word])].append(i)
+    train_sentences_unique = sorted(list(train_sentences_index_dict.keys()))
+    train_sentences_to_unique_index = {
+        t: i for i, t in enumerate(train_sentences_unique)
+    }
+    train_sentences_unique_list_lookup = np.zeros(len(train_demonstrations), dtype=np.int32)
+    for t, indices in train_sentences_index_dict.items():
+        for i in indices:
+            train_sentences_unique_list_lookup[i] = train_sentences_to_unique_index[t]
+
+    model = SentenceTransformer('all-mpnet-base-v2')
+    train_sentences_unique_all_token_encodings = list(map(lambda x: x.cpu().numpy(), model.encode(
+        train_sentences_unique,
+        output_value='token_embeddings',
+        normalize_embeddings=True
+    )))
+    train_sentences_unique_all_token_encodings = [
+        v / (np.linalg.norm(v, axis=-1)[:, None] + 1e-7)
+        for v in train_sentences_unique_all_token_encodings
+    ]
+    train_sentences_unique_all_sentence_encodings = model.encode(
+        train_sentences_unique,
+        normalize_embeddings=True
+    )
+
     # Make an index from the training data
     np.random.seed(args.seed)
     index = (
-        faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX) + args.hidden_size)
+        faiss.IndexFlatIP(len(train_sentences_unique_all_sentence_encodings[0]) + len(ACTION2IDX) + args.hidden_size)
         if args.include_state
-        else faiss.IndexFlatIP(len(WORD2IDX) + len(ACTION2IDX))
+        else faiss.IndexFlatIP(len(train_sentences_unique_all_sentence_encodings[0]) + len(ACTION2IDX))
     )
     count_matrix = to_count_matrix(
         [
-            (instruction, actions)
+            actions
             for instruction, actions, state in train_demonstrations
         ],
-        len(WORD2IDX),
         len(ACTION2IDX),
     )
     tfidf_transformer = TfidfTransformer()
     tfidf_transformer.fit(count_matrix)
+    actions_count_matrix_tfidf = to_tfidf(
+        tfidf_transformer,
+        count_matrix
+    )
+    non_action_component = (
+        np.concatenate([
+            train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup],
+            state_encodings_by_split["train"],
+        ], dim=-1) if state_encodings_by_split is not None else
+        train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup]
+    )
     unscaled_vectors = (
-        np.concatenate(
-            [
-                to_tfidf(tfidf_transformer, count_matrix, len(WORD2IDX), len(ACTION2IDX)),
-                state_encodings_by_split["train"],
-            ],
-            axis=-1,
+        balance_dims(
+            actions_count_matrix_tfidf,
+            non_action_component,
+            factors=[(1 / 2)]
         )
-        if state_encodings_by_split is not None
-        else to_tfidf(tfidf_transformer, count_matrix, len(WORD2IDX), len(ACTION2IDX))
     )
 
     scaled_vectors = normalize(unscaled_vectors, axis=1)
@@ -821,13 +862,17 @@ def main():
                     transformer_model,
                     index,
                     train_demonstrations,
+                    train_sentences_unique_list_lookup,
+                    train_sentences_unique_all_token_encodings,
                     tfidf_transformer,
                     state_autoencoder_transformer,
+                    model,
                     tqdm(dataloader),
                     256,
                     decode_len=128,
                     pad_word_idx=pad_word,
                     pad_action_idx=pad_action,
+                    IDX2WORD=IDX2WORD,
                     word_vocab_size=len(WORD2IDX),
                     action_vocab_size=len(ACTION2IDX),
                     device=args.device,

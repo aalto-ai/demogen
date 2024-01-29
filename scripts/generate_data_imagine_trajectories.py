@@ -36,6 +36,7 @@ from gscan_metaseq2seq.models.instruction_gen.masked_language_model import (
 from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
     train_clip,
 )
+from generate_data import compute_sorted_bsr
 
 from tqdm.auto import tqdm, trange
 
@@ -187,6 +188,63 @@ def make_gscan_seq2seq_ranking_closure(model, pad_word_idx, sos_word_idx, device
             )
 
             return scores
+
+    return compute_scores
+
+
+def make_gscan_max_bsr_ranking_closure(model, pad_word_idx, sos_word_idx, device="cpu"):
+    model.eval()
+
+    def compute_scores(instructions, inputs):
+        states, query_instructions = inputs
+
+        states = states.to(device)
+        instructions = instructions.to(device)
+
+        instruction_pad = instructions == pad_word_idx
+        query_instruction_pad = query_instructions == pad_word_idx
+        state_pad = (states == 0).all(dim=-1).bool()
+
+        with torch.inference_mode(), torch.autocast(
+            device_type=device, dtype=torch.float16, enabled=True
+        ):
+            # Encode the query instructions and state
+            # using the model's encoder and get the representations
+            query_encodings = model.encode(
+                query_instructions,
+                states,
+                torch.cat([query_instruction_pad, state_pad], dim=-1),
+                query_instruction_pad
+            )
+            select_query_instructions_mask = torch.cat([
+                torch.ones_like(query_instruction_pad),
+                torch.zeros_like(state_pad)
+            ], dim=-1)
+            query_encodings[~select_query_instructions_mask] = 0
+            query_encodings = F.normalize(query_encodings, dim=-1)
+            instruction_encodings = model.encode(
+                instructions,
+                states,
+                torch.cat([instruction_pad, state_pad], dim=-1),
+                instruction_pad
+            )
+            select_instructions_mask = torch.cat([
+                torch.ones_like(instruction_pad),
+                torch.zeros_like(state_pad)
+            ], dim=-1)
+            instruction_encodings[select_instructions_mask] = 0
+            instruction_encodings = F.normalize(instruction_encodings, dim=-1)
+
+        # Now that we have them, compute the max-bsr ordering. This is descending-order
+        indices_descending_bsr = np.array(compute_sorted_bsr(
+            query_encodings.cpu().numpy(),
+            instruction_encodings.cpu().numpy(),
+            target_limit=instruction_encodings.shape[0]
+        ))
+        scores = np.ones(instruction_encodings.shape[0]) * float('-inf')
+        scores[indices_descending_bsr] = np.arange(indices_descending_bsr.shape[0])[::-1]
+
+        return torch.tensor(scores)
 
     return compute_scores
 
@@ -856,6 +914,14 @@ class SampleSentencesByWordWeights(IterableDataset):
         ]
 
 
+
+GSCAN_RANKING_FUNCS = {
+    "clip": make_gscan_clip_ranking_closure,
+    "seq2seq": make_gscan_seq2seq_ranking_closure,
+    "max_bsr": make_gscan_max_bsr_ranking_closure
+}
+
+
 def gscan_make_closures(args, dictionaries, datasets, extra_data):
     WORD2IDX, ACTION2IDX = dictionaries
 
@@ -959,13 +1025,13 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         make_gscan_instruction_gen_closure(
             model, pad_word, None, device=args.device, noise_level=0.2
         ),
-        make_gscan_seq2seq_ranking_closure(
+        GSCAN_RANKING_FUNCS[args.ranking_func](
             model, pad_word, WORD2IDX["[sos]"], device=args.device
         ),
         make_gscan_generate_targets_closure(
             transformer_model, pad_word, pad_action, device=args.device
         ),
-        make_gscan_format_output_closure(),
+        make_gscan_format_output_closure(IDX2WORD),
     )
 
 
@@ -1817,6 +1883,7 @@ def gscan_add_subparser(subparsers):
     gscan_parser.add_argument("--save-mlm-model", type=str)
     gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
     gscan_parser.add_argument("--limit-load", type=int, default=None)
+    gscan_parser.add_argument("--ranking-func", type=str, choices=list(GSCAN_RANKING_FUNCS.keys()), default="seq2seq")
 
 
 def cogs_add_subparser(subparsers):
