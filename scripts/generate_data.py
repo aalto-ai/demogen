@@ -1632,6 +1632,8 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
         state_scaler.transform(split_state_vectors)
     ).astype(np.float32)
 
+    del split_state_vectors
+
     split_sentences_index_dict = defaultdict(list)
     for i, example in enumerate(tqdm(dataset["examples"][current_split])):
         split_sentences_index_dict[" ".join(example["command"].split(","))].append(i)
@@ -1669,7 +1671,6 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
 
     # Once we're at this point, lets release a bunch of stuff we don't need anymore
     del split_sentences_unique_all_sentence_encodings
-    del split_state_vectors
 
     search_results = np.concatenate([
         index.search(normalized_split_vectors[b * 128:(b + 1) * 128], 128)[1]
