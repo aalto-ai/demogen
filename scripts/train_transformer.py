@@ -75,7 +75,7 @@ class EMACallback(pl.callbacks.Callback):
     If `use_ema_weights`, then the ema parameters of the network is set after training end.
     """
 
-    def __init__(self, decay=0.9999, use_ema_weights: bool = True):
+    def __init__(self, decay=0.9999, use_ema_weights=True):
         self.decay = decay
         self.ema = None
         self.use_ema_weights = use_ema_weights
