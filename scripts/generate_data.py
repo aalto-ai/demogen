@@ -569,9 +569,9 @@ def parse_sparse_situation(
     :return: grid to be parsed by computational models.
     """
     # Place the agent.
-    agent_row = int(situation_representation["agent_position"].row)
-    agent_column = int(situation_representation["agent_position"].column)
-    agent_direction = DIR_TO_INT[situation_representation["agent_direction"].name]
+    agent_row = int(situation_representation["agent_position"]["row"])
+    agent_column = int(situation_representation["agent_position"]["column"])
+    agent_direction = situation_representation["agent_direction"]
 
     grid = None
 
@@ -586,16 +586,16 @@ def parse_sparse_situation(
         agent_representation[6] = agent_column
         grid.append(agent_representation)
 
-        for placed_object in situation_representation["objects"]:
-            object_row = int(placed_object.position.row)
-            object_column = int(placed_object.position.column)
-            if placed_object.object.shape != "box":
+        for placed_object in situation_representation["placed_objects"].values():
+            object_row = int(placed_object["position"]["row"])
+            object_column = int(placed_object["position"]["column"])
+            if placed_object["object"]["shape"] != "box":
                 grid.append(
                     np.array(
                         [
-                            int(placed_object.object.size),
-                            int(color2idx[placed_object.object.color]),
-                            int(noun2idx[placed_object.object.shape]),
+                            int(placed_object["object"]["size"]),
+                            int(color2idx[placed_object["object"]["color"]]),
+                            int(noun2idx[placed_object["object"]["shape"]]),
                             0,
                             0,
                             object_row,
@@ -615,8 +615,8 @@ def parse_sparse_situation(
                             0,
                             object_row,
                             object_column,
-                            int(placed_object.object.size),
-                            int(color2idx[placed_object.object.color]),
+                            int(placed_object["object"]["size"]),
+                            int(color2idx[placed_object["object"]["color"]]),
                             1,
                         ]
                     )
@@ -633,23 +633,23 @@ def parse_sparse_situation(
         grid[agent_row, agent_column, :] = agent_representation
 
         # Loop over the objects in the world and place them.
-        for placed_object in situation_representation["objects"]:
-            object_row = int(placed_object.position.row)
-            object_column = int(placed_object.position.column)
+        for placed_object in situation_representation["placed_objects"].values():
+            object_row = int(placed_object["position"]["row"])
+            object_column = int(placed_object["position"]["column"])
 
-            if placed_object.object.shape != "box":
-                grid[object_row, object_column, 0] = int(placed_object.object.size)
+            if placed_object["object"]["shape"] != "box":
+                grid[object_row, object_column, 0] = int(placed_object["object"]["size"])
                 grid[object_row, object_column, 1] = int(
-                    color2idx[placed_object.object.color]
+                    color2idx[placed_object["object"]["color"]]
                 )
                 grid[object_row, object_column, 2] = int(
-                    noun2idx[placed_object.object.shape]
+                    noun2idx[placed_object["object"]["shape"]]
                 )
 
-            if reascan_boxes and placed_object.object.shape == "box":
-                grid[object_row, object_column, 5] = int(placed_object.object.size)
+            if reascan_boxes and placed_object["object"]["shape"] == "box":
+                grid[object_row, object_column, 5] = int(placed_object["object"]["size"])
                 grid[object_row, object_column, 6] = int(
-                    color2idx[placed_object.object.color]
+                    color2idx[placed_object["object"]["color"]]
                 )
                 grid[object_row, object_column, 7] = 1
 
@@ -1028,9 +1028,7 @@ def retrieve_layout_instruction_coverage(
             (
                 parse_command_repr(train_examples[i]["command"]),
                 parse_command_repr(train_examples[i]["target_commands"]),
-                Situation.from_representation(
-                    train_examples[i]["situation"]
-                ).to_dict(),
+                train_examples[i]["situation"],
             )
             for i in selected_examples
         ])))
@@ -1408,6 +1406,7 @@ def encode_metalearning_example(
     action_word2idx,
     color2idx,
     noun2idx,
+    grid_size,
     example,
 ):
     (
@@ -1418,11 +1417,10 @@ def encode_metalearning_example(
         support_targets,
         support_situation_representations,
     ) = example
-    situation = Situation.from_representation(situation_representation)
 
     world_layout = parse_sparse_situation(
-        situation.to_dict(),
-        situation.grid_size,
+        situation_representation,
+        grid_size,
         color2idx,
         noun2idx,
         world_encoding_scheme,
@@ -1436,7 +1434,7 @@ def encode_metalearning_example(
     support_layouts = [
         parse_sparse_situation(
             support_situation_representation,
-            support_situation_representation["grid_size"],
+            grid_size,
             color2idx,
             noun2idx,
             world_encoding_scheme,
@@ -1486,6 +1484,7 @@ def encode_metalearning_examples(
     action_word2idx,
     color2idx,
     noun2idx,
+    grid_size
 ):
     for ml_example in metalearning_examples:
         yield encode_metalearning_example(
@@ -1495,6 +1494,7 @@ def encode_metalearning_examples(
             action_word2idx,
             color2idx,
             noun2idx,
+            grid_size,
             ml_example,
         )
 
@@ -1615,7 +1615,8 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
     split_state_vectors = vectorize_all_example_situations(
         tqdm(dataset["examples"][current_split]),
         COLOR2IDX,
-        NOUN2IDX
+        NOUN2IDX,
+        dataset["grid_size"]
     )
     normalized_split_state_vectors = normalize(split_state_vectors)
 
@@ -2248,6 +2249,7 @@ def main():
             ACTION_WORD2IDX,
             COLOR2IDX,
             NOUN2IDX,
+            d["grid_size"]
         ),
     }
 
