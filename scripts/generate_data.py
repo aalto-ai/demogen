@@ -1622,7 +1622,7 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
 
     split_state_vectors = vectorize_all_example_situations(
-        tqdm(dataset["examples"][current_split]),
+        tqdm(dataset["examples"][current_split], desc=f"Vectorizing examples from split {current_split}"),
         COLOR2IDX,
         NOUN2IDX,
         dataset["grid_size"]
