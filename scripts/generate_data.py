@@ -1838,7 +1838,7 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
 
     train_state_vectors = vectorize_all_example_situations(
-        tqdm(dataset["examples"]["train"]),
+        tqdm(dataset["examples"]["train"], desc="Vectorizing examples"),
         COLOR2IDX,
         NOUN2IDX,
         dataset["grid_size"]
