@@ -1009,12 +1009,18 @@ def retrieve_layout_instruction_coverage(
     token_embeddings = split_sentences_unique_all_token_encodings[split_sentences_to_unique_index[index]]
 
     retrievals_from_training_set = retrievals[index]
-    retrievals_from_training_set = retrievals_from_training_set[
+    filtered_retrievals_from_training_set = retrievals_from_training_set[
         np.array([
             command != train_examples[i]["command"].split(",")
             for i in retrievals_from_training_set
         ])
     ]
+
+    # If we just don't get any retrievals, then we have to use the originals
+    if filtered_retrievals_from_training_set.shape[0] == 0:
+        filtered_retrievals_from_training_set = retrievals_from_training_set
+
+    retrievals_from_training_set = filtered_retrievals_from_training_set
 
     retrieved_token_encodings = [
         train_unique_token_encodings[train_unique_indices[i]]
