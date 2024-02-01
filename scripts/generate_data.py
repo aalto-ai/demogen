@@ -1849,10 +1849,6 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
     state_scaler.fit(train_state_vectors[train_state_vectors_fit_perm].astype(np.float32))
     sample_scaled_train_state_vectors = state_scaler.transform(train_state_vectors[train_state_vectors_fit_perm]).astype(np.float32)
 
-    # Used for sanity checks below, but here so that everything is together
-    normalized_train_state_vectors = normalize(train_state_vectors, axis=1)
-    normalized_scaled_train_state_vectors = normalize(scaled_train_state_vectors, axis=1)
-
     print(f"Fitting PCA {(sample_scaled_train_state_vectors.shape[-1], args.retrieval_state_pca_dim)}")
     state_pca = make_pipeline(StandardScaler(), PCA(n_components=args.retrieval_state_pca_dim))
     state_pca.fit(sample_scaled_train_state_vectors)
