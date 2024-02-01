@@ -2302,7 +2302,7 @@ def main():
 
         os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
-            tqdm(d["examples"][split][: args.limit]),
+            tqdm(d["examples"][split][: args.limit], desc=f"Generating for split {split}"),
             payload,
             GENERATION_CONFIGS[args.generate_mode].get("kwargs", {}),
         )
