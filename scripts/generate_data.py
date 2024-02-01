@@ -1894,6 +1894,7 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
         v / (np.linalg.norm(v, axis=-1)[:, None] + 1e-7)
         for v in train_sentences_unique_all_token_encodings
     ]
+    print("Encoding unique sentences")
     train_sentences_unique_all_sentence_encodings = model.encode(
         train_sentences_unique,
         normalize_embeddings=True
