@@ -11,6 +11,8 @@ import multiprocessing
 import random
 import faiss
 from sentence_transformers import SentenceTransformer
+from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.preprocessing import StandardScaler, normalize
 
@@ -1620,7 +1622,7 @@ def retrieve_similar_state_payload(dataset, vocabulary, word2idx, current_split,
     )
     normalized_split_state_vectors = normalize(split_state_vectors)
 
-    pca_split_state_vectors = state_pca.apply(
+    pca_split_state_vectors = state_pca.transform(
         state_scaler.transform(split_state_vectors)
     ).astype(np.float32)
 
@@ -1842,15 +1844,23 @@ def retrieve_similar_state_global_payload(dataset, vocabulary, word2idx):
     normalized_train_state_vectors = normalize(train_state_vectors, axis=1)
     normalized_scaled_train_state_vectors = normalize(scaled_train_state_vectors, axis=1)
 
-    state_pca = faiss.PCAMatrix(scaled_train_state_vectors.shape[-1], 320)
-    state_pca.train(scaled_train_state_vectors)
+    print(f"Fitting PCA {(sample_scaled_train_state_vectors.shape[-1], args.retrieval_state_pca_dim)}")
+    state_pca = make_pipeline(StandardScaler(), PCA(n_components=args.retrieval_state_pca_dim))
+    state_pca.fit(sample_scaled_train_state_vectors)
 
-    pca_train_state_vectors = np.array(state_pca.apply(scaled_train_state_vectors))
+    print(f"Applying PCA to train state vectors")
+    pca_train_state_vectors = np.concatenate([
+        state_pca.transform(state_scaler.transform(train_state_vectors[i * 1024:(i + 1) * 1024]).astype(np.float32))
+        for i in trange(train_state_vectors.shape[0] // 1024 + 1, desc="Applying PCA")
+    ], axis=0)
 
     # Sanity check, how well do we reconstruct the original layouts
-    state_pca_b = faiss.vector_to_array(state_pca.b)
-    state_pca_A = faiss.vector_to_array(state_pca.A).reshape(state_pca.d_out, state_pca.d_in)
-    reconstruction_error = ((((pca_train_state_vectors - state_pca_b[None]) @ state_pca_A) - scaled_train_state_vectors) ** 2).mean()
+    print(f"Sanity check: computing reconstruction error")
+    reconstruction_error_sample = np.random.permutation(pca_train_state_vectors.shape[0])[:8192]
+    reconstruction_error = ((
+        state_pca.inverse_transform(pca_train_state_vectors[reconstruction_error_sample]) -
+        state_scaler.transform(train_state_vectors[reconstruction_error_sample].astype(np.float32))
+    ) ** 2).mean()
 
     print(f"PCA reconstruction error {reconstruction_error}")
 
