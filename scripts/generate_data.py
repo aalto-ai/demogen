@@ -1,6 +1,6 @@
 import argparse
 from bisect import bisect_left
-import ujson as json
+import json
 import itertools
 import numpy as np
 from typing import List, Optional, Tuple
