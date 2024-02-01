@@ -28,14 +28,14 @@ COLOR_ADJECTIVES = "red,green,yellow,blue"
 SIZE_ADJECTIVES = "big,small"
 
 
-def create_vocabulary():
+def create_vocabulary(colors=None, sizes=None, nouns=None):
     vocabulary = Vocabulary.initialize(
         intransitive_verbs=(INTRANSITIVE_VERBS).split(","),
         transitive_verbs=(TRANSITIVE_VERBS).split(","),
         adverbs=(ADVERBS).split(","),
-        nouns=(NOUNS).split(","),
-        color_adjectives=(COLOR_ADJECTIVES).split(","),
-        size_adjectives=(SIZE_ADJECTIVES).split(","),
+        nouns=(nouns or NOUNS).split(","),
+        color_adjectives=(colors or COLOR_ADJECTIVES).split(","),
+        size_adjectives=(sizes or SIZE_ADJECTIVES).split(","),
     )
     return vocabulary
 
