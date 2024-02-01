@@ -1627,7 +1627,6 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
         NOUN2IDX,
         dataset["grid_size"]
     )
-    normalized_split_state_vectors = normalize(split_state_vectors)
 
     pca_split_state_vectors = state_pca.transform(
         state_scaler.transform(split_state_vectors)
@@ -1659,10 +1658,14 @@ def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_spl
         normalize_embeddings=True
     )
 
-    normalized_split_vectors = normalize(np.concatenate([
-        np.array(pca_split_state_vectors),
-        split_sentences_unique_all_sentence_encodings[split_sentences_unique_list_lookup]
-    ], axis=-1), axis=1).astype(np.float32)
+    normalized_split_vectors = normalize(
+        balance_dims(
+            np.array(pca_split_state_vectors),
+            split_sentences_unique_all_sentence_encodings[split_sentences_unique_list_lookup],
+            factors=[params.retrieval_sentence_state_tradeoff]
+        ),
+        axis=1
+    ).astype(np.float32)
 
     # Once we're at this point, lets release a bunch of stuff we don't need anymore
     del split_sentences_unique_all_sentence_encodings
