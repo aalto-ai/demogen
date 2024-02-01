@@ -1974,6 +1974,18 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
     ]).mean()
     print(f"Baseline mean similarity of retrieved states {baseline_sample_mean_similarities}")
 
+    # Compare also baseline index of just sentences
+    baseline_sentence_index = faiss.IndexFlatIP(train_sentences_unique_all_sentence_encodings.shape[-1])
+    baseline_sentence_index.add(train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup[sanity_index_sample_indices]])
+    baseline_sentence_search_sample_train_vectors = train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup[search_sample_indices]]
+    baseline_sentence_sample_retrieved_indices = baseline_sentence_index.search(baseline_sentence_search_sample_train_vectors, 2)[1][:, 1:]
+
+    baseline_sentence_sample_mean_similarities = np.stack([
+        (train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup[sanity_index_sample_indices[indices]]] @ vector[:, None]).mean(axis=0)
+        for vector, indices in zip(baseline_sentence_search_sample_train_vectors, baseline_sentence_sample_retrieved_indices)
+    ]).mean()
+    print(f"Baseline mean similarity of retrieved sentences {baseline_sentence_sample_mean_similarities}")
+
     return (
         model,
         index,
