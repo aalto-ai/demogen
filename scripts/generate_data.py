@@ -18,10 +18,16 @@ from sklearn.preprocessing import StandardScaler, normalize
 
 from tqdm.auto import tqdm, trange
 
+from minigrid.core.world_object import (
+    COLOR_TO_IDX as MINIGRID_COLOR_TO_IDX,
+    OBJECT_TO_IDX as MINIGRID_OBJECT_TO_IDX
+)
 from gscan_metaseq2seq.gscan.world import Situation
 from gscan_metaseq2seq.util.solver import (
-    create_vocabulary,
+    NOUNS as GSCAN_NOUNS,
+    COLOR_ADJECTIVES as GSCAN_COLORS,
     create_world,
+    create_vocabulary,
     demonstrate_command_oracle,
 )
 
@@ -1305,12 +1311,12 @@ GENERATION_STRATEGIES = {
 def generate_supports_for_data_point(
     data_example,
     index,
-    world,
-    vocabulary,
     generation_mode,
     generation_payload,
     generation_options,
 ):
+    vocabulary = create_vocabulary()
+    world = create_world(vocabulary)
     command = parse_command_repr(data_example["command"])
     target_commands = parse_command_repr(data_example["target_commands"])
     situation = Situation.from_representation(data_example["situation"])
@@ -1349,8 +1355,6 @@ def generate_supports_for_data_point_star(args):
 
 def yield_metalearning_examples(
     examples_set,
-    world,
-    vocabulary,
     generation_mode,
     generation_payload,
     generation_options,
@@ -1366,8 +1370,6 @@ def yield_metalearning_examples(
                     lambda x, i: (
                         x,
                         i,
-                        world,
-                        vocabulary,
                         generation_mode,
                         generation_payload,
                         generation_options,
@@ -1387,8 +1389,6 @@ def yield_metalearning_examples(
             error, result = generate_supports_for_data_point(
                 example,
                 i,
-                world,
-                vocabulary,
                 generation_mode,
                 generation_payload,
                 generation_options,
@@ -1565,19 +1565,19 @@ def yield_baseline_examples(
         )
 
 
-def baseline_payload(dataset, vocabulary, word2idx, current_split):
+def baseline_payload(dataset, colors, nouns, word2idx, current_split, global_payload, params):
     return None
 
 
-def generate_oracle_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
+def generate_oracle_payload(dataset, colors, nouns, word2idx, current_split, global_payload, params):
     return (
-        vocabulary.get_nouns(),
-        vocabulary.get_color_adjectives(),
+        nouns,
+        colors,
         SPLITS_ALLOW_ORACLE_DEMONSTRATIONS.get(current_split, []),
     )
 
 
-def generate_oracle_find_any_matching_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
+def generate_oracle_find_any_matching_payload(dataset, colors, nouns, word2idx, current_split, global_payload, params):
     sorted_example_indices_by_command = sort_indices_by_command(
         dataset["examples"]["train"]
     )
@@ -1585,8 +1585,8 @@ def generate_oracle_find_any_matching_payload(dataset, vocabulary, word2idx, cur
     return (
         sorted_example_indices_by_command,
         dataset["examples"]["train"],
-        vocabulary.get_nouns(),
-        vocabulary.get_color_adjectives(),
+        nouns,
+        colors,
         SPLITS_ALLOW_ORACLE_DEMONSTRATIONS.get(current_split, []),
     )
 
@@ -1607,12 +1607,9 @@ def to_tfidf(tfidf_transformer, count_matrix):
     return tfidf_transformer.transform(count_matrix).todense().astype("float32")
 
 
-def retrieve_similar_state_payload(dataset, vocabulary, word2idx, current_split, global_payload, params):
+def retrieve_similar_state_payload(dataset, colors, nouns, word2idx, current_split, global_payload, params):
     model, index, state_scaler, state_pca, train_unique_encodings, train_unique_token_encodings, train_unique_indices = global_payload
-    colors = sorted(vocabulary.get_color_adjectives())
     COLOR2IDX = {c: i + 1 for i, c in enumerate(colors)}
-
-    nouns = sorted(vocabulary.get_nouns())
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
 
     split_state_vectors = vectorize_all_example_situations(
@@ -1682,7 +1679,7 @@ def retrieve_similar_state_payload(dataset, vocabulary, word2idx, current_split,
 
 
 def generate_random_instructions_find_in_any_layout_payload(
-    dataset, vocabulary, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_command = sort_indices_by_command(
         dataset["examples"]["train"]
@@ -1692,7 +1689,7 @@ def generate_random_instructions_find_in_any_layout_payload(
 
 
 def find_supports_with_same_agent_target_offset_payload(
-    dataset, vocabulary, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_offsets = sort_indices_by_offsets(
         dataset["examples"]["train"]
@@ -1709,7 +1706,7 @@ def find_supports_with_same_agent_target_offset_payload(
 
 
 def find_supports_with_any_target_object_in_same_position_payload(
-    dataset, vocabulary, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_target_positions = sort_indices_by_target_positions(
         dataset["examples"]["train"]
@@ -1726,7 +1723,7 @@ def find_supports_with_any_target_object_in_same_position_payload(
 
 
 def find_supports_by_matching_object_in_same_diff_payload(
-    dataset, vocabulary, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload
 ):
     sorted_example_indices_by_diff_and_description = (
         sort_indices_by_target_diff_and_description(dataset["examples"]["train"])
@@ -1743,7 +1740,7 @@ def find_supports_by_matching_object_in_same_diff_payload(
 
 
 def find_supports_by_matching_environment_layout_payload(
-    dataset, vocabulary, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload
 ):
     sorted_examples_by_serialized_layouts = sort_indices_by_serialized_situation(
         dataset["examples"]["train"]
@@ -1761,34 +1758,33 @@ def find_supports_by_matching_environment_layout_payload(
 
 def vectorize_state(situation, grid_size, color2dix, noun2idx, encoding_scheme, reascan_boxes):
     return (parse_sparse_situation(
-        Situation.from_representation(situation).to_dict(), 6, color2dix, noun2idx, "all", False
-    )[:, :-2, None] == np.arange(5, dtype=np.int32)[None, None]).reshape(-1).astype(np.float32)
+        situation, grid_size, color2dix, noun2idx, encoding_scheme, reascan_boxes
+    )[:, :-2, None] == np.arange(5, dtype=np.int32)[None, None]).reshape(-1).astype(bool)
 
 
 def vectorize_state_star(args):
     return vectorize_state(*args)
 
 
-def vectorize_all_example_situations(examples, color2idx, noun2idx):
-    with multiprocessing.Pool() as pool:
-        return np.stack(
-            list(
-                pool.map(
-                    vectorize_state_star,
-                    map(
-                        lambda e: (
-                            e["situation"],
-                            6,
-                            color2idx,
-                            noun2idx,
-                            "all",
-                            False
-                        ),
-                        examples
-                    )
+def vectorize_all_example_situations(examples, color2idx, noun2idx, grid_size):
+    return np.stack(
+        list(
+            map(
+                vectorize_state_star,
+                map(
+                    lambda e: (
+                        e["situation"],
+                        grid_size,
+                        color2idx,
+                        noun2idx,
+                        "all",
+                        False
+                    ),
+                    examples
                 )
             )
         )
+    )
 
 
 # sqrt((a*2) + (b*2)) = 1
@@ -1823,11 +1819,8 @@ def vectorize_example_text(word_counts, tfidf, dim_state):
     return premultiply_balance_dimensions(unscaled_train_text_tfidf, dim_state)
 
 
-def retrieve_similar_state_global_payload(dataset, vocabulary, word2idx):
-    colors = sorted(vocabulary.get_color_adjectives())
+def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args):
     COLOR2IDX = {c: i + 1 for i, c in enumerate(colors)}
-
-    nouns = sorted(vocabulary.get_nouns())
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
 
     train_state_vectors = vectorize_all_example_situations(
@@ -1968,7 +1961,7 @@ def retrieve_similar_state_global_payload(dataset, vocabulary, word2idx):
         train_sentences_unique_list_lookup
     )
 
-def null_global_payload(dataset, vocabulary, word2idx):
+def null_global_payload(dataset, colors, nouns, word2idx, args):
     return None
 
 
@@ -2144,10 +2137,17 @@ def batched(iterable, n):
         yield batch
 
 
+DATASET_VOCABULARIES = {
+    "gscan": (sorted(GSCAN_COLORS.split(",")), sorted(GSCAN_NOUNS.split(","))),
+    "babyai-codeworld": (list(MINIGRID_COLOR_TO_IDX.keys()), list(MINIGRID_OBJECT_TO_IDX.keys()))
+}
+
+
 def main():
     multiprocessing.set_start_method("forkserver")
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset-vocabulary", choices=list(DATASET_VOCABULARIES.keys()), default="gscan")
     parser.add_argument("--gscan-dataset", type=str, required=True)
     parser.add_argument("--output-directory", type=str, required=True)
     parser.add_argument(
@@ -2159,23 +2159,27 @@ def main():
         "--world-encoding-scheme", choices=("sequence", "all"), default="sequence"
     )
     parser.add_argument("--reascan-boxes", action="store_true")
+    parser.add_argument("--retrieval-sentence-state-tradeoff", type=float, default=(4 / 3))
+    parser.add_argument("--retrieval-state-pca-dim", type=int, default=1024)
     args = parser.parse_args()
 
     with open(args.gscan_dataset, "r") as f:
         d = json.load(f)
+
+    d["examples"] = {
+        k: v[:args.limit]
+        for k, v in d["examples"].items()
+    }
+
+    print(d.keys())
 
     print("Number of examples per split :" + "\n".join([
         f"- {key}: {len(values)}"
         for key, values in d["examples"].items()
     ]))
 
-    vocabulary = create_vocabulary()
-    world = create_world(vocabulary)
-
-    colors = sorted(vocabulary.get_color_adjectives())
+    colors, nouns = DATASET_VOCABULARIES[args.dataset_vocabulary]
     COLOR2IDX = {c: i + 1 for i, c in enumerate(colors)}
-
-    nouns = sorted(vocabulary.get_nouns())
     NOUN2IDX = {n: i + 1 for i, n in enumerate(nouns)}
 
     INPUT_WORD2IDX = {
@@ -2234,8 +2238,6 @@ def main():
         "metalearning": lambda examples, payload, kwargs: encode_metalearning_examples(
             yield_metalearning_examples(
                 examples,
-                world,
-                vocabulary,
                 GENERATION_CONFIGS[args.generate_mode]["generate_mode"],
                 payload,
                 kwargs,
@@ -2258,12 +2260,12 @@ def main():
 
     global_payload = PREPROCESSING_GLOBAL_PAYLOAD_GENERATOR[
         GENERATION_CONFIGS[args.generate_mode]["generate_mode"]
-    ](d, vocabulary, INPUT_WORD2IDX)
+    ](d, colors, nouns, INPUT_WORD2IDX, args)
 
     for split, split_name in tqdm(splits.items()):
         payload = PREPROCESSING_PAYLOAD_GENERATOR[
             GENERATION_CONFIGS[args.generate_mode]["generate_mode"]
-        ](d, vocabulary, INPUT_WORD2IDX, split, global_payload, args)
+        ](d, colors, nouns, INPUT_WORD2IDX, split, global_payload, args)
 
         os.makedirs(f"{args.output_directory}/{split_name}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS[args.generate_mode]["yield_func"]](
@@ -2281,8 +2283,8 @@ def main():
             (
                 INPUT_WORD2IDX,
                 ACTION_WORD2IDX,
-                vocabulary.get_color_adjectives(),
-                vocabulary.get_nouns(),
+                colors,
+                nouns
             ),
             f,
         )
