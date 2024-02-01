@@ -1843,9 +1843,10 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
         dataset["grid_size"]
     )
 
+    train_state_vectors_fit_perm = np.random.permutation(train_state_vectors.shape[0])[:8192]
     state_scaler = StandardScaler()
-    state_scaler.fit(np.array(train_state_vectors))
-    scaled_train_state_vectors = state_scaler.transform(train_state_vectors).astype(np.float32)
+    state_scaler.fit(train_state_vectors[train_state_vectors_fit_perm].astype(np.float32))
+    sample_scaled_train_state_vectors = state_scaler.transform(train_state_vectors[train_state_vectors_fit_perm]).astype(np.float32)
 
     # Used for sanity checks below, but here so that everything is together
     normalized_train_state_vectors = normalize(train_state_vectors, axis=1)
@@ -1934,16 +1935,24 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
 
     # Sanity check, run NN search on some random subset of the vectors and check
     # similarity of the states
+    sanity_index_sample_indices = np.random.permutation(scaled_train_vectors.shape[0])[:8192]
+    print("Performing sanity checks")
+    sanity_base_index = faiss.IndexFlatIP(scaled_train_vectors.shape[-1])
+    sanity_index = faiss.IndexIVFFlat(sanity_base_index, scaled_train_vectors.shape[-1], 512)
+    sanity_index.train(scaled_train_vectors[np.random.permutation(scaled_train_vectors.shape[0])[:512 * 40]])
+    sanity_index.nprobe = 10
+    sanity_index.add(scaled_train_vectors[sanity_index_sample_indices])
+
     search_sample_indices = np.random.permutation(scaled_train_vectors.shape[0])[:512]
     search_sample_train_vectors = scaled_train_vectors[search_sample_indices]
-    normalized_search_sample_scaled_train_state_vectors = normalized_train_state_vectors[search_sample_indices]
+    normalized_search_sample_scaled_train_state_vectors = normalize(train_state_vectors[search_sample_indices].astype(np.float32))
     sample_retrieved_indices = index.search(
         search_sample_train_vectors,
         128
     )[1][:, 1:]
 
     sample_mean_similarities = np.stack([
-        (normalized_train_state_vectors[indices] @ vector[:, None]).mean(axis=0)
+        (normalize(train_state_vectors[indices].astype(np.float32)) @ vector[:, None]).mean(axis=0)
         for vector, indices in zip(normalized_search_sample_scaled_train_state_vectors, sample_retrieved_indices)
     ]).mean()
     print(f"Mean similarity of retrieved states {sample_mean_similarities}")
@@ -1953,14 +1962,14 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
     ]).mean()
     print(f"Mean similarity of retrieved sentences {sample_mean_sentence_similarities}")
 
-    # Compare with baseline where we create an index just from the state vectors
-    baseline_index = faiss.IndexFlatIP(scaled_train_state_vectors.shape[-1])
-    baseline_index.add(normalized_train_state_vectors)
-    baseline_search_sample_train_vectors = normalized_train_state_vectors[search_sample_indices]
+    # Compare with baseline where we create an index just from a random subsample of the state vectors
+    baseline_index = faiss.IndexFlatIP(train_state_vectors.shape[-1])
+    baseline_index.add(normalize(train_state_vectors[sanity_index_sample_indices].astype(np.float32)))
+    baseline_search_sample_train_vectors = normalize(train_state_vectors[search_sample_indices].astype(np.float32))
     baseline_sample_retrieved_indices = baseline_index.search(baseline_search_sample_train_vectors, 2)[1][:, 1:]
 
     baseline_sample_mean_similarities = np.stack([
-        (normalized_train_state_vectors[indices] @ vector[:, None]).mean(axis=0)
+        (normalize(train_state_vectors[sanity_index_sample_indices[indices]]) @ vector[:, None]).mean(axis=0)
         for vector, indices in zip(baseline_search_sample_train_vectors, baseline_sample_retrieved_indices)
     ]).mean()
     print(f"Baseline mean similarity of retrieved states {baseline_sample_mean_similarities}")
