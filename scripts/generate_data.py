@@ -1918,7 +1918,7 @@ def retrieve_similar_state_global_payload(dataset, colors, nouns, word2idx, args
         balance_dims(
             np.array(pca_train_state_vectors),
             train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup],
-            factors=[(1 / 2)]
+            factors=[args.retrieval_sentence_state_tradeoff]
         ),
         axis=1
     ).astype(np.float32)
