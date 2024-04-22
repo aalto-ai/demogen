@@ -1,5 +1,7 @@
 import argparse
+import functools
 import copy
+import itertools
 import os
 import math
 import torch
@@ -10,6 +12,7 @@ from torch.utils.data import DataLoader, Subset
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+from tqdm.auto import tqdm
 
 
 from gscan_metaseq2seq.util.dataset import PaddingDataset, ReshuffleOnIndexZeroDataset
@@ -18,6 +21,8 @@ from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
     TransformerLearner,
 )
+
+from sentence_transformers import SentenceTransformer
 
 class ModelEmaV2(nn.Module):
     """ Model Exponential Moving Average V2
@@ -137,6 +142,118 @@ class EMACallback(pl.callbacks.Callback):
             self.copy_to(self.ema.module.parameters(), pl_module.parameters())
 
 
+def determine_padding(demonstrations):
+    max_instruction_len, max_action_len, max_state_len = (0, 0, 0)
+
+    for instr, actions, state in tqdm(demonstrations, desc="Determining padding"):
+        max_instruction_len = max(max_instruction_len, len(instr))
+        max_action_len = max(max_action_len, len(actions))
+        max_state_len = max(max_state_len, len(state))
+
+    return max_instruction_len, max_action_len, max_state_len
+
+
+def debug_pred_inst(instruction, exacts, IDX2WORD, IDX2ACTION):
+    WORD2IDX = {w: i for i, w in IDX2WORD.items()}
+    ACTION2IDX = {w: i for i, w in IDX2ACTION.items()}
+    print(WORD2IDX)
+    print(ACTION2IDX)
+    return [(" ".join([IDX2WORD[w] for w in s if w != WORD2IDX['[pad]']])) for s in instruction[~exacts].numpy()]
+
+
+
+def debug_pred(instruction, target, decoded, exacts, state, IDX2WORD, IDX2ACTION, IDX2COLOR, IDX2OBJECT):
+    WORD2IDX = {w: i for i, w in IDX2WORD.items()}
+    ACTION2IDX = {w: i for i, w in IDX2ACTION.items()}
+    print(WORD2IDX)
+    print(ACTION2IDX)
+    return [
+        (
+            "inst: " + " ".join([IDX2WORD[w] for w in s if w != WORD2IDX['[pad]']]),
+            " - tgt: " + " ".join([IDX2ACTION[w] for w in t if w != ACTION2IDX['[pad]']]),
+            " - pred: " + " ".join([IDX2ACTION[w] for w in d if w != ACTION2IDX['[pad]']]),
+            " - state: " + "\n - ".join([
+                f"{IDX2COLOR[q[1] - 1]} {IDX2OBJECT[q[2] - 1]} - {q[-2:]}"
+                for q in state
+            ])
+         )
+         for s, t, d, state in zip(instruction[~exacts].numpy(), target[~exacts].numpy(), decoded[~exacts].numpy(), state[~exacts].numpy())
+    ]
+
+def debug_pred_all(instruction, target, decoded, exacts, state, IDX2WORD, IDX2ACTION, IDX2COLOR, IDX2OBJECT):
+    WORD2IDX = {w: i for i, w in IDX2WORD.items()}
+    ACTION2IDX = {w: i for i, w in IDX2ACTION.items()}
+    print(WORD2IDX)
+    print(ACTION2IDX)
+    return [
+        (
+            f"inst {e}: " + " ".join([IDX2WORD[w] for w in s if w != WORD2IDX['[pad]']]),
+            " - tgt: " + " ".join([IDX2ACTION[w] for w in t if w != ACTION2IDX['[pad]']]),
+            " - pred: " + " ".join([IDX2ACTION[w] for w in d if w != ACTION2IDX['[pad]']]),
+            " - state: " + "\n - ".join([
+                f"{IDX2COLOR[q[1] - 1]} {IDX2OBJECT[q[2] - 1]} - {q[-2:]}"
+                for q in state
+            ])
+         )
+         for s, t, d, state, e in zip(instruction.numpy(), target.numpy(), decoded.numpy(), state.numpy(), exacts)
+    ]
+
+def debug_pred_inv(instruction, target, decoded, exacts, state, IDX2WORD, IDX2ACTION, IDX2COLOR, IDX2OBJECT):
+    WORD2IDX = {w: i for i, w in IDX2WORD.items()}
+    ACTION2IDX = {w: i for i, w in IDX2ACTION.items()}
+    print(WORD2IDX)
+    print(ACTION2IDX)
+    return [
+        (
+            " ".join([IDX2WORD[w] for w in s if w != WORD2IDX['[pad]']]),
+            " ".join([IDX2ACTION[w] for w in t if w != ACTION2IDX['[pad]']]),
+            " ".join([IDX2ACTION[w] for w in d if w != ACTION2IDX['[pad]']]),
+            "\n - ".join([
+                f"{IDX2COLOR[q[1] - 1]} {IDX2OBJECT[q[2] - 1]} - {q[-2:]}"
+                for q in state
+            ])
+         )
+         for s, t, d, state in zip(instruction[exacts].numpy(), target[exacts].numpy(), decoded[exacts].numpy(), state[exacts].numpy())
+    ]
+
+
+
+def debug_pred_spec(instruction, target, decoded, exacts, IDX2WORD, IDX2ACTION, index):
+    WORD2IDX = {w: i for i, w in IDX2WORD.items()}
+    ACTION2IDX = {w: i for i, w in IDX2ACTION.items()}
+    print(WORD2IDX)
+    print(ACTION2IDX)
+    return [(" ".join([IDX2WORD[w] for w in s if w != WORD2IDX['[pad]']]), " ".join([IDX2ACTION[w] for w in t if w != ACTION2IDX['[pad]']]), " ".join([IDX2ACTION[w] for w in d if w != ACTION2IDX['[pad]']])) for s, t, d in zip(instruction[~exacts].numpy()[index][None], target[~exacts].numpy()[index][None], decoded[~exacts].numpy()[index][None])]
+
+
+def retokenize_with_sbert(demonstrations, IDX2WORD):
+    tokenizer = SentenceTransformer("all-MiniLM-L6-v2").tokenizer
+    instructions, actions, states = list(zip(*demonstrations))
+    retokenized_instructions = tokenizer.batch_encode_plus([
+        " ".join([IDX2WORD[w] for w in instruction])
+        for instruction in instructions
+    ]).input_ids
+
+    return list(zip(retokenized_instructions, actions, states))
+
+
+class SentenceTransformerWrapper(nn.Module):
+    def __init__(self, module, pad_token_id, output_dim):
+        super().__init__()
+        self.module = module
+        self.output_transform = nn.Linear(384, output_dim)
+        self.pad_token_id = pad_token_id
+
+    def forward(self, x):
+        with torch.no_grad():
+            out = self.module({
+                "input_ids": x,
+                "attention_mask": x != self.pad_token_id
+            })["token_embeddings"]
+
+        return self.output_transform(out)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
@@ -167,13 +284,25 @@ def main():
     parser.add_argument("--pad-instructions-to", type=int, default=32)
     parser.add_argument("--pad-actions-to", type=int, default=128)
     parser.add_argument("--pad-state-to", type=int, default=36)
+    parser.add_argument("--determine-padding", action="store_true")
     parser.add_argument("--log-dir", type=str, default="logs")
     parser.add_argument("--dataloader-ncpus", type=int, default=1)
     parser.add_argument("--ema-decay", type=float, default=0.995)
+    parser.add_argument("--limit-load", type=int)
     parser.add_argument(
-        "--state-profile", choices=("gscan", "reascan"), default="gscan"
+        "--state-profile", choices=("gscan", "reascan", "state-calflow", "babyai-codeworld", "messenger"), default="gscan"
+    )
+    parser.add_argument(
+        "--determine-state-profile", action="store_true"
+    )
+    parser.add_argument(
+        "--use-state-component-lengths",
+        action="store_true",
+        help="Use state component lengths (here for backward compatibility)"
     )
     parser.add_argument("--ema", action="store_true")
+    parser.add_argument("--use-sbert-embeddings", action="store_true")
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     exp_name = "gscan"
@@ -181,7 +310,7 @@ def main():
     dataset_name = args.dataset_name
     effective_batch_size = args.train_batch_size * args.batch_size_mult
     exp_name = f"{exp_name}_s_{args.seed}_m_{model_name}_it_{args.iterations}_b_{effective_batch_size}_d_{dataset_name}_t_{args.tag}_drop_{args.dropout_p}"
-    model_dir = f"models/{exp_name}/{model_name}"
+    model_dir = f"{args.log_dir}/models/{exp_name}/{model_name}"
     model_path = f"{model_dir}/{exp_name}.pt"
     print(model_path)
     print(
@@ -193,22 +322,16 @@ def main():
 
     os.makedirs(model_dir, exist_ok=True)
 
-    if os.path.exists(f"{model_path}"):
-        print(f"Skipping {model_path} as it already exists")
-        return
-
     seed = args.seed
     iterations = args.iterations
 
     (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        dictionaries,
         (train_demonstrations, valid_demonstrations_dict),
-    ) = load_data_directories(args.train_demonstrations, args.dictionary)
+    ) = load_data_directories(args.train_demonstrations, args.dictionary, limit_load=args.limit_load)
+
+    WORD2IDX = dictionaries[0]
+    ACTION2IDX = dictionaries[1]
 
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
     IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
@@ -219,30 +342,82 @@ def main():
     eos_action = ACTION2IDX["[eos]"]
 
     STATE_PROFILES = {
-        "gscan": [4, len(color_dictionary), len(noun_dictionary), 1, 4, 8, 8],
+        "gscan": [4, len(dictionaries[2]), len(dictionaries[3]), 1, 4, 8, 8],
+        "babyai-codeworld": [16, len(dictionaries[2]), len(dictionaries[3]), 4, 4, 64, 64],
         "reascan": [
             4,
-            len(color_dictionary),
-            len(noun_dictionary),
+            len(dictionaries[2]),
+            len(dictionaries[3]),
             1,
             4,
             8,
             8,
             4,
-            len(color_dictionary),
+            len(dictionaries[3]),
             1,
         ],
+        "messenger": [
+            len(dictionaries[2]),
+            32,
+            32
+        ],
+        "state-calflow": [
+            8, # token type
+            # These are upper bounds, not exact lengths
+            512, # possible name
+            512, # possible event or time
+            512, # possible event, or time
+            64 # number
+        ]
     }
-    state_feat_len = len(STATE_PROFILES[args.state_profile])
+    if args.determine_state_profile:
+        state_component_max_len = (functools.reduce(
+            lambda x, o: np.stack([
+                x, o
+            ]).max(axis=0),
+            map(lambda x: np.stack(x[-1]).max(axis=0),
+                itertools.chain.from_iterable([
+                    train_demonstrations, *valid_demonstrations_dict.values()
+                ]))
+        ) + 1).tolist()
+        state_feat_len = len(state_component_max_len)
+    else:
+        state_component_max_len = STATE_PROFILES[args.state_profile]
+        state_feat_len = len(state_component_max_len)
+
+    print("State component lengths", state_component_max_len)
+
+    pad_instructions_to, pad_actions_to, pad_state_to = (
+        args.pad_instructions_to,
+        args.pad_actions_to,
+        args.pad_state_to
+    )
+
+    if args.use_sbert_embeddings:
+        train_demonstrations = retokenize_with_sbert(train_demonstrations, IDX2WORD)
+        valid_demonstrations_dict = {
+            k: retokenize_with_sbert(v, IDX2WORD)
+            for k, v in valid_demonstrations_dict.items()
+        }
+        pad_word = SentenceTransformer("all-MiniLM-L6-v2").tokenizer.pad_token_id
+
+    if args.determine_padding:
+        pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(
+            itertools.chain.from_iterable([
+                train_demonstrations, *valid_demonstrations_dict.values()
+            ])
+        )
+
+    print(f"Paddings instr: {pad_instructions_to} ({pad_word}) act: {pad_actions_to} ({pad_action}) state: {pad_state_to} (0)")
 
     pl.seed_everything(0)
     train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
             train_demonstrations,
             (
-                args.pad_instructions_to,
-                args.pad_actions_to,
-                (args.pad_state_to, state_feat_len),
+                pad_instructions_to,
+                pad_actions_to,
+                (pad_state_to, state_feat_len),
             ),
             (pad_word, pad_action, 0),
         )
@@ -265,6 +440,18 @@ def main():
         norm_first=args.norm_first,
         decay_power=args.decay_power,
         warmup_proportion=args.warmup_proportion,
+        state_component_lengths=(
+            state_component_max_len
+            if args.use_state_component_lengths else None
+        ),
+        custom_embedding_model=(
+            SentenceTransformerWrapper(
+                SentenceTransformer("all-MiniLM-L6-v2"),
+                pad_word,
+                args.hidden_size
+            )
+            if args.use_sbert_embeddings else None
+        )
     )
     print(meta_module)
 
@@ -305,9 +492,18 @@ def main():
         callbacks=callbacks,
         max_steps=iterations,
         num_sanity_val_steps=10,
-        accelerator="gpu" if torch.cuda.is_available() else None,
-        devices=1 if torch.cuda.is_available() else 0,
-        precision=args.precision if torch.cuda.is_available() else 32,
+        accelerator="gpu" if torch.cuda.is_available() else "cpu",
+        precision=(
+            "bf16" if (
+                args.precision == 16 and
+                torch.cuda.is_bf16_supported()
+            ) else (
+                "16-mixed" if args.precision == 16 and torch.cuda.is_available()
+                else (
+                    "32"
+                )
+            )
+        ),
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=args.batch_size_mult,
         enable_progress_bar=sys.stdout.isatty() or args.enable_progress,
@@ -315,34 +511,58 @@ def main():
         **check_val_opts,
     )
 
-    trainer.fit(
-        meta_module,
-        train_dataloader,
-        [
-            DataLoader(
-                PaddingDataset(
-                    Subset(
-                        demonstrations,
-                        np.random.permutation(len(demonstrations))[
-                            : args.limit_val_size
-                        ],
-                    ),
-                    (
-                        args.pad_instructions_to,
-                        args.pad_actions_to,
-                        (args.pad_state_to, state_feat_len),
-                    ),
-                    (pad_word, pad_action, 0),
+    print(valid_demonstrations_dict.keys())
+    valid_dataloaders = [
+        DataLoader(
+            PaddingDataset(
+                Subset(
+                    demonstrations,
+                    np.arange(len(demonstrations))[
+                        : args.limit_val_size
+                    ],
                 ),
-                batch_size=max([args.train_batch_size, args.valid_batch_size]),
-                pin_memory=True,
-            )
-            for demonstrations in valid_demonstrations_dict.values()
-        ],
-        ckpt_path="last",
+                (
+                    pad_instructions_to,
+                    pad_actions_to,
+                    (pad_state_to, state_feat_len),
+                ),
+                (pad_word, pad_action, 0),
+            ),
+            batch_size=max([args.train_batch_size, args.valid_batch_size]),
+            pin_memory=True,
+        )
+        for demonstrations in valid_demonstrations_dict.values()
+    ]
+
+    if args.debug:
+        preds = trainer.predict(
+            meta_module,
+            valid_dataloaders[0],
+            ckpt_path=model_path if os.path.exists(model_path) else "last"
+        )
+        instruction, state, decoded, logits, exacts, target = preds[0]
+        import pprint
+        dbg = debug_pred_all(instruction, target, decoded, exacts, state, IDX2WORD, IDX2ACTION, dictionaries[2], dictionaries[3])
+        pprint.pprint(dbg)
+
+        import pdb
+        pdb.set_trace()
+
+    if not os.path.exists(f"{model_path}"):
+        trainer.fit(
+            meta_module,
+            train_dataloader,
+            valid_dataloaders,
+            ckpt_path="last",
+        )
+        trainer.save_checkpoint(f"{model_path}")
+        print(f"Done, saving {model_path}")
+        return
+
+    print(f"Skipping {model_path} as it already exists")
+    trainer.validate(
+        meta_module, valid_dataloaders, ckpt_path=model_path
     )
-    print(f"Done, saving {model_path}")
-    trainer.save_checkpoint(f"{model_path}")
 
 
 if __name__ == "__main__":

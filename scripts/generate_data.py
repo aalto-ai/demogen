@@ -589,7 +589,42 @@ def parse_sparse_situation(
         for placed_object in situation_representation["placed_objects"].values():
             object_row = int(placed_object["position"]["row"])
             object_column = int(placed_object["position"]["column"])
-            if placed_object["object"]["shape"] != "box":
+            if reascan_boxes:
+                if placed_object["object"]["shape"] != "box":
+                    grid.append(
+                        np.array(
+                            [
+                                int(placed_object["object"]["size"]),
+                                int(color2idx[placed_object["object"]["color"]]),
+                                int(noun2idx[placed_object["object"]["shape"]]),
+                                0,
+                                0,
+                                object_row,
+                                object_column,
+                                0,
+                                0,
+                                0
+                            ]
+                        )
+                    )
+                else:
+                    grid.append(
+                        np.array(
+                            [
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                object_row,
+                                object_column,
+                                int(placed_object["object"]["size"]),
+                                int(color2idx[placed_object["object"]["color"]]),
+                                1,
+                            ]
+                        )
+                    )
+            else:
                 grid.append(
                     np.array(
                         [
@@ -600,24 +635,6 @@ def parse_sparse_situation(
                             0,
                             object_row,
                             object_column,
-                        ]
-                        + ([0] * 3 if reascan_boxes else [])
-                    )
-                )
-            elif reascan_boxes:
-                grid.append(
-                    np.array(
-                        [
-                            0,
-                            0,
-                            0,
-                            0,
-                            0,
-                            object_row,
-                            object_column,
-                            int(placed_object["object"]["size"]),
-                            int(color2idx[placed_object["object"]["color"]]),
-                            1,
                         ]
                     )
                 )
@@ -637,7 +654,22 @@ def parse_sparse_situation(
             object_row = int(placed_object["position"]["row"])
             object_column = int(placed_object["position"]["column"])
 
-            if placed_object["object"]["shape"] != "box":
+            if reascan_boxes:
+                if placed_object["object"]["shape"] == "box":
+                    grid[object_row, object_column, 5] = int(placed_object["object"]["size"])
+                    grid[object_row, object_column, 6] = int(
+                        color2idx[placed_object["object"]["color"]]
+                    )
+                    grid[object_row, object_column, 7] = 1
+                else:
+                    grid[object_row, object_column, 0] = int(placed_object["object"]["size"])
+                    grid[object_row, object_column, 1] = int(
+                        color2idx[placed_object["object"]["color"]]
+                    )
+                    grid[object_row, object_column, 2] = int(
+                        noun2idx[placed_object["object"]["shape"]]
+                    )
+            else:
                 grid[object_row, object_column, 0] = int(placed_object["object"]["size"])
                 grid[object_row, object_column, 1] = int(
                     color2idx[placed_object["object"]["color"]]
@@ -646,12 +678,6 @@ def parse_sparse_situation(
                     noun2idx[placed_object["object"]["shape"]]
                 )
 
-            if reascan_boxes and placed_object["object"]["shape"] == "box":
-                grid[object_row, object_column, 5] = int(placed_object["object"]["size"])
-                grid[object_row, object_column, 6] = int(
-                    color2idx[placed_object["object"]["color"]]
-                )
-                grid[object_row, object_column, 7] = 1
 
         grid = add_positional_information_to_grid(grid)
 
@@ -803,7 +829,7 @@ def encode_situation_as_onehot(situation, color2idx, noun2idx):
     return (
         parse_sparse_situation(
             situation.to_dict(),
-            6,
+            situation.grid_size,
             color2idx,
             noun2idx,
             "all",
@@ -1559,7 +1585,7 @@ def yield_baseline_examples(
         )
         situation_object = Situation.from_representation(situation["situation"])
         world_layout = parse_sparse_situation(
-            situation_object.to_dict(),
+            situation["situation"],
             situation_object.grid_size,
             color2idx,
             noun2idx,

@@ -37,6 +37,7 @@ from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
     train_clip,
 )
 from generate_data import compute_sorted_bsr
+from train_transformer import determine_padding
 
 from tqdm.auto import tqdm, trange
 
@@ -937,7 +938,8 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     training_data_indices_by_command = {}
     for i in range(len(train_demonstrations)):
-        if WORD2IDX["cautiously"] in train_demonstrations[i][0]:
+        # A workaround in the gSCAN case to not include stuff from split G
+        if WORD2IDX.get("cautiously", -1) in train_demonstrations[i][0]:
             continue
 
         cmd = " ".join(map(lambda x: IDX2WORD[x], train_demonstrations[i][0]))
@@ -1037,22 +1039,22 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
 def gscan_load_data(args):
     (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        dictionaries,
         (train_demonstrations, valid_demonstrations_dict),
     ) = load_data_directories(
         args.data_directory, args.dictionary, limit_load=args.limit_load
     )
 
+    WORD2IDX = dictionaries[0]
+    ACTION2IDX = dictionaries[1]
+
+    instruction_padding, action_padding, state_padding = determine_padding(train_demonstrations)
+
     dataset_splits = {
         split: MapDataset(
             PaddingDataset(
                 demos,
-                (32, 128, (36, 7)),
+                (instruction_padding, action_padding, (state_padding, 7)),
                 (WORD2IDX["[pad]"], ACTION2IDX["[pad]"], 0),
             ),
             lambda x: ((x[2], x[0]), x[1]),
@@ -1067,7 +1069,7 @@ def gscan_load_data(args):
         )
     }
 
-    return ((WORD2IDX, ACTION2IDX), dataset_splits, (color_dictionary, noun_dictionary))
+    return ((WORD2IDX, ACTION2IDX), dataset_splits, dictionaries[2:])
 
 
 class MonotonicRandomPositionEmbedding(nn.Module):
@@ -1968,6 +1970,7 @@ def main():
     dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](
         args
     )
+    print(dictionaries)
     resume_points = compute_resume_points(args.data_output_directory)
     datasets_with_resume_points = {
         k: (v, resume_points.get(k, 0)) for k, v in datasets.items()

@@ -12,6 +12,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 import pytorch_lightning as pl
 
+import minigrid
+
 import faiss
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.preprocessing import normalize
@@ -37,6 +39,7 @@ from generate_data import (
     compute_sorted_set_bsr,
     compute_sorted_bsr
 )
+from train_transformer import determine_padding
 from sentence_transformers import SentenceTransformer
 
 from tqdm.auto import tqdm
@@ -622,8 +625,8 @@ def main():
     )
     parser.add_argument("--only-splits", nargs="*", help="Which splits to include")
     parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--offset", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--offset", type=float, default=0)
+    parser.add_argument("--limit", type=float, default=None)
     parser.add_argument("--limit-load", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--num-layers", type=int, default=8)
@@ -632,12 +635,7 @@ def main():
     args = parser.parse_args()
 
     (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        dictionaries,
         (train_demonstrations, valid_demonstrations_dict),
     ) = load_data_directories(
         args.training_data,
@@ -645,6 +643,11 @@ def main():
         only_splits=list(set(["train"]) | set(args.only_splits)) if args.only_splits else None,
         limit_load=args.limit_load
     )
+
+    WORD2IDX = dictionaries[0]
+    ACTION2IDX = dictionaries[1]
+
+    print(WORD2IDX, ACTION2IDX)
 
     pad_action = ACTION2IDX["[pad]"]
     pad_word = WORD2IDX["[pad]"]
@@ -657,11 +660,15 @@ def main():
     state_autoencoder_transformer = None
     state_encodings_by_split = None
 
+    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
+
+    print(f"Paddings instr: {pad_instructions_to} act: {pad_actions_to} state: {pad_state_to}")
+
     if args.include_state:
         state_autoencoder_transformer = train_state_autoencoder(
             args.load_state_autoencoder_transformer,
             PaddingDataset(
-                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((36, 7),), (0,)
+                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((pad_state_to, 7),), (0,)
             ),
             args.seed,
             args.state_autoencoder_transformer_iterations
@@ -682,7 +689,7 @@ def main():
 
     transformer_validation_datasets = [
         Subset(
-            PaddingDataset(data, (32, 128, (36, 7)), (pad_word, pad_action, 0)),
+            PaddingDataset(data, (pad_instructions_to, pad_actions_to, (pad_state_to, 7)), (pad_word, pad_action, 0)),
             np.random.permutation(512),
         )
         for data in valid_demonstrations_dict.values()
@@ -692,7 +699,7 @@ def main():
         args.load_transformer_model,
         PaddingDataset(
             train_demonstrations,
-            (32, 128, (36, 7)),
+            (pad_instructions_to, pad_actions_to, (pad_state_to, 7)),
             (
                 pad_word,
                 pad_action,
@@ -826,15 +833,22 @@ def main():
                 Subset(
                     demos,
                     np.arange(
-                        min(args.offset, len(demos)),
                         min(
-                            args.offset
-                            + (len(demos) if not args.limit else args.limit),
+                            math.floor(args.offset * len(demos)),
+                            len(demos),
+                        ),
+                        min(
+                            math.floor(args.offset * len(demos))
+                            + (
+                                len(demos)
+                                if not args.limit
+                                else math.floor(args.limit * len(demos))
+                            ),
                             len(demos),
                         ),
                     ),
                 ),
-                (32, 128, (36, 7)),
+                (pad_instructions_to, pad_actions_to, (pad_state_to, 7)),
                 (pad_word, pad_action, 0),
             ),
             batch_size=args.batch_size,

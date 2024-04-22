@@ -31,6 +31,7 @@ from gscan_metaseq2seq.util.load_data import load_data, load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.util.scheduler import transformer_optimizer_config
 from gscan_metaseq2seq.util.padding import pad_to
+from tqdm.auto import tqdm
 
 
 def init_parameters(module, scale=1e-2):
@@ -909,6 +910,26 @@ class EMACallback(pl.callbacks.Callback):
             self.copy_to(self.ema.module.parameters(), pl_module.parameters())
 
 
+def determine_padding(demonstrations):
+    max_instruction_len, max_action_len, max_state_len = (0, 0, 0)
+
+    for query_instr, query_actions, query_state, support_states, support_instrs, support_actions, score in tqdm(demonstrations, desc="Determining padding"):
+        max_instruction_len = max(max_instruction_len, len(query_instr))
+        max_instruction_len = max(max_instruction_len, max([
+            len(instr) for instr in support_instrs
+        ]))
+        max_action_len = max(max_action_len, len(query_actions))
+        max_action_len = max(max_action_len, max([
+            len(actions) for actions in support_actions
+        ]))
+        max_state_len = max(max_state_len, len(query_state))
+        max_state_len = max(max_state_len, max([
+            len(state) for state in support_states
+        ]))
+
+    return max_instruction_len, max_action_len, max_state_len
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
@@ -954,6 +975,7 @@ def main():
     parser.add_argument("--no-reorder", action="store_true")
     parser.add_argument("--ema", action="store_true")
     parser.add_argument("--ema-decay", type=float, default=0.995)
+    parser.add_argument("--determine-padding", action="store_true")
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1001,6 +1023,13 @@ def main():
     eos_action = ACTION2IDX["[eos]"]
     pad_state = 0
 
+    pad_state_to = args.pad_state_to
+    pad_instructions_to = args.pad_instructions_to
+    pad_actions_to = args.pad_actions_to
+
+    if args.determine_padding:
+        pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(meta_train_demonstrations)
+
     pl.seed_everything(0)
     meta_train_dataset = ReshuffleOnIndexZeroDataset(
         PaddingDataset(
@@ -1044,12 +1073,12 @@ def main():
                 shuffle=not args.disable_shuffle,
             ),
             (
-                (args.pad_state_to, None),
-                (args.metalearn_demonstrations_limit, args.pad_state_to, None),
-                32,
-                128,
-                (args.metalearn_demonstrations_limit, 32),
-                (args.metalearn_demonstrations_limit, 128),
+                (pad_state_to, None),
+                (args.metalearn_demonstrations_limit, pad_state_to, None),
+                pad_instructions_to,
+                pad_actions_to,
+                (args.metalearn_demonstrations_limit, pad_instructions_to),
+                (args.metalearn_demonstrations_limit, pad_actions_to),
             ),
             (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
         )
@@ -1174,12 +1203,12 @@ def main():
                     no_reorder=args.no_reorder
                 ),
                 (
-                    (args.pad_state_to, None),
-                    (args.metalearn_demonstrations_limit, args.pad_state_to, None),
-                    32,
-                    128,
-                    (args.metalearn_demonstrations_limit, 32),
-                    (args.metalearn_demonstrations_limit, 128),
+                    (pad_state_to, None),
+                    (args.metalearn_demonstrations_limit, pad_state_to, None),
+                    pad_instructions_to,
+                    pad_actions_to,
+                    (args.metalearn_demonstrations_limit, pad_instructions_to),
+                    (args.metalearn_demonstrations_limit, pad_actions_to),
                 ),
                 (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
             ),
