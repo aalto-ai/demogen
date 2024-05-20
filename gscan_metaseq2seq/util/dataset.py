@@ -5,6 +5,30 @@ from torch.utils.data import Dataset, IterableDataset
 from .padding import pad_to, recursive_pad_array
 
 
+class SampleSentencesByWordWeights(IterableDataset):
+    def __init__(self, train_data_indices_by_word_idx, word_weights, dataset):
+        super().__init__()
+        self.train_data_indices_by_word_idx = train_data_indices_by_word_idx
+        self.word_weights = word_weights
+        self.words_array = np.arange(len(word_weights))
+        self.dataset = dataset
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        while True:
+            idx = np.random.choice(self.words_array, replace=True, p=self.word_weights)
+            if not self.train_data_indices_by_word_idx[idx]:
+                continue
+
+            break
+
+        return self.dataset[
+            np.random.choice(self.train_data_indices_by_word_idx[idx], replace=True)
+        ]
+
+
 class ReorderSupportsByDistanceDataset(Dataset):
     def __init__(self, dataset, limit, no_reorder=False):
         super().__init__()
