@@ -3,6 +3,8 @@ import copy
 import os
 import numpy as np
 import math
+import functools
+import itertools
 
 import torch
 import torch.nn.functional as F
@@ -976,6 +978,17 @@ def main():
     parser.add_argument("--ema", action="store_true")
     parser.add_argument("--ema-decay", type=float, default=0.995)
     parser.add_argument("--determine-padding", action="store_true")
+    parser.add_argument(
+        "--state-profile", choices=("gscan", "reascan", "state-calflow", "babyai-codeworld", "messenger"), default="gscan"
+    )
+    parser.add_argument(
+        "--determine-state-profile", action="store_true"
+    )
+    parser.add_argument(
+        "--use-state-component-lengths",
+        action="store_true",
+        help="Use state component lengths (here for backward compatibility)"
+    )
     args = parser.parse_args()
 
     exp_name = "meta_gscan"
@@ -1003,17 +1016,14 @@ def main():
     iterations = args.iterations
 
     (
-        (
-            WORD2IDX,
-            ACTION2IDX,
-            color_dictionary,
-            noun_dictionary,
-        ),
+        dictionaries,
         (meta_train_demonstrations, meta_valid_demonstrations_dict),
     ) = load_data_directories(
         args.train_demonstrations, args.dictionary, limit_load=args.limit_load
     )
 
+    WORD2IDX = dictionaries[0]
+    ACTION2IDX = dictionaries[1]
     IDX2WORD = {i: w for w, i in WORD2IDX.items()}
     IDX2ACTION = {i: w for w, i in ACTION2IDX.items()}
 
@@ -1026,6 +1036,51 @@ def main():
     pad_state_to = args.pad_state_to
     pad_instructions_to = args.pad_instructions_to
     pad_actions_to = args.pad_actions_to
+
+    STATE_PROFILES = {
+        "gscan": [4, len(dictionaries[2]), len(dictionaries[3]), 1, 4, 8, 8],
+        "babyai-codeworld": [16, len(dictionaries[2]), len(dictionaries[3]), 4, 4, 64, 64],
+        "reascan": [
+            4,
+            len(dictionaries[2]),
+            len(dictionaries[3]),
+            1,
+            4,
+            8,
+            8,
+            4,
+            len(dictionaries[3]),
+            1,
+        ],
+        "messenger": [
+            len(dictionaries[2]),
+            32,
+            32
+        ],
+        "state-calflow": [
+            8, # token type
+            # These are upper bounds, not exact lengths
+            512, # possible name
+            512, # possible event or time
+            512, # possible event, or time
+            64 # number
+        ]
+    }
+    if args.determine_state_profile:
+        state_component_max_len = (functools.reduce(
+            lambda x, o: np.stack([
+                x, o
+            ]).max(axis=0),
+            map(lambda x: np.stack(x[2]).max(axis=0),
+                itertools.chain.from_iterable([
+                    meta_train_demonstrations,
+                    *meta_valid_demonstrations_dict.values()
+                ]))
+        ) + 1).tolist()
+        state_feat_len = len(state_component_max_len)
+    else:
+        state_component_max_len = STATE_PROFILES[args.state_profile]
+        state_feat_len = len(state_component_max_len)
 
     if args.determine_padding:
         pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(meta_train_demonstrations)
@@ -1086,7 +1141,7 @@ def main():
 
     pl.seed_everything(seed)
     meta_module = BigSymbolTransformerLearner(
-        7,
+        state_feat_len,
         len(WORD2IDX),
         len(ACTION2IDX),
         args.hidden_size,
