@@ -21,7 +21,8 @@ class StateEncoderTransformer(nn.Module):
         dropout_p,
         norm_first,
         pad_word_idx,
-        state_component_lengths=None
+        state_component_lengths=None,
+        custom_embedding_model=None
     ):
         super().__init__()
         self.n_state_components = n_state_components
@@ -35,7 +36,11 @@ class StateEncoderTransformer(nn.Module):
         self.state_projection = nn.Linear(
             self.n_state_components * self.embedding_dim, self.embedding_dim
         )
-        self.embedding = nn.Embedding(input_size, embedding_dim)
+        self.embedding = (
+            custom_embedding_model
+            if custom_embedding_model is not None
+            else nn.Embedding(input_size, embedding_dim)
+        )
         self.norm = nn.LayerNorm(embedding_dim)
         self.dropout = nn.Dropout(dropout_p)
         self.encoding = nn.Parameter(torch.randn(embedding_dim))
@@ -441,7 +446,8 @@ class TransformerLearner(pl.LightningModule):
         warmup_proportion=0.001,
         decay_power=-1,
         predict_steps=64,
-        state_component_lengths=None
+        state_component_lengths=None,
+        custom_embedding_model=None
     ):
         super().__init__()
         self.encoder = StateEncoderTransformer(
@@ -453,7 +459,8 @@ class TransformerLearner(pl.LightningModule):
             dropout_p,
             norm_first,
             pad_word_idx,
-            state_component_lengths=state_component_lengths
+            state_component_lengths=state_component_lengths,
+            custom_embedding_model=custom_embedding_model
         )
         self.decoder = DecoderTransformer(
             embed_dim,
