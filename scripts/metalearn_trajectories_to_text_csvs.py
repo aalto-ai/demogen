@@ -5,6 +5,7 @@ import functools
 import tqdm
 import re
 import numpy as np
+import pandas as pd
 import pprint
 import os
 from gscan_metaseq2seq.util.load_data import load_data_directories
@@ -105,14 +106,11 @@ def check_already_done(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--api-key", type=str, required=True, help="OpenAI API key")
     parser.add_argument("--dataset", type=str, required=True, help="List of input sentences")
-    parser.add_argument("--output-responses", type=str, required=True, help="Where to write chatgpt responses")
+    parser.add_argument("--output-responses", type=str, required=True, help="Where to write outputs")
     parser.add_argument("--only-splits", nargs="*")
     parser.add_argument("--limit-load", type=int)
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--model", choices=("gpt-3.5-turbo", "gpt-4", "gpt-4-turbo-preview"), default="gpt-3.5-turbo")
-    parser.add_argument("--max-output-tokens", type=int, default=512)
     parser.add_argument("--limit-examples", type=int, default=8)
     parser.add_argument("--reverse", action="store_true")
     args = parser.parse_args()
@@ -137,15 +135,12 @@ def main():
 
     os.makedirs(args.output_responses, exist_ok=True)
 
-    for split in {
+    for split_examples in {
         "train": train_demonstrations,
-        **valid_demonstrationd_dict
+        **valid_demonstrations_dict
     }.items():
         df = pd.DataFrame(
-            list(itertools.chain.from_iterable(
-                map(
-                    lambda split_examples: map(
-                        map(
+            list(map(
                             lambda e: convert_to_text_representation(
                                 e,
                                 idx2word,
@@ -158,14 +153,10 @@ def main():
                                 args.reverse
                             ),
                             split_examples[1][:args.limit]
-                        )
-                    ),
-                    valid_demonstrations_dict.items()
-                )
             ))
         )
         df.columns = ["text", "label"]
-        df.to_tsv(os.path.join(args.output_responses, f"{split}.tsv"))
+        df.to_csv(os.path.join(args.output_responses, f"{split_examples[0]}.tsv"), sep='\t')
 
 
 if __name__ == "__main__":
