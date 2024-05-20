@@ -39,6 +39,12 @@ from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
 )
 from generate_data import compute_sorted_bsr
 from train_transformer import determine_padding
+from train_bart import (
+    EncoderDecoderLanguageModel,
+    StateEncoderDecoderLanguageModel,
+    train_encoder_decoder,
+    train_state_encoder_decoder
+)
 
 from tqdm.auto import tqdm, trange
 
@@ -498,162 +504,6 @@ def generate_instructions_and_rank(
                 continue
 
 
-class StateEncoderDecoderLanguageModel(pl.LightningModule):
-    def __init__(
-        self,
-        num_words,
-        num_positions,
-        pad_word_idx,
-        sos_word_idx,
-        lr=0.0001,
-        wd=1e-2,
-        emb_dim=128,
-        nlayers=8,
-        nhead=4,
-        dropout=0.1,
-        norm_first=False,
-        decay_power=-1,
-        warmup_proportion=0.14,
-    ):
-        super().__init__()
-        self.save_hyperparameters()
-        self.state_encoder = BOWEmbedding(64, 7, emb_dim)
-        self.state_encoder_projection = nn.Linear(7 * emb_dim, emb_dim)
-        self.embedding_instructions = nn.Embedding(num_words, emb_dim)
-        self.positional_encoding = MonotonicPositionEncodingByMask(
-            num_positions, emb_dim
-        )
-        self.decoder_positional_encoding = MonotonicRandomPositionEmbedding(
-            128, emb_dim
-        )
-        self.norm_input = nn.LayerNorm(emb_dim)
-        self.norm_decoded_output = nn.LayerNorm(emb_dim)
-        self.dropout = nn.Dropout(p=dropout)
-        self.transformer = nn.Transformer(
-            d_model=emb_dim,
-            dim_feedforward=emb_dim * 4,
-            dropout=dropout,
-            nhead=nhead,
-            norm_first=norm_first,
-            num_encoder_layers=nlayers,
-            num_decoder_layers=nlayers,
-        )
-        self.project = nn.Linear(emb_dim, num_words)
-        self.sos_word_idx = sos_word_idx
-        self.pad_word_idx = pad_word_idx
-
-    def configure_optimizers(self):
-        return transformer_optimizer_config(
-            self,
-            self.hparams.lr,
-            weight_decay=self.hparams.wd,
-            decay_power=self.hparams.decay_power,
-            warmup_proportion=self.hparams.warmup_proportion,
-            optimizer_kwargs={"fused": True},
-        )
-
-    def encode(self, base_instruction, base_state, all_mask, instruction_mask):
-        masked_instruction = base_instruction.clone()
-
-        encoded_state = self.state_encoder_projection(self.state_encoder(base_state))
-        encoded_instruction = self.embedding_instructions(
-            masked_instruction
-        ) + self.positional_encoding(instruction_mask)
-
-        encoded_inp = torch.cat(
-            [
-                encoded_instruction,
-                encoded_state,
-            ],
-            dim=-2,
-        )
-        encoded_inp = self.dropout(self.norm_input(encoded_inp))
-
-        t_encoded_inp = self.transformer.encoder(
-            encoded_inp.transpose(0, 1), src_key_padding_mask=all_mask
-        )
-
-        return t_encoded_inp.transpose(0, 1)
-
-    def decode(self, encodings, encoding_mask, decoder_in):
-        encoded_right_shifted_instruction = self.embedding_instructions(decoder_in)
-        encoded_right_shifted_instruction = (
-            encoded_right_shifted_instruction
-            + self.decoder_positional_encoding(encoded_right_shifted_instruction)
-        )
-        encoded_right_shifted_instruction = self.dropout(
-            self.norm_decoded_output(encoded_right_shifted_instruction)
-        )
-
-        return self.project(
-            self.transformer.decoder(
-                memory=encodings.transpose(0, 1),
-                memory_key_padding_mask=encoding_mask,
-                tgt=encoded_right_shifted_instruction.transpose(0, 1),
-                tgt_key_padding_mask=(decoder_in == self.pad_word_idx),
-                tgt_mask=nn.Transformer.generate_square_subsequent_mask(
-                    decoder_in.shape[1]
-                ).to(self.device),
-            ).transpose(0, 1)
-        )
-
-    def forward(
-        self,
-        base_instruction,
-        base_state,
-        all_mask,
-        instruction_mask,
-        right_shifted_instruction,
-    ):
-        encodings = self.encode(
-            base_instruction, base_state, all_mask, instruction_mask
-        )
-        return self.decode(encodings, all_mask, right_shifted_instruction)
-
-    def training_step(self, x, idx):
-        instruction, state = x
-
-        right_shifted_instruction = torch.cat(
-            [
-                torch.ones_like(instruction[:, :1]) * self.sos_word_idx,
-                instruction,
-            ],
-            dim=1,
-        )[:, :-1]
-
-        instruction_state_padding = torch.cat(
-            [instruction == self.pad_word_idx, (state == 0).all(dim=-1)], dim=-1
-        )
-
-        all_mask = torch.logical_or(
-            torch.rand(instruction_state_padding.shape, device=self.device)
-            < np.random.uniform(0.0, 0.3),
-            instruction_state_padding,
-        )
-        instruction_only_mask = all_mask[:, : instruction.shape[1]]
-
-        # We always keep the very last pad bit unset, so that the entire
-        # input is not padded
-        all_mask[:, -1] = False
-        instruction_only_mask[:, -1] = False
-
-        logits = self(
-            instruction,
-            state,
-            all_mask,
-            instruction_only_mask,
-            right_shifted_instruction,
-        )
-
-        loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
-        self.log("tloss", loss, prog_bar=True)
-
-        return loss
-
-    def validation_step(self, x, idx):
-        return self.training_step(x, idx)
-
-
 def sample_from_state_encoder_decoder_model_with_mask(
     model,
     expanded_instruction,
@@ -798,88 +648,6 @@ def sample_from_state_encoder_decoder_model(
     )
 
 
-def train_state_encoder_decoder(
-    dataset,
-    seed,
-    mlm_iterations,
-    pad_word,
-    sos_word,
-    vocab_size,
-    batch_size,
-    device="cuda",
-    load=None,
-):
-    nlayers = 8
-    nhead = 8
-    hidden_size = 512
-    dropout_p = 0.1
-    train_batch_size = batch_size
-    batch_size_mult = 1
-    dataset_name = "gscan"
-    check_val_every = 8000
-
-    exp_name = "enc_dec"
-    model_name = f"transformer_l_{nlayers}_h_{nhead}_d_{hidden_size}"
-    dataset_name = dataset_name
-    effective_batch_size = train_batch_size * batch_size_mult
-    exp_name = f"{exp_name}_s_{seed}_m_{model_name}_it_{mlm_iterations}_b_{effective_batch_size}_d_{dataset_name}_drop_{dropout_p}"
-    model_dir = f"models/{exp_name}/{model_name}"
-    model_path = f"{model_dir}/{exp_name}.pt"
-    print(model_path)
-    print(
-        f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
-    )
-
-    train_dataloader = DataLoader(dataset, batch_size=train_batch_size, pin_memory=True)
-
-    logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
-
-    num_positions = 72
-
-    model = StateEncoderDecoderLanguageModel(
-        vocab_size,
-        num_positions,
-        pad_word,
-        sos_word,
-        nlayers=nlayers,
-        nhead=nhead,
-        emb_dim=hidden_size,
-        dropout=dropout_p,
-        norm_first=True,
-        lr=1e-4,
-        decay_power=-1,
-        warmup_proportion=0.1,
-    )
-
-    if load is not None:
-        model.load_state_dict(torch.load(load))
-
-    os.makedirs(logs_root_dir, exist_ok=True)
-    trainer = pl.Trainer(
-        logger=[
-            TensorBoardLogger(logs_root_dir),
-        ],
-        callbacks=[pl.callbacks.LearningRateMonitor()],
-        max_steps=mlm_iterations,
-        num_sanity_val_steps=10,
-        accelerator="gpu",
-        devices=1,
-        precision="16-mixed" if device == "cuda" else 32,
-        default_root_dir=logs_root_dir,
-        accumulate_grad_batches=batch_size_mult,
-        limit_val_batches=128,
-        # gradient_clip_val=0.2,
-    )
-
-    trainer.fit(model, train_dataloader)
-
-    # We validate on the train_dataloader, but its just a sanity check to make sure that
-    # we loaded a valid model
-    trainer.validate(model, train_dataloader)
-
-    return model
-
-
 def make_inv_counts_dist(counts_dictionary):
     counts_array = np.zeros(max(counts_dictionary.keys()) + 1)
     for word, count in counts_dictionary.items():
@@ -937,6 +705,11 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         MapDataset(datasets["train"], lambda x: (x[0][1], x[0][0])),
     )
 
+    state_component_max_len, state_feat_len = determine_state_profile(train_demonstrations, {
+        k: v.dataset.dataset
+        for k, v in datasets.items() if k != "train"
+    })
+
     model = train_state_encoder_decoder(
         balanced_training_data_subset,
         args.seed,
@@ -957,7 +730,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     transformer_model_weights = torch.load(args.load_transformer_model)
     transformer_model_state_dict = transformer_model_weights["state_dict"] if "state_dict" in transformer_model_weights else transformer_model_weights
     transformer_model_hparams = transformer_model_weights["hyper_parameters"] if "hyper_parameters" in transformer_model_weights else dict(
-        n_state_components=7,
+        n_state_components=state_feat_len,
         x_categories=len(WORD2IDX),
         y_categories=len(ACTION2IDX),
         embed_dim=512,
@@ -1046,244 +819,6 @@ def gscan_load_data(args):
     }
 
     return ((WORD2IDX, ACTION2IDX), dataset_splits, dictionaries[2:])
-
-
-class MonotonicRandomPositionEmbedding(nn.Module):
-    def __init__(self, num_positions, emb_dim):
-        super().__init__()
-        self.embedding = nn.Embedding(num_positions, emb_dim)
-        self.num_positions = num_positions
-
-    def forward(self, x):
-        permutation = (
-            torch.from_numpy(
-                np.sort(np.random.permutation(self.num_positions)[: x.shape[1]])
-            )[None]
-            .expand(x.shape[0], -1)
-            .to(x.device)
-        )
-
-        return self.embedding(permutation)
-
-
-class MonotonicPositionEncodingByMask(nn.Module):
-    def __init__(self, num_positions, emb_dim):
-        super().__init__()
-        self.embedding = nn.Embedding(num_positions, emb_dim)
-        self.num_positions = num_positions
-
-    def forward(self, key_padding_mask):
-        inv_key_padding_mask = ~key_padding_mask
-        inv_key_padding_mask_cumsum = inv_key_padding_mask.to(torch.long).cumsum(dim=-1)
-
-        return self.embedding(inv_key_padding_mask_cumsum)
-
-
-class EncoderDecoderLanguageModel(pl.LightningModule):
-    def __init__(
-        self,
-        num_words,
-        num_positions,
-        pad_word_idx,
-        sos_word_idx,
-        eos_word_idx,
-        lr=0.0001,
-        wd=1e-2,
-        emb_dim=128,
-        nlayers=8,
-        nhead=4,
-        dropout=0.1,
-        norm_first=False,
-        decay_power=-1,
-        warmup_proportion=0.14,
-    ):
-        super().__init__()
-        self.save_hyperparameters()
-        self.embedding_instructions = nn.Embedding(num_words, emb_dim)
-        self.positional_encoding = MonotonicPositionEncodingByMask(
-            num_positions, emb_dim
-        )
-        self.decoder_positional_encoding = MonotonicRandomPositionEmbedding(
-            128, emb_dim
-        )
-        self.transformer = nn.Transformer(
-            d_model=emb_dim,
-            dim_feedforward=emb_dim * 4,
-            dropout=dropout,
-            nhead=nhead,
-            norm_first=norm_first,
-            num_encoder_layers=nlayers,
-            num_decoder_layers=nlayers,
-        )
-        self.project = nn.Linear(emb_dim, num_words)
-        self.sos_word_idx = sos_word_idx
-        self.pad_word_idx = pad_word_idx
-        self.eos_word_idx = eos_word_idx
-
-    def configure_optimizers(self):
-        return transformer_optimizer_config(
-            self,
-            self.hparams.lr,
-            weight_decay=self.hparams.wd,
-            decay_power=self.hparams.decay_power,
-            warmup_proportion=self.hparams.warmup_proportion,
-        )
-
-    def forward(self, base_instruction, instruction_mask, right_shifted_instruction):
-        masked_instruction = base_instruction.clone()
-
-        encoded_instruction = self.embedding_instructions(
-            masked_instruction
-        ) + self.positional_encoding(instruction_mask)
-        encoded_right_shifted_instruction = self.embedding_instructions(
-            right_shifted_instruction
-        )
-        encoded_right_shifted_instruction = (
-            encoded_right_shifted_instruction
-            + self.decoder_positional_encoding(encoded_right_shifted_instruction)
-        )
-
-        decoded_instruction = self.transformer(
-            src=encoded_instruction.transpose(0, 1),
-            tgt=encoded_right_shifted_instruction.transpose(0, 1),
-            src_key_padding_mask=instruction_mask,
-            memory_key_padding_mask=instruction_mask,
-            tgt_key_padding_mask=(right_shifted_instruction == self.pad_word_idx),
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
-                right_shifted_instruction.shape[1]
-            ).to(self.device),
-        ).transpose(0, 1)
-
-        return self.project(decoded_instruction)
-
-    def training_step(self, x, idx):
-        (instruction,) = x
-
-        right_shifted_instruction = torch.cat(
-            [
-                torch.ones_like(instruction[:, :1]) * self.sos_word_idx,
-                instruction,
-            ],
-            dim=1,
-        )[:, :-1]
-
-        instruction_mask = torch.logical_or(
-            torch.rand(instruction.shape, device=self.device)
-            < np.random.uniform(0.1, 0.9),
-            instruction == self.pad_word_idx,
-        )
-
-        # We always keep the very last pad bit unset, so that the entire
-        # input is not padded
-        instruction_mask[:, -1] = False
-
-        logits = self(instruction, instruction_mask, right_shifted_instruction)
-
-        loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
-        self.log("loss", loss)
-
-        return loss
-
-    def validation_step(self, x, idx, dl_idx=0):
-        (instruction,) = x
-
-        right_shifted_instruction = torch.cat(
-            [
-                torch.ones_like(instruction[:, :1]) * self.sos_word_idx,
-                instruction,
-            ],
-            dim=1,
-        )[:, :-1]
-
-        instruction_mask = torch.logical_or(
-            torch.rand(instruction.shape, device=self.device) < 0.5,
-            instruction == self.pad_word_idx,
-        )
-
-        # We always keep the very last pad bit unset, so that the entire
-        # input is not padded
-        instruction_mask[:, -1] = False
-
-        logits = self(instruction, instruction_mask, right_shifted_instruction)
-
-        loss = F.cross_entropy(logits.flatten(0, -2), instruction.flatten())
-        self.log("vloss", loss)
-
-        return loss
-
-
-def train_encoder_decoder(
-    dataset,
-    seed,
-    mlm_train_iterations,
-    pad_word,
-    sos_word,
-    eos_word,
-    vocab_size,
-    batch_size,
-    device="cpu",
-):
-    nlayers = 4
-    nhead = 8
-    hidden_size = 128
-    dropout_p = 0.1
-    train_batch_size = batch_size
-    batch_size_mult = 1
-    dataset_name = "cogs"
-    check_val_every = 8000
-
-    exp_name = "enc_dec"
-    model_name = f"transformer_l_{nlayers}_h_{nhead}_d_{hidden_size}"
-    dataset_name = dataset_name
-    effective_batch_size = train_batch_size * batch_size_mult
-    exp_name = f"{exp_name}_s_{seed}_m_{model_name}_it_{mlm_train_iterations}_b_{effective_batch_size}_d_{dataset_name}_drop_{dropout_p}"
-    model_dir = f"models/{exp_name}/{model_name}"
-    model_path = f"{model_dir}/{exp_name}.pt"
-    print(model_path)
-    print(
-        f"Batch size {train_batch_size}, mult {batch_size_mult}, total {train_batch_size * batch_size_mult}"
-    )
-
-    train_dataloader = DataLoader(dataset, batch_size=train_batch_size, pin_memory=True)
-
-    logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
-
-    num_positions = 72
-
-    model = EncoderDecoderLanguageModel(
-        vocab_size,
-        num_positions,
-        pad_word,
-        sos_word,
-        eos_word,
-        nlayers=nlayers,
-        nhead=nhead,
-        emb_dim=hidden_size,
-        dropout=dropout_p,
-        norm_first=True,
-        lr=1e-4,
-        decay_power=-1,
-        warmup_proportion=0.1,
-    )
-
-    trainer = pl.Trainer(
-        logger=[
-            TensorBoardLogger(logs_root_dir),
-            LoadableCSVLogger(logs_root_dir, flush_logs_every_n_steps=10),
-        ],
-        callbacks=[pl.callbacks.LearningRateMonitor()],
-        max_steps=mlm_train_iterations,
-        num_sanity_val_steps=10,
-        gpus=1 if device == "cuda" else 0,
-        precision=16 if device == "cuda" else 32,
-        default_root_dir=logs_root_dir,
-        accumulate_grad_batches=batch_size_mult,
-        # gradient_clip_val=0.2,
-    )
-
-    trainer.fit(model, train_dataloader)
-
-    return model
 
 
 def sample_from_encoder_decoder_model_with_mask(
