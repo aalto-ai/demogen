@@ -755,7 +755,16 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
     transformer_model_trainer = pl.Trainer(
         accelerator="gpu" if torch.cuda.is_available() else None,
         devices=1 if torch.cuda.is_available() else 0,
-        precision="16-mixed" if torch.cuda.is_available() else None,
+        precision=(
+            "bf16" if (
+                torch.cuda.is_bf16_supported()
+            ) else (
+                "16-mixed" if torch.cuda.is_available()
+                else (
+                    "32"
+                )
+            )
+        ),
     )
     transformer_model_trainer.validate(
         transformer_model,
