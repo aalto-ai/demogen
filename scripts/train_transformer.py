@@ -494,7 +494,7 @@ def main():
         num_sanity_val_steps=10,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         precision=(
-            "bf16" if (
+            "bf16-mixed" if (
                 args.precision == 16 and
                 torch.cuda.is_bf16_supported()
             ) else (
