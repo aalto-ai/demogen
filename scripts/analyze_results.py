@@ -452,6 +452,11 @@ MATCH_CONFIGS = {
         "dataset": "baseline_reascan_paraphrased",
         "headline": "gscan",
     },
+    "babyai_gscan_comb_gotolocal_transformer": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "babyai_gscan_comb_gotolocal",
+        "headline": "gscan",
+    },
     "transformer_full": {
         "model": "vilbert_cross_encoder_decode_actions",
         "headline": "gscan",
@@ -541,6 +546,22 @@ MATCH_CONFIGS = {
         "dropout": "0.1",
         "ml_d_limit": "16",
     },
+    "retrieval_gscan_sr": {
+        "dataset": "baseline_sr_retrieval",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
+    "retrieval_reascan": {
+        "dataset": "baseline_reascan_retrieval",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
     "gscan_metalearn_only_random": {
         "dataset": "metalearn_random_instructions_same_layout_allow_any",
         "headline": "meta_gscan",
@@ -548,6 +569,14 @@ MATCH_CONFIGS = {
     "gscan_metalearn_sample_environments": {
         "dataset": "metalearn_find_matching_instruction_demos_allow_any",
         "headline": "meta_gscan",
+    },
+    "retrieval_babyai_comb_gotolocal": {
+        "dataset": "babyai_gscan_comb_gotolocal_retrieval",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
     },
 }
 
