@@ -873,6 +873,10 @@ def main():
     ](examples, dictionaries, args)
 
     for split in tqdm(splits):
+        # Note we still make always make the directory,
+        # this is to ensure that the dataloader indices align correctly
+        os.makedirs(f"{args.data_output_directory}/{split}", exist_ok=True)
+
         if not examples[split]:
             print(f"Skip {split} as it is empty")
             continue
@@ -881,7 +885,6 @@ def main():
             GENERATION_CONFIGS["metalearn_retrieve_state_coverage"]["generate_mode"]
         ](examples, dictionaries, split, global_payload, args)
 
-        os.makedirs(f"{args.data_output_directory}/{split}", exist_ok=True)
         iterable = bound_funcs[GENERATION_CONFIGS["metalearn_retrieve_state_coverage"]["yield_func"]](
             tqdm(examples[split][: args.limit], desc=f"Generating for split {split}"),
             payload,

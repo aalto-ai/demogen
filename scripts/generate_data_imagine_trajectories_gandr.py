@@ -868,7 +868,13 @@ def main():
     save_offset = (args.offset or 0) // 10000
 
     for split, dataloader in tqdm(dataloader_splits.items()):
-        os.makedirs(os.path.join(args.data_output_directory, split), exist_ok=True)
+        # Note we still make always make the directory,
+        # this is to ensure that the dataloader indices align correctly
+        os.makedirs(f"{args.data_output_directory}/{split}", exist_ok=True)
+
+        if len(dataloader.dataset) == 0:
+            print(f"Skip {split} as it is empty")
+            continue
 
         for i, batch in enumerate(
             batched(
