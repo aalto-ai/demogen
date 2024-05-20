@@ -20,6 +20,7 @@ from gscan_metaseq2seq.util.dataset import (
     PaddingDataset,
     ReshuffleOnIndexZeroDataset,
     MapDataset,
+    SampleSentencesByWordWeights
 )
 from gscan_metaseq2seq.util.load_data import load_data_directories
 from gscan_metaseq2seq.util.logging import LoadableCSVLogger
@@ -889,31 +890,6 @@ def make_inv_counts_dist(counts_dictionary):
     inv_counts_dist = inv_counts / inv_counts.sum()
 
     return inv_counts_dist
-
-
-class SampleSentencesByWordWeights(IterableDataset):
-    def __init__(self, train_data_indices_by_word_idx, word_weights, dataset):
-        super().__init__()
-        self.train_data_indices_by_word_idx = train_data_indices_by_word_idx
-        self.word_weights = word_weights
-        self.words_array = np.arange(len(word_weights))
-        self.dataset = dataset
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        while True:
-            idx = np.random.choice(self.words_array, replace=True, p=self.word_weights)
-            if not self.train_data_indices_by_word_idx[idx]:
-                continue
-
-            break
-
-        return self.dataset[
-            np.random.choice(self.train_data_indices_by_word_idx[idx], replace=True)
-        ]
-
 
 
 GSCAN_RANKING_FUNCS = {
