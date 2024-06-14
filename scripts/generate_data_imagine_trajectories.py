@@ -516,6 +516,7 @@ def generate_instructions_and_rank(
                 )
                 break
             except SamplingError:
+                print("Sampling error")
                 continue
 
 
