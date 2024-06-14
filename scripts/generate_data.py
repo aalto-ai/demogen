@@ -2229,6 +2229,7 @@ def main():
         k: v[:args.limit]
         for k, v in d["examples"].items()
     }
+    d["grid_size"] = d.get("grid_size", 6)
 
     print(d.keys())
 
@@ -2307,7 +2308,7 @@ def main():
             ACTION_WORD2IDX,
             COLOR2IDX,
             NOUN2IDX,
-            d["grid_size"]
+            d.get("grid_size", None) or d["examples"]["train"][0]["grid_size"]
         ),
     }
 
