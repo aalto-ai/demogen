@@ -16,6 +16,8 @@ from gscan_metaseq2seq.util.dataset import (
 )
 from train_meta_encdec_big_symbol_transformer import (
     BigSymbolTransformerLearner,
+    determine_state_profile,
+    determine_padding
 )
 
 from analyze_failure_cases import get_metaseq2seq_predictions
@@ -63,6 +65,12 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
+    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(meta_train_demonstrations)
+    state_component_max_len, state_feat_len = determine_state_profile(
+        train_demonstrations,
+        valid_demonstrations_dict
+    )
+
     per_n_per_split_exacts = list(itertools.chain.from_iterable([
         list(itertools.chain.from_iterable([
             list(map(lambda x: (n, k, x), get_metaseq2seq_predictions(
@@ -91,10 +99,10 @@ def main():
                     (
                         (args.pad_state_to, None),
                         (n, args.pad_state_to, None),
-                        32,
-                        128,
-                        (n, 32),
-                        (n, 128),
+                        pad_instructions_to,
+                        pad_actions_to,
+                        (n, pad_instructions_to),
+                        (n, pad_actions),
                     ),
                     (pad_state, pad_state, pad_word, pad_action, pad_word, pad_action),
                 ),
