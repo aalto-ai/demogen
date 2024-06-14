@@ -59,9 +59,9 @@ def read_pb_file(path):
         return pickle.load(f)
 
 
-def postprocess(item, postprocess_limit):
+def postprocess(item, postprocess_limit, no_sort):
     query, targets, query_state, support_state, support_x, support_y, score = item
-    sort_idx = sorted(list(range(len(support_x))), key=lambda i: -score[i])[
+    sort_idx = np.random.permutation(len(supports_x))[:postprocess_limit] if no_sort else sorted(list(range(len(support_x))), key=lambda i: -score[i])[
         :postprocess_limit
     ]
 
@@ -70,6 +70,7 @@ def postprocess(item, postprocess_limit):
 
     support_x = [support_x[i] for i in sort_idx]
     support_y = [support_y[i] for i in sort_idx]
+    score = [score[i] for i in sort_idx]
 
     return (query, targets, query_state, support_state, support_x, support_y, score)
 
@@ -89,8 +90,10 @@ def batched(iterable, n):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--directories", nargs="+")
     parser.add_argument("--limit", default=32, type=int)
+    parser.add_argument("--no-sort", action="store_true")
     parser.add_argument("--output-directory", required=True)
     parser.add_argument("--batch-size", default=10000, type=int)
     args = parser.parse_args()
@@ -107,7 +110,10 @@ def main():
 
         for i, batch in enumerate(
             batched(
-                itertools.chain.from_iterable(map(read_pb_file, tqdm(paths))),
+                map(
+                    functools.partial(postprocess, postprocess_limit=args.limit, no_sort=args.no_sort),
+                    itertools.chain.from_iterable(map(read_pb_file, tqdm(paths)))
+                ),
                 args.batch_size,
             )
         ):
