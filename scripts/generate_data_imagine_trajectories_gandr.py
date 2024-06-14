@@ -909,7 +909,7 @@ def main():
                     model,
                     tqdm(dataloader),
                     256,
-                    decode_len=128,
+                    decode_len=256,
                     pad_word_idx=pad_word,
                     pad_action_idx=pad_action,
                     IDX2WORD=IDX2WORD,
