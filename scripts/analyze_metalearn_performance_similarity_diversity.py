@@ -256,25 +256,7 @@ def main():
         groupby_df = plot_data.groupby(['Bin ' + metric, 'Split']).agg({'Exact Match Fraction': ['mean', 'std'], metric: 'count'})
         groupby_df.columns = ['mean', 'std', 'count']
         groupby_df = groupby_df.sort_values(['Split', 'Bin ' + metric])
-        print(groupby_df)
-
-    import pdb
-    pdb.set_trace()
-
-    sns.lineplot(data=plot_data, x="Number of Demonstrations", y="Exact Match Fraction", hue="Split")
-    plt.ylim(0, 1.1)
-    plt.savefig(os.path.join(args.output_directory, "demonstrations-efficiency.pdf"))
-
-    for split in valid_demonstrations_dict.keys():
-        plt.clf()
-        sns.lineplot(data=plot_data.loc[plot_data["Split"] == split],
-                     x="Number of Demonstrations",
-                     y="Exact Match Fraction",
-                     hue="Split")
-        plt.ylim(0, 1.1)
-        plt.savefig(os.path.join(args.output_directory, f"demonstrations-efficiency-{split}.pdf"))
-
-    plot_data.to_csv(os.path.join(args.output_directory, "results.csv"))
+        print(groupby_df.to_latex(float_format='%.2f'))
 
 if __name__ == "__main__":
     main()
