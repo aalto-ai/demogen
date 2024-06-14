@@ -287,6 +287,19 @@ def make_gscan_format_output_closure(IDX2WORD):
         (generated_instructions, generated_targets, scores) = list(zip(*sample_scores))
         query_state, query_instruction = inputs
 
+        if False:
+            import pprint
+            print([IDX2WORD[w] for w in query_instruction.cpu().numpy()])
+            pprint.pprint([
+                [
+                    IDX2WORD[w] for w in s
+                ]
+                for s in generated_instructions
+            ])
+
+            import pdb
+            pdb.set_trace()
+
         return (
             query_instruction.numpy(),
             targets.numpy(),
@@ -363,7 +376,7 @@ def try_gen_instructions(
         raise SamplingError()
 
     # Note: we are kind of assuming the gscan dataset here
-    original_pred_targets = target_gen_closure(inputs[1], inputs, decode_len).cpu()
+    original_pred_targets = target_gen_closure(inputs[1], inputs, targets.shape[-1]).cpu()
 
     per_id_results = defaultdict(list)
 
@@ -399,7 +412,7 @@ def try_gen_instructions(
         sampled_instruction_set_targets = target_gen_closure(
             sampled_instruction_set_batch,
             sampled_instruction_set_inputs_batch,
-            decode_len,
+            targets.shape[-1],
         )
 
         # Now we populate per_id_results with the score
