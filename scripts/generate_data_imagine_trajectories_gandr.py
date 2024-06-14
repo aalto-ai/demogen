@@ -39,8 +39,9 @@ from generate_data import (
     compute_sorted_set_bsr,
     compute_sorted_bsr
 )
-from train_transformer import determine_padding
+from train_transformer import determine_padding, determine_state_profile
 from sentence_transformers import SentenceTransformer
+from generate_data_imagine_trajectories import compute_resume_points
 
 from tqdm.auto import tqdm
 
@@ -65,6 +66,7 @@ def train_transformer(
     seed,
     transformer_train_iterations,
     batch_size,
+    state_feat_len,
     x_categories,
     y_categories,
     pad_word_idx,
@@ -109,14 +111,19 @@ def train_transformer(
 
     logs_root_dir = f"logs/{exp_name}/{model_name}/{dataset_name}/{seed}"
 
-    model = TransformerLearner(
-        7,
-        x_categories,
-        y_categories,
-        embed_dim=hidden_size,
-        dropout_p=dropout_p,
-        nlayers=nlayers,
-        nhead=nhead,
+    transformer_model_weights = torch.load(weights_path)
+    transformer_model_state_dict = transformer_model_weights["state_dict"] if "state_dict" in transformer_model_weights else transformer_model_weights
+    loaded_hparams = transformer_model_weights["hyper_parameters"] if "hyper_parameters" in transformer_model_weights else None
+    print(state_feat_len)
+    print(loaded_hparams)
+    transformer_model_hparams = loaded_hparams or dict(
+        n_state_components=state_feat_len,
+        x_categories=x_categories,
+        y_categories=y_categories,
+        embed_dim=512,
+        dropout_p=0.0,
+        nlayers=12,
+        nhead=8,
         pad_word_idx=pad_word_idx,
         pad_action_idx=pad_action_idx,
         sos_action_idx=sos_action_idx,
@@ -126,15 +133,13 @@ def train_transformer(
         decay_power=-1,
         warmup_proportion=0.1,
     )
-    print(model)
+    loaded_hparams["n_state_components"] = state_feat_len
 
-    if weights_path:
-        transformer_weights = torch.load(weights_path)
-        model.load_state_dict(
-            transformer_weights["state_dict"]
-            if "state_dict" in transformer_weights
-            else transformer_weights
-        )
+    transformer_model = TransformerLearner(
+        **transformer_model_hparams
+    )
+    transformer_model.load_state_dict(transformer_model_state_dict)
+    print(transformer_model)
 
     pl.seed_everything(seed)
     trainer = pl.Trainer(
@@ -153,9 +158,9 @@ def train_transformer(
         gradient_clip_val=0.2,
     )
 
-    trainer.fit(model, train_dataloader, validation_dataloaders)
+    trainer.fit(transformer_model, train_dataloader, validation_dataloaders)
 
-    return model
+    return transformer_model
 
 
 def to_count_matrix(action_word_arrays, action_vocab_size):
@@ -632,6 +637,7 @@ def main():
     parser.add_argument("--num-layers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--include-state", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
     (
@@ -643,6 +649,13 @@ def main():
         only_splits=list(set(["train"]) | set(args.only_splits)) if args.only_splits else None,
         limit_load=args.limit_load
     )
+    resume_points = compute_resume_points(args.data_output_directory) if args.resume else {}
+    datasets_with_resume_points = {
+        k: (v, resume_points.get(k, 0)) for k, v in {
+            "train": train_demonstrations,
+            **valid_demonstrations_dict
+        }.items()
+    }
 
     WORD2IDX = dictionaries[0]
     ACTION2IDX = dictionaries[1]
@@ -660,6 +673,10 @@ def main():
     state_autoencoder_transformer = None
     state_encodings_by_split = None
 
+    state_component_max_len, state_feat_len = determine_state_profile(train_demonstrations, {
+        k: v
+        for k, v in valid_demonstrations_dict.items()
+    })
     pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
 
     print(f"Paddings instr: {pad_instructions_to} act: {pad_actions_to} state: {pad_state_to}")
@@ -668,7 +685,7 @@ def main():
         state_autoencoder_transformer = train_state_autoencoder(
             args.load_state_autoencoder_transformer,
             PaddingDataset(
-                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((pad_state_to, 7),), (0,)
+                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((pad_state_to, state_feat_len),), (0,)
             ),
             args.seed,
             args.state_autoencoder_transformer_iterations
@@ -689,8 +706,8 @@ def main():
 
     transformer_validation_datasets = [
         Subset(
-            PaddingDataset(data, (pad_instructions_to, pad_actions_to, (pad_state_to, 7)), (pad_word, pad_action, 0)),
-            np.random.permutation(512),
+            PaddingDataset(data, (pad_instructions_to, pad_actions_to, (pad_state_to, state_feat_len)), (pad_word, pad_action, 0)),
+            np.random.permutation(min(512, len(data))),
         )
         for data in valid_demonstrations_dict.values()
     ]
@@ -699,7 +716,7 @@ def main():
         args.load_transformer_model,
         PaddingDataset(
             train_demonstrations,
-            (pad_instructions_to, pad_actions_to, (pad_state_to, 7)),
+            (pad_instructions_to, pad_actions_to, (pad_state_to, state_feat_len)),
             (
                 pad_word,
                 pad_action,
@@ -710,6 +727,7 @@ def main():
         args.seed,
         args.transformer_iterations if args.save_transformer_model else 0,
         args.batch_size,
+        state_feat_len,
         len(WORD2IDX),
         len(ACTION2IDX),
         pad_word,
@@ -834,7 +852,7 @@ def main():
                     demos,
                     np.arange(
                         min(
-                            math.floor(args.offset * len(demos)),
+                            math.floor(args.offset * len(demos)) + resume_point_offset,
                             len(demos),
                         ),
                         min(
@@ -848,20 +866,13 @@ def main():
                         ),
                     ),
                 ),
-                (pad_instructions_to, pad_actions_to, (pad_state_to, 7)),
+                (pad_instructions_to, pad_actions_to, (pad_state_to, state_feat_len)),
                 (pad_word, pad_action, 0),
             ),
             batch_size=args.batch_size,
             pin_memory=True,
         )
-        for split, demos in zip(
-            itertools.chain.from_iterable(
-                [valid_demonstrations_dict.keys(), ["train"]]
-            ),
-            itertools.chain.from_iterable(
-                [valid_demonstrations_dict.values(), [train_demonstrations]]
-            ),
-        )
+        for split, (demos, resume_point_offset) in datasets_with_resume_points.items()
         if not args.only_splits or split in args.only_splits
     }
 
@@ -900,9 +911,9 @@ def main():
                 10000,
             )
         ):
-            with open(
-                os.path.join(args.data_output_directory, split, f"{i + save_offset}.pb"), "wb"
-            ) as f:
+            save_path = os.path.join(args.data_output_directory, split, f"{i + save_offset}.pb")
+            with open(save_path, "wb") as f:
+                print(f"Save {save_path}")
                 pickle.dump(batch, f)
 
 
