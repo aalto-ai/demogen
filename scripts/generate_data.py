@@ -116,7 +116,7 @@ def sort_indices_by_serialized_situation(examples):
         situation = Situation.from_representation(example["situation"])
         command_examples[serialize_situation(situation)].append(index)
 
-    return command_examples
+    return dict(command_examples)
 
 
 ALL_ACTION_OPTIONS = [["walk", "to"], ["push"], ["pull"]]
