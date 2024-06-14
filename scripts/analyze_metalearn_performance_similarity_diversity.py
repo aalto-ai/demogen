@@ -22,6 +22,7 @@ from sentence_transformers import SentenceTransformer
 
 from analyze_failure_cases import get_metaseq2seq_predictions_from_model
 from train_meta_encdec_big_symbol_transformer import determine_padding, determine_state_profile
+from analyze_nearest_neighbour_similarities import situations_to_dense_situations, situation_to_dense
 
 def mean_std(array):
     return [array.mean(), array.std()]
@@ -41,7 +42,12 @@ def batch_measure_performance_similarities_diversity(
     idx2word,
     pad_word
 ):
-    query_sentences, support_sentences = list(zip(*[
+    (
+        query_sentences,
+        support_sentences,
+        query_states,
+        support_states
+    ) = list(zip(*[
         (
             (
                 " ".join([
@@ -60,6 +66,15 @@ def batch_measure_performance_similarities_diversity(
                         support_instructions
                     )
                 ]
+            ),
+            (
+                situation_to_dense(state[~(state == 0).all(axis=-1)])
+            ),
+            (
+                np.stack([
+                    situation_to_dense(s[~(s == 0).all(axis=-1)])
+                    for s in support_states if s.any()
+                ])
             )
         )
         for state, support_states, query_instruction, query_targets, support_instructions, support_actions in dataset
@@ -89,15 +104,28 @@ def batch_measure_performance_similarities_diversity(
         (normalize(q[None]) @ normalize(s).T)
         for q, s in zip(query_sentence_encodings, support_sentence_encodings)
     ]
+    state_relevances = [
+        (query_state[None] == ss).all(axis=-1).astype(np.float32).mean(axis=-1)
+        for query_state, ss in zip(query_states, support_states)
+    ]
 
     mean_relevances = [r.mean() for r in relevances]
     max_relevances = [r.max() for r in relevances]
     top4_mean_relevances = [r.flatten()[r.flatten().argsort()][-4:].mean() for r in relevances]
 
+    state_mean_relevances = [r.mean() for r in state_relevances]
+    state_max_relevances = [r.max() for r in state_relevances]
+    state_top4_mean_relevances = [r.flatten()[r.flatten().argsort()][-4:].mean() for r in state_relevances]
+
     diversities = [
         # (S x 1 x E) - (1 x S x E) => (S x S x E) => (S x S) => S
         np.linalg.norm(s[:, None, :] - s[None, :, :], axis=-1).sum() / ((s.shape[0] ** 2 - s.shape[0]) or 1)
         for s in support_sentence_encodings
+    ]
+    state_diversities = [
+        # 1 x S x M x T == S x 1 x T => S x S x M x T => S x S
+        np.triu(1 - (ss[None] == ss[:, None]).all(axis=-1).mean(axis=-1), 1).sum() / ((ss.shape[0] * (ss.shape[0] - 1)) // 2 or 1)
+        for ss in support_states
     ]
 
     transformer_module.cuda()
@@ -111,7 +139,7 @@ def batch_measure_performance_similarities_diversity(
     )
     transformer_module.cpu()
 
-    return list(zip(exacts_stacked.numpy(), mean_relevances, max_relevances, top4_mean_relevances, diversities)) 
+    return list(zip(exacts_stacked.numpy(), mean_relevances, max_relevances, top4_mean_relevances, diversities, state_mean_relevances, state_max_relevances, state_top4_mean_relevances, state_diversities)) 
 
 
 def main():
@@ -216,7 +244,7 @@ def main():
         for k, demonstrations in tqdm(valid_demonstrations_dict.items())
     ]))
 
-    predictor_metrics = ["Mean Relevance", "Max Relevance", "Top 4 Mean Relevance", "Diversity"]
+    predictor_metrics = ["Mean Relevance", "Max Relevance", "Top 4 Mean Relevance", "Diversity", "State Mean Relevance", "State Max Relevance", "State Top 4 Mean Relevance", "State Diversity"]
     plot_data = pd.DataFrame(per_n_per_split_exacts, columns=["Split", "Exact Match Fraction"] + predictor_metrics)
 
     for split in valid_demonstrations_dict:
