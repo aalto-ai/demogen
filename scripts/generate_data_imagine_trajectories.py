@@ -738,6 +738,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         device=args.device,
         load=args.load_mlm_model,
     )
+    print(model)
 
     if args.save_mlm_model:
         torch.save(model.state_dict(), args.save_mlm_model)
