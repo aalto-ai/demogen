@@ -1,6 +1,7 @@
 import argparse
 import os
 import numpy as np
+import torch
 import itertools
 import pandas as pd
 import seaborn as sns
@@ -31,7 +32,7 @@ def normalize(vector):
 
 
 def batch_measure_performance_similarities_diversity(
-    transformer_checkpoint,
+    transformer_module,
     sentence_transformer_checkpoint,
     dataset,
     use_cuda,
@@ -64,20 +65,24 @@ def batch_measure_performance_similarities_diversity(
         for state, support_states, query_instruction, query_targets, support_instructions, support_actions in dataset
     ]))
 
-    # We can have an uneven number of support instructions per support set,
-    # so we need to keep track of the assignment indices
-    support_sentence_assignment_indices = np.concatenate([
-        [i] * len(b)
-        for i, b in enumerate(support_sentences)
-    ])
-    query_sentence_encodings = sentence_transformer_checkpoint.encode(query_sentences, show_progress_bar=True)
-    support_sentence_encodings = [
-        np.stack(list(map(lambda x: x[1], group)))
-        for key, group in itertools.groupby(
-            enumerate(sentence_transformer_checkpoint.encode(list(itertools.chain.from_iterable(support_sentences)), show_progress_bar=True)),
-            key=lambda x: support_sentence_assignment_indices[x[0]]
-        )
-    ]
+    with torch.inference_mode():
+        sentence_transformer_checkpoint.cuda()
+
+        # We can have an uneven number of support instructions per support set,
+        # so we need to keep track of the assignment indices
+        support_sentence_assignment_indices = np.concatenate([
+            [i] * len(b)
+            for i, b in enumerate(support_sentences)
+        ])
+        query_sentence_encodings = sentence_transformer_checkpoint.encode(query_sentences, show_progress_bar=True)
+        support_sentence_encodings = [
+            np.stack(list(map(lambda x: x[1], group)))
+            for key, group in itertools.groupby(
+                enumerate(sentence_transformer_checkpoint.encode(list(itertools.chain.from_iterable(support_sentences)), show_progress_bar=True)),
+                key=lambda x: support_sentence_assignment_indices[x[0]]
+            )
+        ]
+        sentence_transformer_checkpoint.cpu()
 
     relevances = [
         # (1 x E) * (E x S) => S => 1
