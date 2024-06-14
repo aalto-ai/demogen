@@ -19,8 +19,7 @@ from train_meta_encdec_big_symbol_transformer import (
 )
 from sentence_transformers import SentenceTransformer
 
-from analyze_failure_cases import get_metaseq2seq_predictions
-from train_meta_encdec_big_symbol_transformer import determine_padding
+from analyze_failure_cases import get_metaseq2seq_predictions_from_model
 
 def mean_std(array):
     return [array.mean(), array.std()]
@@ -95,14 +94,16 @@ def batch_measure_performance_similarities_diversity(
         for s in support_sentence_encodings
     ]
 
-    exacts_stacked = get_metaseq2seq_predictions(
-        transformer_checkpoint,
+    transformer_module.cuda()
+    exacts_stacked = get_metaseq2seq_predictions_from_model(
+        transformer_module,
         dataset,
         use_cuda=use_cuda,
         batch_size=batch_size,
         only_exacts=only_exacts,
         validate_first=True
     )
+    transformer_module.cpu()
 
     return list(zip(exacts_stacked.numpy(), mean_relevances, max_relevances, top4_mean_relevances, diversities)) 
 
