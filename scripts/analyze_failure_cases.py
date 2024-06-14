@@ -114,9 +114,7 @@ def make_target_commands_frequency_table(examples, actions):
     return frequency_counts_df
 
 
-def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True, batch_size=64, only_exacts=True, validate_first=True):
-    module = BigSymbolTransformerLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
-    module.hparams.predict_only_exacts = only_exacts
+def get_metaseq2seq_predictions_from_model(module, dataset, use_cuda=True, batch_size=64, only_exacts=True, validate_first=True):
     trainer = pl.Trainer(
         accelerator="gpu" if use_cuda else None,
         devices=1,
@@ -138,6 +136,20 @@ def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True,
     )
 
     return (predicted_targets_stacked, logits_stacked, exacts_stacked)
+
+
+
+def get_metaseq2seq_predictions(meta_seq2seq_checkpoint, dataset, use_cuda=True, batch_size=64, only_exacts=True, validate_first=True):
+    module = BigSymbolTransformerLearner.load_from_checkpoint(meta_seq2seq_checkpoint)
+    module.hparams.predict_only_exacts = only_exacts
+    return get_metaseq2seq_predictions_from_model(
+        module,
+        dataset,
+        use_cuda=use_cuda,
+        batch_size=batch_size,
+        only_exacts=only_exacts,
+        validate_first=validate_first
+    )
 
 
 def get_transformer_predictions(
