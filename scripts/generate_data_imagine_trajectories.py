@@ -1458,15 +1458,28 @@ def cogs_add_subparser(subparsers):
 
 def load_and_count_file(file_path):
     with open(file_path, "rb") as f:
-        return len(pickle.load(f))
+        object_len = len(pickle.load(f))
+        tqdm.write(f"{file_path} - found {object_len} items\n")
+        return object_len
+
+
+def running_count_sum_till_exception(split_path, filenames):
+    running_sum = 0
+    try:
+        for fname in filenames:
+            running_sum += load_and_count_file(os.path.join(split_path, fname))
+    except:
+        pass
+
+    return running_sum
 
 
 def load_and_count_from_split_dir(split_path):
     filenames = os.listdir(split_path)
     filenames = sorted(filenames, key=lambda x: int(os.path.splitext(x)[0]))
 
-    return sum(
-        [load_and_count_file(os.path.join(split_path, fname)) for fname in filenames]
+    return running_count_sum_till_exception(
+        split_path, list(map(lambda fname: os.path.join(split_path, fname), filenames))
     )
 
 
@@ -1476,10 +1489,15 @@ def compute_resume_points(data_output_directory):
             dirname: load_and_count_from_split_dir(
                 os.path.join(data_output_directory, dirname)
             )
-            for dirname in os.listdir(data_output_directory)
-            if os.path.isdir(dirname)
+            for dirname in tqdm(
+                os.listdir(data_output_directory),
+                desc="Computing resume points"
+            )
+            if os.path.isdir(os.path.join(data_output_directory, dirname))
         }
     except IOError:
+        import traceback
+        traceback.print_exc()
         return {}
 
 
@@ -1525,8 +1543,7 @@ def main():
     dictionaries, datasets, extra_data = DATASET_CONFIGS[args.dataset]["load_data"](
         args
     )
-    print(dictionaries)
-    resume_points = compute_resume_points(args.data_output_directory)
+    resume_points = compute_resume_points(args.data_output_directory) if args.resume else {}
     datasets_with_resume_points = {
         k: (v, resume_points.get(k, 0)) for k, v in datasets.items()
     }
@@ -1535,6 +1552,8 @@ def main():
     print("Flash attention:", torch.backends.cuda.flash_sdp_enabled())
 
     print(args.offset, args.offset + (args.limit or 0))
+    dataset_offsets_string = '\n'.join([f'{k}: {v[1]}/{(args.limit or 1) * len(v[0])}' for k, v in datasets_with_resume_points.items()])
+    print(f"Dataset offsets {dataset_offsets_string}")
 
     dataloader_splits = {
         split: DataLoader(
@@ -1547,7 +1566,6 @@ def main():
                     ),
                     min(
                         math.floor(args.offset * len(dataset))
-                        + resume_point_offset
                         + (
                             len(dataset)
                             if not args.limit
@@ -1576,7 +1594,9 @@ def main():
     with open(os.path.join(args.data_output_directory, "dictionary.pb"), "wb") as f:
         pickle.dump(dictionaries, f)
 
-    for split, dataloader in tqdm(dataloader_splits.items()):
+    file_batch_size = 10000
+
+    for (split, dataloader) in tqdm(dataloader_splits.items(), desc="Splits"):
         # Note we still make always make the directory,
         # this is to ensure that the dataloader indices align correctly
         os.makedirs(f"{args.data_output_directory}/{split}", exist_ok=True)
@@ -1584,6 +1604,9 @@ def main():
         if len(dataloader.dataset) == 0:
             print(f"Skip {split} as it is empty")
             continue
+
+        known_offset = resume_points.get(split, 0)
+        i_offset = known_offset // file_batch_size
 
         for i, batch in enumerate(
             batched(
@@ -1601,13 +1624,20 @@ def main():
                     deduplicate_by_output=args.deduplicate_by_outputs,
                     no_sort=args.no_sort
                 ),
-                10000,
+                file_batch_size,
             )
         ):
-            with open(
-                os.path.join(args.data_output_directory, split, f"{i}.pb"), "wb"
-            ) as f:
-                pickle.dump(batch, f)
+            try:
+                with open(os.path.join(args.data_output_directory, split, f"{i + i_offset}.pb"), "rb") as f:
+                    existing_examples = pickle.load(f)
+            except:
+                existing_examples = []
+
+            if not args.dry_run:
+                with open(
+                    os.path.join(args.data_output_directory, split, f"{i + i_offset}.pb"), "wb"
+                ) as f:
+                    pickle.dump(existing_examples + batch, f)
 
 
 if __name__ == "__main__":
