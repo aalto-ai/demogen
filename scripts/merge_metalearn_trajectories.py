@@ -4,6 +4,8 @@ import itertools
 import re
 import pickle
 import pprint
+import shutil
+import functools
 
 from tqdm.auto import tqdm
 
@@ -98,6 +100,7 @@ def main():
     pprint.pprint(all_split_paths)
 
     os.makedirs(args.output_directory, exist_ok=True)
+    shutil.copyfile(args.dictionary, os.path.join(args.output_directory, "dictionary.pb"))
 
     for split, paths in tqdm(all_split_paths.items()):
         os.makedirs(os.path.join(args.output_directory, split), exist_ok=True)
