@@ -1729,7 +1729,7 @@ def generate_random_instructions_find_in_any_layout_payload(
 
 
 def find_supports_with_same_agent_target_offset_payload(
-    dataset, colors, nouns, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload, args
 ):
     sorted_example_indices_by_offsets = sort_indices_by_offsets(
         dataset["examples"]["train"]
@@ -1746,7 +1746,7 @@ def find_supports_with_same_agent_target_offset_payload(
 
 
 def find_supports_with_any_target_object_in_same_position_payload(
-    dataset, colors, nouns, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload, args
 ):
     sorted_example_indices_by_target_positions = sort_indices_by_target_positions(
         dataset["examples"]["train"]
@@ -1763,7 +1763,7 @@ def find_supports_with_any_target_object_in_same_position_payload(
 
 
 def find_supports_by_matching_object_in_same_diff_payload(
-    dataset, colors, nouns, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload, args
 ):
     sorted_example_indices_by_diff_and_description = (
         sort_indices_by_target_diff_and_description(dataset["examples"]["train"])
@@ -1780,7 +1780,7 @@ def find_supports_by_matching_object_in_same_diff_payload(
 
 
 def find_supports_by_matching_environment_layout_payload(
-    dataset, colors, nouns, word2idx, current_split, global_payload
+    dataset, colors, nouns, word2idx, current_split, global_payload, args
 ):
     sorted_examples_by_serialized_layouts = sort_indices_by_serialized_situation(
         dataset["examples"]["train"]
