@@ -17,6 +17,7 @@ from gscan_metaseq2seq.util.logging import LoadableCSVLogger
 from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model import (
     TransformerLearner,
 )
+from train_transformer import determine_padding, determine_state_profile
 
 def concat_all_demos(demonstrations, pad_word_idx):
     return list(
@@ -112,22 +113,8 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
-    STATE_PROFILES = {
-        "gscan": [4, len(color_dictionary), len(noun_dictionary), 1, 4, 8, 8],
-        "reascan": [
-            4,
-            len(color_dictionary),
-            len(noun_dictionary),
-            1,
-            4,
-            8,
-            8,
-            4,
-            len(color_dictionary),
-            1,
-        ],
-    }
-    state_feat_len = len(STATE_PROFILES[args.state_profile])
+    state_feat_len, state_feat_max_len = determine_state_profile(train_demonstrations, valid_demonstrations_dict)
+    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
 
     train_demonstrations = concat_all_demos(train_demonstrations, pad_word)
     # We keep valid_demonstrations_dict the same, eg, we don't add any new
@@ -138,9 +125,9 @@ def main():
         PaddingDataset(
             train_demonstrations,
             (
-                args.pad_instructions_to,
-                args.pad_actions_to,
-                (args.pad_state_to, state_feat_len),
+                pad_instructions_to,
+                pad_actions_to,
+                (pad_state_to, state_feat_max_len),
             ),
             (pad_word, pad_action, 0),
         )
@@ -218,9 +205,9 @@ def main():
                         ],
                     ),
                     (
-                        args.pad_instructions_to,
-                        args.pad_actions_to,
-                        (args.pad_state_to, state_feat_len),
+                        pad_instructions_to,
+                        pad_actions_to,
+                        (pad_state_to, state_feat_len),
                     ),
                     (pad_word, pad_action, 0),
                 ),
