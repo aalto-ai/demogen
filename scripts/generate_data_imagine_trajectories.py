@@ -1533,6 +1533,8 @@ def main():
     parser.add_argument("--no-query-overlap", action="store_true")
     parser.add_argument("--deduplicate-by-outputs", action="store_true")
     parser.add_argument("--no-sort", action="store_true")
+    parser.add_argument("--decode-to", type=int, default=256)
+    parser.add_argument("--dry-run", action="store_true")
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1615,10 +1617,10 @@ def main():
                     ranking_closure,
                     generate_targets_closure,
                     format_output_closure,
-                    tqdm(dataloader),
+                    tqdm(dataloader, f"Split ({split}) examples"),
                     args.gen_sample_n,
                     batch_size=args.batch_size,
-                    decode_len=128,
+                    decode_len=args.decode_to,
                     device=args.device,
                     no_query_overlap=args.no_query_overlap,
                     deduplicate_by_output=args.deduplicate_by_outputs,
