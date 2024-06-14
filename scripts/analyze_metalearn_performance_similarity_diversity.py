@@ -146,7 +146,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dictionary", type=str, required=True)
     parser.add_argument("--data-directory", type=str, required=True)
-    parser.add_argument("--output-directory", type=str, required=True)
     parser.add_argument("--transformer-checkpoint", type=str, required=True)
     parser.add_argument("--disable-cuda", action="store_true")
     parser.add_argument("--limit-load", type=int, default=None)
@@ -158,7 +157,6 @@ def main():
     parser.add_argument("--determine-padding", action="store_true")
     args = parser.parse_args()
 
-    os.makedirs(args.output_directory, exist_ok=True)
 
     (
         (
