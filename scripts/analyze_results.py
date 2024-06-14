@@ -433,6 +433,12 @@ MATCH_CONFIGS = {
         "dataset": "baseline_sr_paraphrased",
         "headline": "gscan",
     },
+    "baseline_sr_i2g_seq2seq_ft": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "i2g_seq2seq_model_score_baseline_sr",
+        "headline": "gscan",
+        "tag": "include_demos"
+    },
     "baseline_reascan_vilbert": {
         "model": "vilbert_cross_encoder_decode_actions",
         "dataset": "baseline_reascan",
@@ -454,6 +460,12 @@ MATCH_CONFIGS = {
         "model": "transformer_encoder_only_decode_actions",
         "dataset": "baseline_reascan_paraphrased",
         "headline": "gscan",
+    },
+    "baseline_reascan_i2g_seq2seq_ft": {
+        "model": "transformer_encoder_only_decode_actions",
+        "dataset": "i2g_seq2seq_model_score_baseline_reascan",
+        "headline": "gscan",
+        "tag": "include_demos"
     },
     "babyai_gscan_comb_gotolocal_transformer": {
         "model": "transformer_encoder_only_decode_actions",
@@ -528,6 +540,38 @@ MATCH_CONFIGS = {
         "tag": "none",
         "dropout": "0.1",
         "ml_d_limit": "16",
+    },
+    "baseline_reascan_i2g_seq2seq": {
+        "dataset": "i2g_seq2seq_model_score_baseline_reascan",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16"
+    },
+    "baseline_reascan_gandr": {
+        "dataset": "gandr_baseline_reascan",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16"
+    },
+    "baseline_sr_i2g_seq2seq": {
+        "dataset": "i2g_seq2seq_model_score_baseline_sr",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16"
+    },
+    "baseline_sr_gandr": {
+        "dataset": "gandr_baseline_sr",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "none",
+        "dropout": "0.1",
+        "ml_d_limit": "16"
     },
     "gandr": {"dataset": "gandr", "headline": "meta_gscan"},
     "gandr_coverage": {"dataset": "gandr_coverage", "headline": "meta_gscan"},
