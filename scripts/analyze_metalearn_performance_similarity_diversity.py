@@ -197,10 +197,12 @@ def main():
     # Diversity score is given by the average of the L2 distances of
     # each vector from every other vector
     sentence_transformer_model = SentenceTransformer('all-mpnet-base-v2')
+    module = BigSymbolTransformerLearner.load_from_checkpoint(args.transformer_checkpoint)
+    module.hparams.predict_only_exacts = True
 
     per_n_per_split_exacts = list(itertools.chain.from_iterable([
         list(map(lambda x: (k, *x), batch_measure_performance_similarities_diversity(
-            args.transformer_checkpoint,
+            module,
             sentence_transformer_model,
             PaddingDataset(
                 ReorderSupportsByDistanceDataset(
