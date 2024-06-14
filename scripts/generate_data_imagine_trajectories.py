@@ -79,6 +79,7 @@ def transformer_predict(transformer_learner, state, instruction, decode_len):
         transformer_learner.sos_action_idx,
         transformer_learner.eos_action_idx,
         transformer_learner.pad_action_idx,
+        quiet=True
     )
 
     return decoded, logits
@@ -369,6 +370,7 @@ def try_gen_instructions(
     for i in trange(
         concat_sampled_instruction_set_inputs.shape[0] // batch_size + 1,
         desc="Score/pred batch",
+        disable=True
     ):
         first_index = i * batch_size
         last_index = (i + 1) * batch_size
@@ -536,7 +538,7 @@ def sample_from_state_encoder_decoder_model_with_mask(
             expanded_instruction, expanded_state, all_mask, instruction_mask
         )
 
-        for i in trange(unroll_length, desc="Gen instrs"):
+        for i in trange(unroll_length, desc="Gen instrs", disable=True):
             stopped_mask = (decoded_instruction == pad_tgt_idx).any(dim=-1)
             still_going_mask = ~stopped_mask
             still_going_indices = torch.nonzero(still_going_mask).flatten()
