@@ -810,7 +810,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     return (
         make_gscan_instruction_gen_closure(
-            model, pad_word, None, device=args.device, noise_level=0.2
+            model, pad_word, None, device=args.device, noise_level=args.noise_level
         ),
         GSCAN_RANKING_FUNCS[args.ranking_func](
             model, pad_word, WORD2IDX["[sos]"], device=args.device
@@ -1440,6 +1440,7 @@ def gscan_add_subparser(subparsers):
     gscan_parser.add_argument("--load-transformer-model", type=str, required=True)
     gscan_parser.add_argument("--limit-load", type=int, default=None)
     gscan_parser.add_argument("--ranking-func", type=str, choices=list(GSCAN_RANKING_FUNCS.keys()), default="seq2seq")
+    gscan_parser.add_argument("--noise-level", type=float, default=0.2)
 
 
 def cogs_add_subparser(subparsers):
