@@ -38,7 +38,7 @@ from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
     train_clip,
 )
 from generate_data import compute_sorted_bsr
-from train_transformer import determine_padding
+from train_transformer import determine_padding, determine_state_profile
 from train_bart import (
     EncoderDecoderLanguageModel,
     StateEncoderDecoderLanguageModel,
@@ -716,6 +716,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         0 if args.load_mlm_model else args.mlm_train_iterations,
         pad_word,
         WORD2IDX["[sos]"],
+        state_feat_len,
         len(WORD2IDX),
         args.batch_size,
         device=args.device,
@@ -746,6 +747,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         decay_power=-1,
         warmup_proportion=0.1,
     )
+    loaded_hparams["n_state_components"] = state_feat_len
 
     transformer_model = TransformerLearner(
         **transformer_model_hparams
