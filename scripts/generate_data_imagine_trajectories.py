@@ -747,7 +747,10 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     transformer_model_weights = torch.load(args.load_transformer_model)
     transformer_model_state_dict = transformer_model_weights["state_dict"] if "state_dict" in transformer_model_weights else transformer_model_weights
-    transformer_model_hparams = transformer_model_weights["hyper_parameters"] if "hyper_parameters" in transformer_model_weights else dict(
+    loaded_hparams = transformer_model_weights["hyper_parameters"] if "hyper_parameters" in transformer_model_weights else None
+    print(state_feat_len, state_component_max_len)
+    print(loaded_hparams)
+    transformer_model_hparams = loaded_hparams or dict(
         n_state_components=state_feat_len,
         x_categories=len(WORD2IDX),
         y_categories=len(ACTION2IDX),
@@ -770,6 +773,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         **transformer_model_hparams
     )
     transformer_model.load_state_dict(transformer_model_state_dict)
+    print(transformer_model)
 
     transformer_model_trainer = pl.Trainer(
         accelerator="gpu" if torch.cuda.is_available() else None,
