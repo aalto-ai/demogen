@@ -282,7 +282,7 @@ def make_gscan_generate_targets_closure(
     return compute_targets
 
 
-def make_gscan_format_output_closure():
+def make_gscan_format_output_closure(IDX2WORD):
     def format_output(inputs, targets, sample_scores):
         (generated_instructions, generated_targets, scores) = list(zip(*sample_scores))
         query_state, query_instruction = inputs
