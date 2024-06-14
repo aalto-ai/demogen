@@ -421,7 +421,7 @@ def train_state_encoder_decoder(
         accelerator="gpu",
         devices=1,
         precision=(
-            "bf16" if (
+            "bf16-mixed" if (
                 precision == 16 and
                 torch.cuda.is_bf16_supported()
             ) else (
