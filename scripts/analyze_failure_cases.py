@@ -124,7 +124,7 @@ def get_metaseq2seq_predictions_from_model(module, dataset, use_cuda=True, batch
     if validate_first:
         trainer.validate(
             module,
-            DataLoader(Subset(dataset, torch.arange(min(len(dataset), 1024))), batch_size=64),
+            DataLoader(Subset(dataset, torch.arange(min(len(dataset), 1024))), batch_size=batch_size),
         )
     preds = trainer.predict(module, DataLoader(dataset, batch_size=batch_size))
 
