@@ -20,6 +20,7 @@ from train_meta_encdec_big_symbol_transformer import (
 from sentence_transformers import SentenceTransformer
 
 from analyze_failure_cases import get_metaseq2seq_predictions_from_model
+from train_meta_encdec_big_symbol_transformer import determine_padding, determine_state_profile
 
 def mean_std(array):
     return [array.mean(), array.std()]
@@ -151,9 +152,12 @@ def main():
     pad_actions_to = args.pad_actions_to
     pad_instructions_to = args.pad_instructions_to
 
-    if args.determine_padding:
-        pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
+    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
 
+    state_component_max_len, state_feat_len = determine_state_profile(
+        train_demonstrations,
+        valid_demonstrations_dict
+    )
     print(BigSymbolTransformerLearner.load_from_checkpoint(args.transformer_checkpoint))
 
     # Here we calculate the sentence-transformer cosine similarity of
@@ -189,8 +193,8 @@ def main():
                     16,
                 ),
                 (
-                    (pad_state_to, None),
-                    (16, pad_state_to, None),
+                    (pad_state_to, state_feat_len),
+                    (16, pad_state_to, state_feat_len),
                     pad_instructions_to,
                     pad_actions_to,
                     (16, pad_instructions_to),
