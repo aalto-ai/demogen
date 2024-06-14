@@ -36,7 +36,10 @@ def get_top_values_for_corresponding_value(
 ):
     select_cols = values + ([corresponding] if corresponding not in values else [])
 
-    nonrolling_dfs = [df[select_cols].dropna() for df in dfs]
+    nonrolling_dfs = [
+        df[select_cols].dropna() for df in dfs
+        if all([s in df.columns for s in select_cols])
+    ]
 
     rolling_dfs = [
         df[select_cols].rolling(rolling).mean().fillna(0) for df in nonrolling_dfs
