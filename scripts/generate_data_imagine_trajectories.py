@@ -809,12 +809,19 @@ def gscan_load_data(args):
     ACTION2IDX = dictionaries[1]
 
     instruction_padding, action_padding, state_padding = determine_padding(train_demonstrations)
+    state_component_max_len, state_feat_len = determine_state_profile(train_demonstrations, {
+        k: v
+        for k, v in {
+            **valid_demonstrations_dict,
+            "train": train_demonstrations
+        }.items()
+    })
 
     dataset_splits = {
         split: MapDataset(
             PaddingDataset(
                 demos,
-                (instruction_padding, action_padding, (state_padding, 7)),
+                (instruction_padding, action_padding, (state_padding, state_feat_len)),
                 (WORD2IDX["[pad]"], ACTION2IDX["[pad]"], 0),
             ),
             lambda x: ((x[2], x[0]), x[1]),
