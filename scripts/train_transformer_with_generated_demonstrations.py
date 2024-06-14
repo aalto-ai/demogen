@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--train-batch-size", type=int, default=128)
     parser.add_argument("--valid-batch-size", type=int, default=128)
     parser.add_argument("--batch-size-mult", type=int, default=1)
-    parser.add_argument("--hidden-size", type=int, default=128)
+    parser.add_argument("--hidden-size", type=int, default=512)
     parser.add_argument("--nlayers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--dropout-p", type=float, default=0.1)
