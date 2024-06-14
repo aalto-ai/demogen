@@ -723,7 +723,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
 
     state_component_max_len, state_feat_len = determine_state_profile(train_demonstrations, {
         k: v.dataset.dataset
-        for k, v in datasets.items() if k != "train"
+        for k, v in datasets.items()
     })
 
     model = train_state_encoder_decoder(
