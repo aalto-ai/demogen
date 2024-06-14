@@ -806,6 +806,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
             }.values()
         ],
     )
+    print(transformer_model)
 
     return (
         make_gscan_instruction_gen_closure(
