@@ -794,7 +794,7 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
         [
             DataLoader(
                 MapDataset(
-                    Subset(data, np.random.permutation(512)),
+                    Subset(data, np.random.permutation(min(len(data), 512))),
                     lambda x: (x[0][1], x[1], x[0][0]),
                 ),
                 batch_size=args.batch_size,
