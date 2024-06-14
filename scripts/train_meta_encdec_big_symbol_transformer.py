@@ -932,6 +932,21 @@ def determine_padding(demonstrations):
     return max_instruction_len, max_action_len, max_state_len
 
 
+def determine_state_profile(train_demonstrations, valid_demonstrations_dict):
+    state_component_max_len = (functools.reduce(
+        lambda x, o: np.stack([
+            x, o
+        ]).max(axis=0),
+        map(lambda x: np.stack(x[2]).max(axis=0),
+            itertools.chain.from_iterable([
+                train_demonstrations,
+                *valid_demonstrations_dict.values()
+            ]))
+    ) + 1).tolist()
+    state_feat_len = len(state_component_max_len)
+    return state_component_max_len, state_feat_len
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-demonstrations", type=str, required=True)
@@ -1067,17 +1082,10 @@ def main():
         ]
     }
     if args.determine_state_profile:
-        state_component_max_len = (functools.reduce(
-            lambda x, o: np.stack([
-                x, o
-            ]).max(axis=0),
-            map(lambda x: np.stack(x[2]).max(axis=0),
-                itertools.chain.from_iterable([
-                    meta_train_demonstrations,
-                    *meta_valid_demonstrations_dict.values()
-                ]))
-        ) + 1).tolist()
-        state_feat_len = len(state_component_max_len)
+        state_component_max_len, state_feat_len = determine_state_profile(
+            meta_train_demonstrations,
+            meta_valid_demonstrations_dict
+        )
     else:
         state_component_max_len = STATE_PROFILES[args.state_profile]
         state_feat_len = len(state_component_max_len)
