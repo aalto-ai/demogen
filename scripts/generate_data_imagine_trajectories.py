@@ -800,7 +800,10 @@ def gscan_make_closures(args, dictionaries, datasets, extra_data):
                 batch_size=args.batch_size,
                 pin_memory=True,
             )
-            for data in {k: v for k, v in datasets.items() if k != "train"}.values()
+            for data in {
+                k: v for k, v in datasets.items()
+                if k != "train"
+            }.values()
         ],
     )
 
