@@ -433,7 +433,7 @@ def train_state_encoder_decoder(
         ),
         default_root_dir=logs_root_dir,
         accumulate_grad_batches=batch_size_mult,
-        limit_val_batches=128,
+        limit_val_batches=8,
         # gradient_clip_val=0.2,
     )
 
