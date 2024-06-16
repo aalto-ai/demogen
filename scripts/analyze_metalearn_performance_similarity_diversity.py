@@ -209,7 +209,8 @@ def main():
                 ReorderSupportsByDistanceDataset(
                     MapDataset(
                         MapDataset(
-                            demonstrations,
+                            Subset(demonstrations, np.random.permutation(len(demonstrations))[:args.limit_per_split])
+                            if args.limit_per_split else demonstrations,
                             lambda x: (x[2], x[3], x[0], x[1], x[4], x[5], x[6]),
                         ),
                         lambda x: (
