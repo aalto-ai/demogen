@@ -256,6 +256,8 @@ def main():
                 cats, bins = pd.cut(plot_data.loc[plot_data['Split'] == split][metric], 10, retbins=True)
                 plot_data.loc[plot_data['Split'] == split, "Bin " + metric] = bins[cats.cat.codes]
 
+    os.makedirs(args.output_directory, exist_ok=True)
+
     for metric in predictor_metrics:
         groupby_df = plot_data.groupby(['Bin ' + metric, 'Split']).agg({'Exact Match Fraction': ['mean', 'std'], metric: 'count'})
         groupby_df.columns = ['mean', 'std', 'count']
