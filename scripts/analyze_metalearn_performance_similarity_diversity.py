@@ -262,7 +262,11 @@ def main():
         groupby_df = plot_data.groupby(['Bin ' + metric, 'Split']).agg({'Exact Match Fraction': ['mean', 'std'], metric: 'count'})
         groupby_df.columns = ['mean', 'std', 'count']
         groupby_df = groupby_df.sort_values(['Split', 'Bin ' + metric])
-        print(groupby_df.to_latex(float_format='%.2f'))
+
+        with open(os.path.join(args.output_directory, metric + ".tex"), "w") as f:
+            print(groupby_df.to_latex(float_format='%.2f'), file=f)
+
+        groupby_df.to_csv(os.path.join(args.output_directory, metric + ".csv"))
 
 if __name__ == "__main__":
     main()
