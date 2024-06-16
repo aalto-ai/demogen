@@ -228,8 +228,8 @@ def main():
                     16,
                 ),
                 (
-                    (pad_state_to, state_feat_len),
-                    (16, pad_state_to, state_feat_len),
+                    (pad_state_to, None),
+                    (16, pad_state_to, None),
                     pad_instructions_to,
                     pad_actions_to,
                     (16, pad_instructions_to),
