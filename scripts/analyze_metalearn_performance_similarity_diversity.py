@@ -244,6 +244,7 @@ def main():
             pad_word=pad_word
         )))
         for k, demonstrations in tqdm(valid_demonstrations_dict.items())
+        if len(demonstrations)
     ]))
 
     predictor_metrics = ["Mean Relevance", "Max Relevance", "Top 4 Mean Relevance", "Diversity", "State Mean Relevance", "State Max Relevance", "State Top 4 Mean Relevance", "State Diversity"]
