@@ -198,6 +198,7 @@ def main():
     module = BigSymbolTransformerLearner.load_from_checkpoint(args.transformer_checkpoint)
     module.hparams.predict_only_exacts = True
 
+    np.random.seed(0)
     per_n_per_split_exacts = list(itertools.chain.from_iterable([
         list(map(lambda x: (k, *x), batch_measure_performance_similarities_diversity(
             module,
