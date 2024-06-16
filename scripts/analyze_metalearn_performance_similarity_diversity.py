@@ -268,5 +268,10 @@ def main():
 
         groupby_df.to_csv(os.path.join(args.output_directory, metric + ".csv"))
 
+    for split in valid_demonstrations_dict:
+        plot_data[plot_data.Split == split][predictor_metrics + ["Exact Match Fraction"]].corr(method='pearson').to_csv(
+            os.path.join(args.output_directory, split + ".corr.csv")
+        )
+
 if __name__ == "__main__":
     main()
