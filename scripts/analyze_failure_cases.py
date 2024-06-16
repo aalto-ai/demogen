@@ -118,7 +118,7 @@ def get_metaseq2seq_predictions_from_model(module, dataset, use_cuda=True, batch
     trainer = pl.Trainer(
         accelerator="gpu" if use_cuda else None,
         devices=1,
-        precision="16-mixed",
+        precision="32", # "16-mixed",
         logger=False
     )
     if validate_first:
