@@ -549,6 +549,22 @@ MATCH_CONFIGS = {
         "dropout": "0.1",
         "ml_d_limit": "16"
     },
+    "baseline_reascan_i2g_seq2seq_noshuffle": {
+        "dataset": "i2g_seq2seq_model_score_baseline_reascan",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "noshuffle",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
+    "baseline_reascan_i2g_seq2seq_unscored": {
+        "dataset": "i2g_seq2seq_unscored_baseline_reascan",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+        "tag": "no_reorder_flag"
+    },
     "baseline_reascan_gandr": {
         "dataset": "gandr_baseline_reascan",
         "model": "meta_symbol_encdec_big_transformer",
@@ -564,6 +580,21 @@ MATCH_CONFIGS = {
         "tag": "none",
         "dropout": "0.1",
         "ml_d_limit": "16"
+    },
+    "baseline_sr_i2g_seq2seq_noshuffle": {
+        "dataset": "i2g_seq2seq_model_score_baseline_sr",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "tag": "noshuffle",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
+    },
+    "baseline_sr_i2g_seq2seq_unscored": {
+        "dataset": "i2g_seq2seq_unscored_baseline_sr",
+        "model": "meta_symbol_encdec_big_transformer",
+        "headline": "meta_gscan",
+        "dropout": "0.1",
+        "ml_d_limit": "16",
     },
     "baseline_sr_gandr": {
         "dataset": "gandr_baseline_sr",
