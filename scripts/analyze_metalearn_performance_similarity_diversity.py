@@ -149,9 +149,6 @@ def main():
     parser.add_argument("--transformer-checkpoint", type=str, required=True)
     parser.add_argument("--disable-cuda", action="store_true")
     parser.add_argument("--limit-load", type=int, default=None)
-    parser.add_argument("--pad-instructions-to", type=int, default=8)
-    parser.add_argument("--pad-actions-to", type=int, default=128)
-    parser.add_argument("--pad-state-to", type=int, default=36)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--only-splits", type=str, nargs="*")
     parser.add_argument("--determine-padding", action="store_true")
@@ -179,11 +176,12 @@ def main():
     sos_action = ACTION2IDX["[sos]"]
     eos_action = ACTION2IDX["[eos]"]
 
-    pad_state_to = args.pad_state_to
-    pad_actions_to = args.pad_actions_to
-    pad_instructions_to = args.pad_instructions_to
-
-    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(train_demonstrations)
+    pad_instructions_to, pad_actions_to, pad_state_to = determine_padding(
+        itertools.chain.from_iterable([
+            train_demonstrations,
+            *valid_demonstrations_dict.values()
+        ])
+    )
 
     state_component_max_len, state_feat_len = determine_state_profile(
         train_demonstrations,
