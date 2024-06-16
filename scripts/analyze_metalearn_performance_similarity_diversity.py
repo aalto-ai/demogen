@@ -152,6 +152,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--only-splits", type=str, nargs="*")
     parser.add_argument("--determine-padding", action="store_true")
+    parser.add_argument("--output-directory", type=str, required=True)
+    parser.add_argument("--limit-per-split", type=int, default=None)
     args = parser.parse_args()
 
 
