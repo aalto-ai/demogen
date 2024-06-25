@@ -62,7 +62,7 @@ def read_pb_file(path):
 
 def postprocess(item, postprocess_limit, no_sort):
     query, targets, query_state, support_state, support_x, support_y, score = item
-    sort_idx = np.random.permutation(len(supports_x))[:postprocess_limit] if no_sort else sorted(list(range(len(support_x))), key=lambda i: -score[i])[
+    sort_idx = np.random.permutation(len(score))[:postprocess_limit] if no_sort else sorted(list(range(len(score))), key=lambda i: -score[i])[
         :postprocess_limit
     ]
 
