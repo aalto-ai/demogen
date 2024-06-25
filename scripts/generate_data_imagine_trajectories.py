@@ -37,7 +37,7 @@ from gscan_metaseq2seq.models.instruction_gen.masked_language_model import (
 from gscan_metaseq2seq.models.instruction_gen.clip_ranking import (
     train_clip,
 )
-from generate_data import compute_sorted_bsr
+from generate_data_retrieval import compute_sorted_bsr
 from train_transformer import determine_padding, determine_state_profile
 from train_bart import (
     EncoderDecoderLanguageModel,

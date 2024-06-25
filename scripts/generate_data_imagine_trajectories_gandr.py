@@ -35,9 +35,10 @@ from gscan_metaseq2seq.models.enc_dec_transformer.enc_dec_transformer_model impo
     TransformerLearner,
     autoregressive_model_unroll_predictions,
 )
-from generate_data import (
+from generate_data_retrieval import (
     compute_sorted_set_bsr,
-    compute_sorted_bsr
+    compute_sorted_bsr,
+    vectorize_all_example_situations
 )
 from train_transformer import determine_padding, determine_state_profile
 from sentence_transformers import SentenceTransformer
