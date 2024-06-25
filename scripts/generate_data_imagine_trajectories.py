@@ -335,6 +335,7 @@ def try_gen_instructions(
     no_query_overlap=False,
     deduplicate_by_output=False,
     no_sort=False
+    demonstrations_limit=None
 ):
     sampled_instructions = instruction_gen_closure(inputs, sample_n)
 
@@ -464,7 +465,7 @@ def try_gen_instructions(
     # (eg, a higher score is better)
     if not no_sort:
         per_id_results = {
-            i: sorted(results, key=lambda x: -x[-1])
+            i: sorted(results, key=lambda x: -x[-1])[:demonstrations_limit]
             for i, results in per_id_results.items()
         }
 
@@ -492,7 +493,8 @@ def generate_instructions_and_rank(
     device="cpu",
     no_query_overlap=False,
     deduplicate_by_output=False,
-    no_sort=False
+    no_sort=False,
+    demonstrations_limit=None
 ):
     for batch in dataloader:
         inputs, targets = batch
@@ -512,7 +514,8 @@ def generate_instructions_and_rank(
                     device=device,
                     no_query_overlap=no_query_overlap,
                     deduplicate_by_output=deduplicate_by_output,
-                    no_sort=no_sort
+                    no_sort=no_sort,
+                    demonstrations_limit=demonstrations_limit
                 )
                 break
             except SamplingError:
@@ -1535,6 +1538,7 @@ def main():
     parser.add_argument("--no-sort", action="store_true")
     parser.add_argument("--decode-to", type=int, default=256)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--demonstrations-limit", type=int, default=128)
     subparsers = parser.add_subparsers(dest="dataset")
 
     for config_name, config_values in DATASET_CONFIGS.items():
@@ -1649,7 +1653,8 @@ def main():
                     device=args.device,
                     no_query_overlap=args.no_query_overlap,
                     deduplicate_by_output=args.deduplicate_by_outputs,
-                    no_sort=args.no_sort
+                    no_sort=args.no_sort,
+                    demonstrations_limit=args.demonstrations_limit
                 ),
                 file_batch_size,
             )
