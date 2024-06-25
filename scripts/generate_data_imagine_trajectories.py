@@ -1557,6 +1557,31 @@ def main():
     dataset_offsets_string = '\n'.join([f'{k}: {v[1]}/{(args.limit or 1) * len(v[0])}' for k, v in datasets_with_resume_points.items()])
     print(f"Dataset offsets {dataset_offsets_string}")
 
+    dataloader_offsets = {
+        split: (
+            min(
+                math.floor(args.offset * len(dataset)) + resume_point_offset,
+                len(dataset),
+            ),
+            min(
+                math.floor(args.offset * len(dataset))
+                + (
+                    len(dataset)
+                    if not args.limit
+                    else math.floor(args.limit * len(dataset))
+                ),
+                len(dataset),
+            )
+        )
+        for split, (dataset, resume_point_offset) in datasets_with_resume_points.items()
+        if not args.only_splits or split in args.only_splits
+    }
+    dataloader_offsets_string = '\n'.join([
+        f'{split}: {offset}'
+        for split, offset in dataloader_offsets.items()
+    ])
+    print(dataloader_offsets_string)
+
     dataloader_splits = {
         split: DataLoader(
             Subset(
