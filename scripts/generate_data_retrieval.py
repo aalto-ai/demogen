@@ -76,7 +76,7 @@ def compute_sorted_bsr(
             # Otherwise, we can remove this example
             examples_in_set_sorted_by_weights = np.concatenate([
                 examples_in_set_sorted_by_weights[:i],
-                examples_in_set_sorted_by_weights[:i + 1]
+                examples_in_set_sorted_by_weights[i + 1:]
             ], axis=0)
             current_overall_token_coverages = current_overall_token_coverages - scores
             removed = True
