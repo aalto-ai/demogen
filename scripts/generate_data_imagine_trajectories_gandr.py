@@ -16,7 +16,9 @@ import minigrid
 
 import faiss
 from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.preprocessing import normalize
+from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler, normalize
 from pytorch_lightning.loggers import TensorBoardLogger
 from positional_encodings.torch_encodings import PositionalEncoding1D
 
@@ -44,7 +46,7 @@ from train_transformer import determine_padding, determine_state_profile
 from sentence_transformers import SentenceTransformer
 from generate_data_imagine_trajectories import compute_resume_points
 
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm, trange
 
 
 def batched(iterable, n):
@@ -229,7 +231,8 @@ def gandr_like_search(
     train_sentences_unique_list_lookup,
     train_sentences_unique_all_token_encodings,
     tfidf_transformer,
-    state_autoencoder_transformer,
+    state_pca,
+    component_max_sizes,
     sentence_transformer,
     dataloader,
     sample_n,
@@ -244,22 +247,14 @@ def gandr_like_search(
     transformer_prediction_model.to(device)
     transformer_prediction_model.eval()
 
-    if state_autoencoder_transformer is not None:
-        state_autoencoder_transformer.to(device)
-        state_autoencoder_transformer.eval()
-
     for batch in dataloader:
         instruction, targets, state = batch
 
-        state_encodings = None
-        if state_autoencoder_transformer is not None:
-            with torch.inference_mode():
-                state_encodings = (
-                    state_autoencoder_transformer.encode_to_vector(state.to(device))
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
+        # We need to vectorize all example situations here
+        # as well, but the dataset is padded, so we have to un-pad it somehow?
+        state_encodings = state_pca.transform(vectorize_all_example_situations([
+            s[~(s == 0).all()].numpy() for s in state
+        ], component_max_sizes).astype(np.float32))
 
         predicted_targets, logits = transformer_predict(
             transformer_prediction_model,
@@ -296,17 +291,17 @@ def gandr_like_search(
             count_matrix
         )
         non_action_component = (
-            np.concatenate([
-                sentence_vectors,
+            balance_dims(
                 state_encodings,
-            ], dim=-1) if state_encodings is not None else
-            sentence_vectors
+                sentence_vectors,
+                factors=[(4 / 3)]
+             )
         )
         unscaled_vectors = (
             balance_dims(
                 actions_count_matrix_tfidf,
                 non_action_component,
-                factors=[(1 / 2)]
+                factors=[(1 / 4)]
             )
         )
         scaled_vectors = normalize(unscaled_vectors, axis=1)
@@ -610,6 +605,53 @@ def premultiply_balance_dimensions(vectors, dim_other):
     return vectors * (dim_other / vectors.shape[-1]) * (1 / 8)
 
 
+def shift_bit_length(x):
+    return 1 << ((x - 1).bit_length() - 1)
+
+
+def lower_pow2(num):
+    return shift_bit_length(num)
+
+
+def compute_state_pca(train_demonstrations, state_component_max_len, pca_dim):
+    train_state_vectors = vectorize_all_example_situations(
+        tqdm(train_demonstrations, desc="Vectorizing examples"),
+        state_component_max_len
+    )
+
+    train_state_vectors_fit_perm = np.random.permutation(train_state_vectors.shape[0])[:8192]
+    selected_train_state_vectors = train_state_vectors[train_state_vectors_fit_perm]
+
+    n_components = min(
+        lower_pow2(selected_train_state_vectors.shape[-1]),
+        pca_dim
+    )
+    print(f"Fitting PCA {(selected_train_state_vectors.shape[-1], n_components)}")
+    state_pca = make_pipeline(
+        StandardScaler(),
+        PCA(n_components=n_components)
+    )
+    state_pca.fit(selected_train_state_vectors)
+
+    print(f"Applying PCA to train state vectors")
+    pca_train_state_vectors = np.concatenate([
+        state_pca.transform(train_state_vectors[i * 1024:(i + 1) * 1024].astype(np.float32))
+        for i in trange(train_state_vectors.shape[0] // 1024 + 1, desc="Applying PCA")
+    ], axis=0)
+
+    # Sanity check, how well do we reconstruct the original layouts
+    print(f"Sanity check: computing reconstruction error")
+    reconstruction_error_sample = np.random.permutation(pca_train_state_vectors.shape[0])[:8192]
+    reconstruction_error = ((
+        state_pca.inverse_transform(pca_train_state_vectors[reconstruction_error_sample]) -
+        train_state_vectors[reconstruction_error_sample].astype(np.float32)
+    ) ** 2).mean()
+
+    print(f"PCA reconstruction error {reconstruction_error}")
+
+    return state_pca, n_components
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--training-data", type=str, required=True)
@@ -639,6 +681,8 @@ def main():
     parser.add_argument("--nhead", type=int, default=8)
     parser.add_argument("--include-state", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--retrieval-sentence-state-tradeoff", type=float, default=(4 / 3))
+    parser.add_argument("--retrieval-state-pca-dim", type=int, default=1024)
     args = parser.parse_args()
 
     (
@@ -670,10 +714,6 @@ def main():
 
     os.makedirs(os.path.join(args.data_output_directory), exist_ok=True)
 
-    # Set to None by default at least so that we can handle it not being there
-    state_autoencoder_transformer = None
-    state_encodings_by_split = None
-
     state_component_max_len, state_feat_len = determine_state_profile(train_demonstrations, {
         k: v
         for k, v in valid_demonstrations_dict.items()
@@ -682,26 +722,11 @@ def main():
 
     print(f"Paddings instr: {pad_instructions_to} act: {pad_actions_to} state: {pad_state_to}")
 
-    if args.include_state:
-        state_autoencoder_transformer = train_state_autoencoder(
-            args.load_state_autoencoder_transformer,
-            PaddingDataset(
-                MapDataset(train_demonstrations, lambda x: (x[-1],)), ((pad_state_to, state_feat_len),), (0,)
-            ),
-            args.seed,
-            args.state_autoencoder_transformer_iterations
-            if args.save_state_autoencoder_transformer
-            else 0,
-            args.batch_size,
-            hidden_size=args.hidden_size,
-            device=args.device,
-        )
-
-        if args.save_state_autoencoder_transformer:
-            torch.save(
-                state_autoencoder_transformer.state_dict(),
-                args.save_state_autoencoder_transformer,
-            )
+    state_pca, state_pca_n_components = compute_state_pca(
+        train_demonstrations,
+        state_component_max_len,
+        args.retrieval_state_pca_dim
+    )
 
     torch.set_float32_matmul_precision("medium")
 
@@ -773,21 +798,6 @@ def main():
 
     print(args.offset, args.offset + (0 if args.limit is None else args.limit))
 
-    if args.include_state:
-        if args.load_state_encodings:
-            state_encodings_by_split = load_state_encodings(args.load_state_encodings)
-        else:
-            state_encodings_by_split = generate_state_encodings(
-                state_autoencoder_transformer,
-                train_demonstrations,
-                valid_demonstrations_dict,
-                args.batch_size,
-                device=args.device,
-            )
-
-        if args.save_state_encodings:
-            save_state_encodings(state_encodings_by_split, args.save_state_encodings)
-
     # Make a lookup table of train sentences to indices - this will allow
     # us to just encode the unique sentences and save some memory.
     train_sentences_index_dict = defaultdict(list)
@@ -819,11 +829,7 @@ def main():
 
     # Make an index from the training data
     np.random.seed(args.seed)
-    index = (
-        faiss.IndexFlatIP(len(train_sentences_unique_all_sentence_encodings[0]) + len(ACTION2IDX) + args.hidden_size)
-        if args.include_state
-        else faiss.IndexFlatIP(len(train_sentences_unique_all_sentence_encodings[0]) + len(ACTION2IDX))
-    )
+
     count_matrix = to_count_matrix(
         [
             actions
@@ -837,22 +843,24 @@ def main():
         tfidf_transformer,
         count_matrix
     )
-    non_action_component = (
-        np.concatenate([
-            train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup],
-            state_encodings_by_split["train"],
-        ], dim=-1) if state_encodings_by_split is not None else
-        train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup]
+    non_action_component = balance_dims(
+        train_sentences_unique_all_sentence_encodings[train_sentences_unique_list_lookup],
+        state_pca.transform(vectorize_all_example_situations(
+            tqdm(train_demonstrations, desc="Vectorizing examples"),
+            state_component_max_len
+        ).astype(np.float32)),
+        factors=[args.retrieval_sentence_state_tradeoff]
     )
     unscaled_vectors = (
         balance_dims(
             actions_count_matrix_tfidf,
             non_action_component,
-            factors=[(1 / 2)]
+            factors=[(1 / 4)]
         )
     )
 
     scaled_vectors = normalize(unscaled_vectors, axis=1)
+    index = faiss.IndexFlatIP(scaled_vectors.shape[1])
     index.add(scaled_vectors)
 
     dataloader_splits = {
@@ -906,7 +914,8 @@ def main():
                     train_sentences_unique_list_lookup,
                     train_sentences_unique_all_token_encodings,
                     tfidf_transformer,
-                    state_autoencoder_transformer,
+                    state_pca,
+                    state_component_max_len,
                     model,
                     tqdm(dataloader),
                     256,
