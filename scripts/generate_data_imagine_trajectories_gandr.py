@@ -679,6 +679,8 @@ def main():
     parser.add_argument("--hidden-size", type=int, default=128)
     parser.add_argument("--num-layers", type=int, default=8)
     parser.add_argument("--nhead", type=int, default=8)
+    parser.add_argument("--decode-to", type=int, default=256)
+    parser.add_argument("--gen-sample-n", type=int, default=256)
     parser.add_argument("--include-state", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retrieval-sentence-state-tradeoff", type=float, default=(4 / 3))
@@ -918,8 +920,8 @@ def main():
                     state_component_max_len,
                     model,
                     tqdm(dataloader),
-                    256,
-                    decode_len=256,
+                    args.gen_sample_n,
+                    decode_len=args.decode_to,
                     pad_word_idx=pad_word,
                     pad_action_idx=pad_action,
                     IDX2WORD=IDX2WORD,
